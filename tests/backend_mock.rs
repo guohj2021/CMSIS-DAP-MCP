@@ -15,6 +15,7 @@ fn mock_memory_roundtrip() {
         protocol: Protocol::Swd,
         speed_khz: None,
         target: None,
+        under_reset: false,
     })
     .unwrap();
     b.write_memory(0x2000_0000, AccessWidth::U32, &[0xDEAD_BEEF])

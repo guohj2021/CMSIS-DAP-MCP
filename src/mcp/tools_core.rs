@@ -35,4 +35,26 @@ pub struct ClearBreakpointsParams {}
 pub struct ListBreakpointsParams {}
 
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
-pub struct ResetParams {}
+pub struct ResetParams {
+    /// Reset mode: "run" (default, reset and continue) or "halt" (reset and halt).
+    pub mode: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+pub struct ListCoreRegistersParams {}
+
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+pub struct GetCoreStatusParams {}
+
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+pub struct SetWatchpointParams {
+    pub address: u64,
+    /// Access type to watch: "read", "write" or "rw".
+    pub access: String,
+}
+
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+pub struct ClearWatchpointsParams {}
+
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+pub struct ListWatchpointsParams {}

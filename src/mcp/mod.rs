@@ -5,7 +5,7 @@ pub mod tools_memory;
 pub mod tools_probe;
 pub mod tools_svd;
 
-use crate::backend::{CoreRegister, Protocol};
+use crate::backend::{CoreRegister, Protocol, ResetMode, WatchAccess};
 use crate::error::ErrorCode;
 use crate::security::{SecurityLevel, SecurityPolicy};
 use crate::session::SessionManager;
@@ -15,12 +15,14 @@ use rmcp::{tool, tool_router, ServerHandler};
 use std::sync::Mutex;
 
 pub use tools_core::{
-    ClearBreakpointsParams, HaltParams, ListBreakpointsParams, ReadCoreRegisterParams, ResetParams,
-    ResumeParams, SetBreakpointParams, StepParams, WriteCoreRegisterParams,
+    ClearBreakpointsParams, ClearWatchpointsParams, GetCoreStatusParams, HaltParams,
+    ListBreakpointsParams, ListCoreRegistersParams, ListWatchpointsParams, ReadCoreRegisterParams,
+    ResetParams, ResumeParams, SetBreakpointParams, SetWatchpointParams, StepParams,
+    WriteCoreRegisterParams,
 };
 pub use tools_dap::{ReadDapParams, WriteDapParams};
 pub use tools_flash::{EraseFlashParams, ProgramFlashParams};
-pub use tools_memory::{ReadMemoryParams, WriteMemoryParams};
+pub use tools_memory::{ReadMemoryParams, VerifyMemoryParams, WriteMemoryParams};
 pub use tools_probe::{
     ConnectParams, DisconnectParams, GetProbeInfoParams, GetTargetInfoParams, ListProbesParams,
 };
@@ -29,15 +31,18 @@ pub use tools_svd::{
 };
 
 pub const SERVER_INSTRUCTIONS: &str = "CMSIS-DAP MCP server for Cortex-M targets. \
-Security tiers: ReadOnly tools (list_probes, get_target_info, read_memory, read_core_register, \
-list_breakpoints, read_dap, list_peripherals, read_peripheral) are always available; Write tools \
-(connect, disconnect, write_memory, write_core_register, halt, resume, step, set_breakpoint, \
-clear_breakpoints, reset, write_dap, load_svd, write_peripheral) are marked write and governed by \
-the MCP client approval policy; Destructive tools (erase_flash, program_flash) are disabled unless \
-the server was started with --allow-destructive. Workflow: call list_probes, then connect with the \
-probe id, then use memory/core tools. For named peripheral access, first call load_svd with a path \
-to an SVD file provided by the user; chip-specific files are never bundled. All tools return \
-structured JSON content. Logs go to stderr only.";
+Security tiers: ReadOnly tools (list_probes, get_probe_info, get_target_info, read_memory, \
+read_core_register, list_core_registers, list_breakpoints, get_core_status, read_dap, \
+list_watchpoints, list_peripherals, read_peripheral, verify_memory) are always available; Write \
+tools (connect, disconnect, write_memory, write_core_register, halt, resume, step, set_breakpoint, \
+clear_breakpoints, reset, write_dap, set_watchpoint, clear_watchpoints, load_svd, \
+write_peripheral) are marked write and governed by the MCP client approval policy; Destructive \
+tools (erase_flash, program_flash) are disabled unless the server was started with \
+--allow-destructive. Workflow: call list_probes, then connect (protocol swd or jtag, optionally \
+under_reset) with the probe id, then use memory/core tools; reset accepts mode run or halt; \
+program_flash accepts verify for read-back checking. For named peripheral access, first call \
+load_svd with a path to an SVD file provided by the user; chip-specific files are never bundled. \
+All tools return structured JSON content. Logs go to stderr only.";
 
 pub fn error_result(code: ErrorCode, message: String) -> CallToolResult {
     CallToolResult::structured_error(serde_json::json!({
@@ -346,9 +351,22 @@ impl CmsisDapMcp {
             open_world_hint = false
         )
     )]
-    pub async fn reset(&self, Parameters(_): Parameters<ResetParams>) -> CallToolResult {
-        match self.session.lock().unwrap().backend().reset() {
-            Ok(()) => CallToolResult::structured(serde_json::json!({ "reset": true })),
+    pub async fn reset(&self, Parameters(params): Parameters<ResetParams>) -> CallToolResult {
+        let mode = match params.mode.as_deref() {
+            None | Some("run") => ResetMode::Run,
+            Some("halt") => ResetMode::Halt,
+            Some(other) => {
+                return error_result(
+                    ErrorCode::InvalidArgument,
+                    format!("mode must be run or halt, got {other}"),
+                )
+            }
+        };
+        match self.session.lock().unwrap().backend().reset(mode) {
+            Ok(()) => CallToolResult::structured(serde_json::json!({
+                "reset": true,
+                "mode": if mode == ResetMode::Run { "run" } else { "halt" },
+            })),
             Err(e) => error_result(e.code, e.message),
         }
     }
@@ -609,16 +627,182 @@ impl CmsisDapMcp {
         if let Err(e) = self.policy.check(SecurityLevel::Destructive) {
             return error_result(e.code, e.message);
         }
+        match self.session.lock().unwrap().backend().program_flash(
+            params.address,
+            &params.data,
+            params.verify.unwrap_or(false),
+        ) {
+            Ok(()) => CallToolResult::structured(serde_json::json!({
+                "programmed": true,
+                "address": params.address,
+                "bytes": params.data.len(),
+                "verify": params.verify.unwrap_or(false),
+            })),
+            Err(e) => error_result(e.code, e.message),
+        }
+    }
+
+    #[tool(
+        description = "List the core registers available on the connected target.",
+        annotations(
+            title = "List core registers",
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    pub async fn list_core_registers(
+        &self,
+        Parameters(_): Parameters<ListCoreRegistersParams>,
+    ) -> CallToolResult {
+        match self.session.lock().unwrap().backend().list_core_registers() {
+            Ok(registers) => {
+                CallToolResult::structured(serde_json::json!({ "registers": registers }))
+            }
+            Err(e) => error_result(e.code, e.message),
+        }
+    }
+
+    #[tool(
+        description = "Get the execution status of the connected core (running, halted, sleeping, locked up or unknown), the halt reason, and the program counter when halted.",
+        annotations(
+            title = "Get core status",
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    pub async fn get_core_status(
+        &self,
+        Parameters(_): Parameters<GetCoreStatusParams>,
+    ) -> CallToolResult {
+        match self.session.lock().unwrap().backend().get_core_status() {
+            Ok(status) => CallToolResult::structured(serde_json::json!({
+                "state": status.state,
+                "halt_reason": status.halt_reason,
+                "pc": status.pc,
+            })),
+            Err(e) => error_result(e.code, e.message),
+        }
+    }
+
+    #[tool(
+        description = "Set a data watchpoint on the given address. access is read, write or rw.",
+        annotations(
+            title = "Set watchpoint",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    pub async fn set_watchpoint(
+        &self,
+        Parameters(params): Parameters<SetWatchpointParams>,
+    ) -> CallToolResult {
+        let access = match WatchAccess::parse(&params.access) {
+            Some(access) => access,
+            None => {
+                return error_result(
+                    ErrorCode::InvalidArgument,
+                    "access must be read, write or rw".into(),
+                )
+            }
+        };
         match self
             .session
             .lock()
             .unwrap()
             .backend()
-            .program_flash(params.address, &params.data)
+            .set_watchpoint(params.address, access)
         {
-            Ok(()) => CallToolResult::structured(
-                serde_json::json!({ "programmed": true, "address": params.address, "bytes": params.data.len() }),
-            ),
+            Ok(()) => CallToolResult::structured(serde_json::json!({
+                "address": params.address,
+                "access": access,
+                "set": true,
+            })),
+            Err(e) => error_result(e.code, e.message),
+        }
+    }
+
+    #[tool(
+        description = "Clear all data watchpoints.",
+        annotations(
+            title = "Clear watchpoints",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    pub async fn clear_watchpoints(
+        &self,
+        Parameters(_): Parameters<ClearWatchpointsParams>,
+    ) -> CallToolResult {
+        match self.session.lock().unwrap().backend().clear_watchpoints() {
+            Ok(()) => CallToolResult::structured(serde_json::json!({ "cleared": true })),
+            Err(e) => error_result(e.code, e.message),
+        }
+    }
+
+    #[tool(
+        description = "List currently set data watchpoints.",
+        annotations(
+            title = "List watchpoints",
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    pub async fn list_watchpoints(
+        &self,
+        Parameters(_): Parameters<ListWatchpointsParams>,
+    ) -> CallToolResult {
+        match self.session.lock().unwrap().backend().list_watchpoints() {
+            Ok(watchpoints) => {
+                CallToolResult::structured(serde_json::json!({ "watchpoints": watchpoints }))
+            }
+            Err(e) => error_result(e.code, e.message),
+        }
+    }
+
+    #[tool(
+        description = "Read back memory at the given address and compare it against the expected data. width is one of u8/u16/u32/u64.",
+        annotations(
+            title = "Verify memory",
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    pub async fn verify_memory(
+        &self,
+        Parameters(params): Parameters<VerifyMemoryParams>,
+    ) -> CallToolResult {
+        let width = match tools_memory::parse_width(&params.width) {
+            Some(w) => w,
+            None => {
+                return error_result(
+                    ErrorCode::InvalidArgument,
+                    "width must be u8/u16/u32/u64".into(),
+                )
+            }
+        };
+        match self.session.lock().unwrap().backend().verify_memory(
+            params.address,
+            width,
+            &params.data,
+        ) {
+            Ok(report) => CallToolResult::structured(serde_json::json!({
+                "address": params.address,
+                "width": params.width,
+                "verified": report.verified,
+                "mismatches": report.mismatches,
+            })),
             Err(e) => error_result(e.code, e.message),
         }
     }
@@ -699,6 +883,7 @@ impl CmsisDapMcp {
             protocol,
             speed_khz: params.speed_khz,
             target: params.target,
+            under_reset: params.under_reset.unwrap_or(false),
         };
         match self.session.lock().unwrap().connect(&opts) {
             Ok(info) => CallToolResult::structured(serde_json::json!({ "target": info })),

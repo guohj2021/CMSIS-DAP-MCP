@@ -17,6 +17,13 @@ pub struct WriteMemoryParams {
     pub values: Vec<u64>,
 }
 
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+pub struct VerifyMemoryParams {
+    pub address: u64,
+    pub width: String,
+    pub data: Vec<u64>,
+}
+
 fn default_count() -> u32 {
     1
 }

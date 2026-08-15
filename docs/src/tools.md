@@ -1,22 +1,108 @@
 # Tools
 
-| Tool | Purpose | Level |
-| --- | --- | --- |
-| `list_probes` | Enumerate CMSIS-DAP probes | Read |
-| `get_probe_info` | Probe firmware/serial details | Read |
-| `connect` | Connect a target | Write |
-| `disconnect` | Disconnect | Write |
-| `get_target_info` | Core and memory info | Read |
-| `read_memory` | Read memory by address/width | Read |
-| `write_memory` | Write memory by address/width | Write |
-| `read_core_register` | Read a core register | Read |
-| `write_core_register` | Write a core register | Write |
-| `halt` / `resume` / `step` | Core execution control | Write |
-| `set_breakpoint` / `clear_breakpoints` / `list_breakpoints` | Hardware breakpoints | Write/Read |
-| `reset` | Reset the target | Write |
-| `read_dap` / `write_dap` | Raw DP/AP registers | Read/Write |
-| `load_svd` / `list_peripherals` | Load SVD and list peripherals | Write/Read |
-| `read_peripheral` / `write_peripheral` | Named register/field access | Read/Write |
-| `erase_flash` / `program_flash` | Flash erase/program | Destructive |
+Levels: **Read** (always available), **Write** (governed by client approval),
+**Destructive** (requires `--allow-destructive`).
 
-Memory widths: `u8`, `u16`, `u32`, `u64`. DAP addresses use APSEL in bits 24-31 for AP access (for example `0x010000FC`).
+## Probe and session
+
+| Tool | Params | Level |
+| --- | --- | --- |
+| `list_probes` | - | Read |
+| `get_probe_info` | `probe_id` (optional) | Read |
+| `connect` | `probe_id`, `protocol` (`swd`/`jtag`, default `swd`), `speed_khz`, `target`, `under_reset` | Write |
+| `disconnect` | - | Write |
+| `get_target_info` | - | Read |
+
+`list_probes` returns the probe id, vendor/product, serial, product id,
+interface, HID flag, supported protocols, speed and target voltage (when the
+probe reports it).
+
+`get_target_info` returns the core type and count, the real AP count, CPUID,
+DPIDR and a memory map summary (RAM/NVM regions).
+
+## Memory
+
+| Tool | Params | Level |
+| --- | --- | --- |
+| `read_memory` | `address`, `width` (`u8`/`u16`/`u32`/`u64`), `count` (default 1) | Read |
+| `write_memory` | `address`, `width`, `values` | Write |
+| `verify_memory` | `address`, `width`, `data` | Read |
+
+`verify_memory` reads back the given range and compares it with `data`,
+returning `verified` and a list of `mismatches`.
+
+## Core
+
+| Tool | Params | Level |
+| --- | --- | --- |
+| `read_core_register` | `name` **or** `number` | Read |
+| `write_core_register` | `name` **or** `number`, `value` | Write |
+| `list_core_registers` | - | Read |
+| `get_core_status` | - | Read |
+| `halt` | - | Write |
+| `resume` | - | Write |
+| `step` | - | Write |
+| `reset` | `mode` (`run` default / `halt`) | Write |
+
+Register names are resolved case-insensitively. Special roles (`pc`, `sp`,
+`fp`, `lr`/`ra`, `psr`/`xpsr`, `msp`, `psp`, `fpsr`) and general registers
+(`r0`-`r15`) are supported; any other name is looked up in the architecture
+register file. `list_core_registers` returns all available names.
+
+`get_core_status` returns `state` (`running`/`halted`/`sleeping`/`locked_up`/
+`unknown`), the `halt_reason` when halted, and the program counter when
+halted.
+
+## Breakpoints and watchpoints
+
+| Tool | Params | Level |
+| --- | --- | --- |
+| `set_breakpoint` | `address` | Write |
+| `clear_breakpoints` | - | Write |
+| `list_breakpoints` | - | Read |
+| `set_watchpoint` | `address`, `access` (`read`/`write`/`rw`) | Write |
+| `clear_watchpoints` | - | Write |
+| `list_watchpoints` | - | Read |
+
+Watchpoints use the core's DWT comparators. They trigger on core load/store
+accesses, not on debugger writes. If the target has no DWT comparators, the
+server returns `UnsupportedFeature`.
+
+## DAP
+
+| Tool | Params | Level |
+| --- | --- | --- |
+| `read_dap` | `address` | Read |
+| `write_dap` | `address`, `value` | Write |
+
+DAP addresses use APSEL in bits 24-31 for AP access (e.g. `0x010000FC`);
+otherwise bits 0-7 are the DP register address (bits 4-7 select the DP bank).
+
+## SVD
+
+| Tool | Params | Level |
+| --- | --- | --- |
+| `load_svd` | `path` | Write |
+| `list_peripherals` | - | Read |
+| `read_peripheral` | `peripheral`, `register`, `field` (optional) | Read |
+| `write_peripheral` | `peripheral`, `register`, `field` (optional), `value` | Write |
+
+Field writes are read-modify-write.
+
+## Flash
+
+| Tool | Params | Level |
+| --- | --- | --- |
+| `erase_flash` | `address`, `size` | Destructive |
+| `program_flash` | `address`, `data`, `verify` (optional) | Destructive |
+
+`erase_flash` erases only the sectors overlapping `[address, address+size)`;
+pass the full flash range to erase the whole chip. `program_flash` with
+`verify: true` reads the data back after programming.
+
+## Error codes
+
+Errors return structured JSON with `code` and `message`:
+`ProbeNotFound`, `ConnectFailed`, `NotConnected`, `ProtocolError`, `Timeout`,
+`MemoryFault`, `SvdNotLoaded`, `UnsupportedFeature`, `DestructiveDisabled`,
+`InvalidArgument`, `InternalError`.
