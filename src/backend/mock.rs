@@ -11,6 +11,12 @@ pub struct MockBackend {
     breakpoints: Vec<u64>,
 }
 
+impl Default for MockBackend {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MockBackend {
     pub fn new() -> Self {
         Self {
@@ -49,7 +55,10 @@ impl Backend for MockBackend {
 
     fn connect(&mut self, _opts: &ConnectOptions) -> Result<TargetInfo, McpError> {
         self.connected = true;
-        Ok(TargetInfo { core_type: "Cortex-M0".into(), ap_count: 1 })
+        Ok(TargetInfo {
+            core_type: "Cortex-M0".into(),
+            ap_count: 1,
+        })
     }
 
     fn disconnect(&mut self) -> Result<(), McpError> {
@@ -57,7 +66,12 @@ impl Backend for MockBackend {
         Ok(())
     }
 
-    fn read_memory(&mut self, address: u64, width: AccessWidth, count: u32) -> Result<Vec<u64>, McpError> {
+    fn read_memory(
+        &mut self,
+        address: u64,
+        width: AccessWidth,
+        count: u32,
+    ) -> Result<Vec<u64>, McpError> {
         if !self.connected {
             return Err(not_connected());
         }
@@ -67,12 +81,18 @@ impl Backend for MockBackend {
             .collect())
     }
 
-    fn write_memory(&mut self, address: u64, width: AccessWidth, data: &[u64]) -> Result<(), McpError> {
+    fn write_memory(
+        &mut self,
+        address: u64,
+        width: AccessWidth,
+        data: &[u64],
+    ) -> Result<(), McpError> {
         if !self.connected {
             return Err(not_connected());
         }
         for (i, v) in data.iter().enumerate() {
-            self.memory.insert(address + i as u64 * width_bytes(width), *v);
+            self.memory
+                .insert(address + i as u64 * width_bytes(width), *v);
         }
         Ok(())
     }
@@ -83,7 +103,10 @@ impl Backend for MockBackend {
         }
         match reg {
             CoreRegister::Name(n) => Ok(*self.registers.get(n).unwrap_or(&0)),
-            CoreRegister::Number(_) => Err(McpError::new(ErrorCode::UnsupportedFeature, "number-based register access not supported by mock")),
+            CoreRegister::Number(_) => Err(McpError::new(
+                ErrorCode::UnsupportedFeature,
+                "number-based register access not supported by mock",
+            )),
         }
     }
 
@@ -96,20 +119,37 @@ impl Backend for MockBackend {
                 self.registers.insert(n.clone(), value);
                 Ok(())
             }
-            CoreRegister::Number(_) => Err(McpError::new(ErrorCode::UnsupportedFeature, "number-based register access not supported by mock")),
+            CoreRegister::Number(_) => Err(McpError::new(
+                ErrorCode::UnsupportedFeature,
+                "number-based register access not supported by mock",
+            )),
         }
     }
 
     fn halt(&mut self) -> Result<(), McpError> {
-        if !self.connected { Err(not_connected()) } else { self.halted = true; Ok(()) }
+        if !self.connected {
+            Err(not_connected())
+        } else {
+            self.halted = true;
+            Ok(())
+        }
     }
 
     fn resume(&mut self) -> Result<(), McpError> {
-        if !self.connected { Err(not_connected()) } else { self.halted = false; Ok(()) }
+        if !self.connected {
+            Err(not_connected())
+        } else {
+            self.halted = false;
+            Ok(())
+        }
     }
 
     fn step(&mut self) -> Result<(), McpError> {
-        if !self.connected { Err(not_connected()) } else { Ok(()) }
+        if !self.connected {
+            Err(not_connected())
+        } else {
+            Ok(())
+        }
     }
 
     fn set_breakpoint(&mut self, address: u64) -> Result<(), McpError> {
@@ -124,11 +164,20 @@ impl Backend for MockBackend {
     }
 
     fn clear_breakpoints(&mut self) -> Result<(), McpError> {
-        if !self.connected { Err(not_connected()) } else { self.breakpoints.clear(); Ok(()) }
+        if !self.connected {
+            Err(not_connected())
+        } else {
+            self.breakpoints.clear();
+            Ok(())
+        }
     }
 
     fn list_breakpoints(&mut self) -> Result<Vec<u64>, McpError> {
-        if !self.connected { Err(not_connected()) } else { Ok(self.breakpoints.clone()) }
+        if !self.connected {
+            Err(not_connected())
+        } else {
+            Ok(self.breakpoints.clone())
+        }
     }
 
     fn reset(&mut self) -> Result<(), McpError> {
@@ -141,11 +190,20 @@ impl Backend for MockBackend {
     }
 
     fn read_dap(&mut self, address: u32) -> Result<u32, McpError> {
-        if !self.connected { Err(not_connected()) } else { Ok(*self.dap.get(&address).unwrap_or(&0)) }
+        if !self.connected {
+            Err(not_connected())
+        } else {
+            Ok(*self.dap.get(&address).unwrap_or(&0))
+        }
     }
 
     fn write_dap(&mut self, address: u32, value: u32) -> Result<(), McpError> {
-        if !self.connected { Err(not_connected()) } else { self.dap.insert(address, value); Ok(()) }
+        if !self.connected {
+            Err(not_connected())
+        } else {
+            self.dap.insert(address, value);
+            Ok(())
+        }
     }
 
     fn erase_flash(&mut self, address: u64, size: u64) -> Result<(), McpError> {
