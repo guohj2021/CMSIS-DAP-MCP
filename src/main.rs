@@ -46,6 +46,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         allow_destructive: cfg.allow_destructive,
     };
     let mcp = CmsisDapMcp::new(session, policy);
-    mcp.serve(rmcp::transport::stdio()).await?;
+    let running = mcp.serve(rmcp::transport::stdio()).await?;
+    running.waiting().await?;
     Ok(())
 }
