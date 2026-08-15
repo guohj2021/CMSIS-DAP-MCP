@@ -234,12 +234,50 @@ impl Backend for ProbeRsBackend {
             .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))
     }
 
-    fn read_dap(&mut self, _address: u32) -> Result<u32, McpError> {
-        Err(McpError::new(ErrorCode::UnsupportedFeature, "not implemented yet"))
+    fn read_dap(&mut self, address: u32) -> Result<u32, McpError> {
+        let session = self.session.as_mut().ok_or_else(|| McpError::new(ErrorCode::NotConnected, "no active session"))?;
+        let iface = session
+            .get_arm_interface()
+            .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))?;
+        let value = if (address >> 24) & 0xFF != 0 {
+            let apsel = ((address >> 24) & 0xFF) as u8;
+            let ap_addr = (address & 0xFF) as u64;
+            iface
+                .read_raw_ap_register(&probe_rs::architecture::arm::FullyQualifiedApAddress::v1_with_default_dp(apsel), ap_addr)
+                .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))?
+        } else {
+            let dp_addr = probe_rs::architecture::arm::dp::DpRegisterAddress {
+                address: (address & 0x0F) as u8,
+                bank: Some(((address >> 4) & 0x0F) as u8),
+            };
+            iface
+                .read_raw_dp_register(probe_rs::architecture::arm::dp::DpAddress::Default, dp_addr)
+                .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))?
+        };
+        Ok(value)
     }
 
-    fn write_dap(&mut self, _address: u32, _value: u32) -> Result<(), McpError> {
-        Err(McpError::new(ErrorCode::UnsupportedFeature, "not implemented yet"))
+    fn write_dap(&mut self, address: u32, value: u32) -> Result<(), McpError> {
+        let session = self.session.as_mut().ok_or_else(|| McpError::new(ErrorCode::NotConnected, "no active session"))?;
+        let iface = session
+            .get_arm_interface()
+            .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))?;
+        if (address >> 24) & 0xFF != 0 {
+            let apsel = ((address >> 24) & 0xFF) as u8;
+            let ap_addr = (address & 0xFF) as u64;
+            iface
+                .write_raw_ap_register(&probe_rs::architecture::arm::FullyQualifiedApAddress::v1_with_default_dp(apsel), ap_addr, value)
+                .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))?
+        } else {
+            let dp_addr = probe_rs::architecture::arm::dp::DpRegisterAddress {
+                address: (address & 0x0F) as u8,
+                bank: Some(((address >> 4) & 0x0F) as u8),
+            };
+            iface
+                .write_raw_dp_register(probe_rs::architecture::arm::dp::DpAddress::Default, dp_addr, value)
+                .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))?
+        }
+        Ok(())
     }
 
     fn erase_flash(&mut self, _address: u64, _size: u64) -> Result<(), McpError> {

@@ -1,4 +1,5 @@
 pub mod tools_core;
+pub mod tools_dap;
 pub mod tools_memory;
 
 use crate::backend::CoreRegister;
@@ -14,6 +15,7 @@ pub use tools_core::{
     ClearBreakpointsParams, HaltParams, ListBreakpointsParams, ReadCoreRegisterParams, ResetParams,
     ResumeParams, SetBreakpointParams, StepParams, WriteCoreRegisterParams,
 };
+pub use tools_dap::{ReadDapParams, WriteDapParams};
 pub use tools_memory::{ReadMemoryParams, WriteMemoryParams};
 
 pub const SERVER_INSTRUCTIONS: &str = "CMSIS-DAP MCP server for Cortex-M targets. \
@@ -167,6 +169,22 @@ impl CmsisDapMcp {
     pub async fn reset(&self, Parameters(_): Parameters<ResetParams>) -> CallToolResult {
         match self.session.lock().unwrap().backend().reset() {
             Ok(()) => CallToolResult::structured(serde_json::json!({ "reset": true })),
+            Err(e) => error_result(e.code, e.message),
+        }
+    }
+
+    #[tool(description = "Read a raw DP or AP register. For AP access include APSEL in bits 24-31 (e.g. 0x010000FC); otherwise bits 0-7 are the DP register address.", annotations(title = "Read DAP register", read_only_hint = true, destructive_hint = false, idempotent_hint = true, open_world_hint = false))]
+    pub async fn read_dap(&self, Parameters(params): Parameters<ReadDapParams>) -> CallToolResult {
+        match self.session.lock().unwrap().backend().read_dap(params.address) {
+            Ok(value) => CallToolResult::structured(serde_json::json!({ "address": params.address, "value": value })),
+            Err(e) => error_result(e.code, e.message),
+        }
+    }
+
+    #[tool(description = "Write a raw DP or AP register. For AP access include APSEL in bits 24-31 (e.g. 0x010000FC); otherwise bits 0-7 are the DP register address.", annotations(title = "Write DAP register", read_only_hint = false, destructive_hint = false, idempotent_hint = true, open_world_hint = false))]
+    pub async fn write_dap(&self, Parameters(params): Parameters<WriteDapParams>) -> CallToolResult {
+        match self.session.lock().unwrap().backend().write_dap(params.address, params.value) {
+            Ok(()) => CallToolResult::structured(serde_json::json!({ "address": params.address, "value": params.value, "written": true })),
             Err(e) => error_result(e.code, e.message),
         }
     }
