@@ -39,6 +39,19 @@ Start the server with `--allow-destructive`.
 - `pc_init`, `pc_uninit`, `pc_erase_sector`, `pc_program_page` and
   `pc_erase_all` in the YAML are **offsets** from the code start address.
 
+## File formats and scripts
+
+- `bin` files have no address information: always pass `address` (or the
+  script `loadbin` address).
+- `axf` files are ELF containers: use format `axf` or `auto`; they are parsed
+  with the ELF loader.
+- `hex` files are standard Intel HEX (type 00/04/01); invalid checksums or
+  records return `FileError`.
+- A valid ELF/AXF must contain loadable sections; an ELF with no sections
+  fails with `FileError` ("no loadable segments").
+- Scripts stop at the first failing command; check the per-command `status`
+  and `output` in the result.
+
 ## AI client does not show the tools
 
 - Restart the client after adding the server.
