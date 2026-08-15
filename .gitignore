@@ -5,4 +5,5 @@ node_modules/
 *.log
 .env
 .idea/
-.vscode/.serial_mcp/
+.vscode/
+.serial_mcp/
