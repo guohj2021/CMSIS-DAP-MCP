@@ -35,6 +35,8 @@ async fn read_memory_returns_mock_values() {
         address: 0x2000_0000,
         width: "u32".into(),
         count: 1,
+        path: None,
+        format: None,
     };
     let res = mcp.read_memory(Parameters(params)).await;
     assert!(!res.is_error.unwrap_or(true));
@@ -62,6 +64,8 @@ async fn write_then_read_memory() {
         address: 0x2000_0000,
         width: "u32".into(),
         count: 1,
+        path: None,
+        format: None,
     };
     let res = mcp.read_memory(Parameters(read)).await;
     let structured = res.structured_content.unwrap();
@@ -263,8 +267,10 @@ async fn flash_works_with_flag() {
     let res = mcp
         .program_flash(Parameters(ProgramFlashParams {
             address: 0x0800_0000,
-            data: vec![0xAA, 0xBB],
+            data: Some(vec![0xAA, 0xBB]),
             verify: None,
+            path: None,
+            format: None,
         }))
         .await;
     assert!(!res.is_error.unwrap_or(true));
@@ -273,6 +279,8 @@ async fn flash_works_with_flag() {
             address: 0x0800_0000,
             width: "u8".into(),
             count: 2,
+            path: None,
+            format: None,
         }))
         .await;
     let structured = res.structured_content.unwrap();

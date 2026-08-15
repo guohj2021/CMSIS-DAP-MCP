@@ -3,9 +3,12 @@ pub mod tools_dap;
 pub mod tools_flash;
 pub mod tools_memory;
 pub mod tools_probe;
+pub mod tools_script;
 pub mod tools_svd;
 
-use crate::backend::{CoreRegister, Protocol, ResetMode, WatchAccess};
+use crate::backend::{
+    CoreRegister, ExportFormat, ImageFileFormat, Protocol, ResetMode, WatchAccess,
+};
 use crate::error::ErrorCode;
 use crate::security::{SecurityLevel, SecurityPolicy};
 use crate::session::SessionManager;
@@ -26,6 +29,7 @@ pub use tools_memory::{ReadMemoryParams, VerifyMemoryParams, WriteMemoryParams};
 pub use tools_probe::{
     ConnectParams, DisconnectParams, GetProbeInfoParams, GetTargetInfoParams, ListProbesParams,
 };
+pub use tools_script::RunScriptParams;
 pub use tools_svd::{
     ListPeripheralsParams, LoadSvdParams, ReadPeripheralParams, WritePeripheralParams,
 };
@@ -40,9 +44,12 @@ write_peripheral) are marked write and governed by the MCP client approval polic
 tools (erase_flash, program_flash) are disabled unless the server was started with \
 --allow-destructive. Workflow: call list_probes, then connect (protocol swd or jtag, optionally \
 under_reset) with the probe id, then use memory/core tools; reset accepts mode run or halt; \
-program_flash accepts verify for read-back checking. For named peripheral access, first call \
-load_svd with a path to an SVD file provided by the user; chip-specific files are never bundled. \
-All tools return structured JSON content. Logs go to stderr only.";
+program_flash accepts raw data or a firmware file (axf/elf/bin/hex) with verify for read-back \
+checking; read_memory can export a range as bin or hex when given a path; run_script executes \
+J-Link Commander / OpenOCD style scripts (destructive script commands require \
+--allow-destructive). For named peripheral access, first call load_svd with a path to an SVD \
+file provided by the user; chip-specific files are never bundled. All tools return structured \
+JSON content. Logs go to stderr only.";
 
 pub fn error_result(code: ErrorCode, message: String) -> CallToolResult {
     CallToolResult::structured_error(serde_json::json!({
@@ -95,27 +102,61 @@ impl CmsisDapMcp {
         &self,
         Parameters(params): Parameters<ReadMemoryParams>,
     ) -> CallToolResult {
-        let width = match tools_memory::parse_width(&params.width) {
-            Some(w) => w,
-            None => {
+        if let Some(path) = &params.path {
+            let format = match params.format.as_deref() {
+                None | Some("bin") => ExportFormat::Bin,
+                Some("hex") | Some("ihex") | Some("intelhex") => ExportFormat::Hex,
+                Some(other) => {
+                    return error_result(
+                        ErrorCode::InvalidArgument,
+                        format!("export format must be bin or hex, got {other}"),
+                    )
+                }
+            };
+            if params.count == 0 {
                 return error_result(
                     ErrorCode::InvalidArgument,
-                    "width must be u8/u16/u32/u64".into(),
-                )
+                    "export count must be greater than zero".into(),
+                );
             }
-        };
-        match self.session.lock().unwrap().backend().read_memory(
-            params.address,
-            width,
-            params.count,
-        ) {
-            Ok(values) => CallToolResult::structured(serde_json::json!({
-                "address": params.address,
-                "width": params.width,
-                "count": params.count,
-                "values": values,
-            })),
-            Err(e) => error_result(e.code, e.message),
+            match self.session.lock().unwrap().backend().export_memory(
+                std::path::Path::new(path),
+                format,
+                params.address,
+                params.count as u64,
+            ) {
+                Ok(bytes) => CallToolResult::structured(serde_json::json!({
+                    "exported": true,
+                    "path": path,
+                    "format": format.as_str(),
+                    "address": params.address,
+                    "bytes": bytes,
+                })),
+                Err(e) => error_result(e.code, e.message),
+            }
+        } else {
+            let width = match tools_memory::parse_width(&params.width) {
+                Some(w) => w,
+                None => {
+                    return error_result(
+                        ErrorCode::InvalidArgument,
+                        "width must be u8/u16/u32/u64".into(),
+                    )
+                }
+            };
+            match self.session.lock().unwrap().backend().read_memory(
+                params.address,
+                width,
+                params.count,
+            ) {
+                Ok(values) => CallToolResult::structured(serde_json::json!({
+                    "address": params.address,
+                    "width": params.width,
+                    "count": params.count,
+                    "values": values,
+                })),
+                Err(e) => error_result(e.code, e.message),
+            }
         }
     }
 
@@ -627,17 +668,105 @@ impl CmsisDapMcp {
         if let Err(e) = self.policy.check(SecurityLevel::Destructive) {
             return error_result(e.code, e.message);
         }
-        match self.session.lock().unwrap().backend().program_flash(
-            params.address,
-            &params.data,
-            params.verify.unwrap_or(false),
-        ) {
-            Ok(()) => CallToolResult::structured(serde_json::json!({
-                "programmed": true,
-                "address": params.address,
-                "bytes": params.data.len(),
-                "verify": params.verify.unwrap_or(false),
-            })),
+        match (&params.data, &params.path) {
+            (Some(_), Some(_)) => error_result(
+                ErrorCode::InvalidArgument,
+                "provide exactly one of data or path".into(),
+            ),
+            (None, None) => error_result(ErrorCode::InvalidArgument, "provide data or path".into()),
+            (Some(data), None) => {
+                match self.session.lock().unwrap().backend().program_flash(
+                    params.address,
+                    data,
+                    params.verify.unwrap_or(false),
+                ) {
+                    Ok(()) => CallToolResult::structured(serde_json::json!({
+                        "programmed": true,
+                        "address": params.address,
+                        "bytes": data.len(),
+                        "verify": params.verify.unwrap_or(false),
+                    })),
+                    Err(e) => error_result(e.code, e.message),
+                }
+            }
+            (None, Some(path)) => {
+                let format = match params.format.as_deref() {
+                    None => match ImageFileFormat::from_extension(std::path::Path::new(path)) {
+                        Some(f) => f,
+                        None => {
+                            return error_result(
+                                ErrorCode::InvalidArgument,
+                                format!("cannot infer file format from extension of {path}"),
+                            )
+                        }
+                    },
+                    Some(name) => match ImageFileFormat::parse(name) {
+                        Some(f) => f,
+                        None => {
+                            return error_result(
+                                ErrorCode::InvalidArgument,
+                                format!("unsupported file format {name}"),
+                            )
+                        }
+                    },
+                };
+                match self.session.lock().unwrap().backend().program_file(
+                    std::path::Path::new(path),
+                    format,
+                    params.address,
+                    params.verify.unwrap_or(false),
+                ) {
+                    Ok(bytes) => CallToolResult::structured(serde_json::json!({
+                        "programmed": true,
+                        "path": path,
+                        "format": format.as_str(),
+                        "address": params.address,
+                        "bytes": bytes,
+                        "verify": params.verify.unwrap_or(false),
+                    })),
+                    Err(e) => error_result(e.code, e.message),
+                }
+            }
+        }
+    }
+
+    #[tool(
+        description = "Run a debug script using a J-Link Commander / OpenOCD style command subset. Provide exactly one of path or script. Destructive commands (erase, loadbin, loadfile, flash write_image) require --allow-destructive.",
+        annotations(
+            title = "Run script",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
+    )]
+    pub async fn run_script(
+        &self,
+        Parameters(params): Parameters<RunScriptParams>,
+    ) -> CallToolResult {
+        let text = match (&params.path, &params.script) {
+            (Some(_), Some(_)) => {
+                return error_result(
+                    ErrorCode::InvalidArgument,
+                    "provide exactly one of path or script".into(),
+                )
+            }
+            (None, None) => {
+                return error_result(ErrorCode::InvalidArgument, "provide path or script".into())
+            }
+            (Some(path), None) => match std::fs::read_to_string(path) {
+                Ok(text) => text,
+                Err(e) => {
+                    return error_result(ErrorCode::FileError, e.to_string());
+                }
+            },
+            (None, Some(script)) => script.clone(),
+        };
+        let mut session = self.session.lock().unwrap();
+        match crate::script::run(&mut session, &self.policy, &text) {
+            Ok(report) => {
+                CallToolResult::structured(serde_json::to_value(&report).unwrap_or_default())
+            }
             Err(e) => error_result(e.code, e.message),
         }
     }

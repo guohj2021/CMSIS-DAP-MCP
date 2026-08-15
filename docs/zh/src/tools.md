@@ -23,12 +23,19 @@
 
 | 工具 | 参数 | 等级 |
 | --- | --- | --- |
-| `read_memory` | `address`、`width`（`u8`/`u16`/`u32`/`u64`）、`count`（默认 1） | 读 |
+| `read_memory` | `address`、`width`（`u8`/`u16`/`u32`/`u64`）、`count`（默认 1）、`path`、`format` | 读 |
 | `write_memory` | `address`、`width`、`values` | 写 |
 | `verify_memory` | `address`、`width`、`data` | 读 |
 
 `verify_memory` 读回指定范围并与 `data` 比较，返回 `verified` 与 `mismatches`
 列表。
+
+`read_memory` 还可以把范围导出到文件：传 `path` 加 `format`（默认 `bin` 或
+`hex`），此时 `count` 表示**字节数**。示例：
+
+```text
+read_memory { "address": 0x08000000, "width": "u8", "count": 0x1000, "path": "firmware.bin", "format": "bin" }
+```
 
 ## 内核
 
@@ -90,14 +97,32 @@ DAP 地址在 bit 24-31 放 APSEL 表示 AP 访问（例如 `0x010000FC`）；�
 | 工具 | 参数 | 等级 |
 | --- | --- | --- |
 | `erase_flash` | `address`、`size` | 破坏性 |
-| `program_flash` | `address`、`data`、`verify`（可选） | 破坏性 |
+| `program_flash` | `address`、`data` **或** `path`、`format`（可选）、`verify`（可选） | 破坏性 |
 
 `erase_flash` 只擦除与 `[address, address+size)` 重叠的扇区；传入完整 Flash
-范围即整片擦除。`program_flash` 带 `verify: true` 时烧写后读回校验。
+范围即整片擦除。`program_flash` 带 `verify: true` 时烧写后读回校验。除了原始
+`data`，还可以用 `path` 传入固件文件：
+
+```text
+program_flash { "address": 0x08004000, "path": "/path/to/fw.hex", "format": "hex", "verify": true }
+```
+
+支持的格式：`elf`、`axf`（与 ELF 同容器）、`bin`（必须给 `address`）、
+`hex`/`ihex`/`intelhex`，或 `auto`（默认，按扩展名
+`.elf`/`.axf`/`.bin`/`.hex`/`.ihx` 推断）。
+
+## 脚本
+
+| 工具 | 参数 | 等级 |
+| --- | --- | --- |
+| `run_script` | `path` **或** `script` | 写 |
+
+`run_script` 用 J-Link Commander / OpenOCD 风格命令子集执行线性调试脚本。
+完整命令参考与示例见 [脚本使用](./scripting.md)。
 
 ## 错误码
 
 错误返回结构化 JSON，含 `code` 与 `message`：`ProbeNotFound`、
 `ConnectFailed`、`NotConnected`、`ProtocolError`、`Timeout`、`MemoryFault`、
-`SvdNotLoaded`、`UnsupportedFeature`、`DestructiveDisabled`、
+`SvdNotLoaded`、`FileError`、`UnsupportedFeature`、`DestructiveDisabled`、
 `InvalidArgument`、`InternalError`。

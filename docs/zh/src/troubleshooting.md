@@ -34,6 +34,17 @@
 - YAML 中的 `pc_init`、`pc_uninit`、`pc_erase_sector`、`pc_program_page`、
   `pc_erase_all` 是**相对代码起始地址的偏移**。
 
+## 文件格式与脚本
+
+- `bin` 文件没有地址信息：必须显式给 `address`（或脚本 `loadbin` 的地址）。
+- `axf` 是 ELF 容器：用 `axf` 或 `auto` 格式，走 ELF 解析。
+- `hex` 是标准 Intel HEX（type 00/04/01）；校验和或记录非法时返回
+  `FileError`。
+- 有效的 ELF/AXF 必须包含可加载节；无节的 ELF 会以 `FileError`
+  （"no loadable segments"）失败。
+- 脚本遇到第一条失败命令即停止；请查看返回结果中每条命令的 `status` 与
+  `output`。
+
 ## AI 客户端不显示工具
 
 - 添加服务器后重启客户端。

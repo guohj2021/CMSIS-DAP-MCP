@@ -1,6 +1,7 @@
 use crate::error::McpError;
 pub mod mock;
 pub mod probe_rs;
+use std::path::Path;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AccessWidth {
@@ -67,6 +68,69 @@ pub enum CoreRegister {
 pub enum ResetMode {
     Run,
     Halt,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImageFileFormat {
+    Elf,
+    Axf,
+    Bin,
+    Hex,
+}
+
+impl ImageFileFormat {
+    pub fn parse(value: &str) -> Option<Self> {
+        match value.to_ascii_lowercase().as_str() {
+            "elf" => Some(Self::Elf),
+            "axf" => Some(Self::Axf),
+            "bin" | "binary" => Some(Self::Bin),
+            "hex" | "ihex" | "intelhex" => Some(Self::Hex),
+            _ => None,
+        }
+    }
+
+    pub fn from_extension(path: &Path) -> Option<Self> {
+        let ext = path.extension()?.to_string_lossy().to_ascii_lowercase();
+        match ext.as_str() {
+            "elf" => Some(Self::Elf),
+            "axf" => Some(Self::Axf),
+            "bin" => Some(Self::Bin),
+            "hex" | "ihx" => Some(Self::Hex),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Elf => "elf",
+            Self::Axf => "axf",
+            Self::Bin => "bin",
+            Self::Hex => "hex",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExportFormat {
+    Bin,
+    Hex,
+}
+
+impl ExportFormat {
+    pub fn parse(value: &str) -> Option<Self> {
+        match value.to_ascii_lowercase().as_str() {
+            "bin" => Some(Self::Bin),
+            "hex" | "ihex" | "intelhex" => Some(Self::Hex),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Bin => "bin",
+            Self::Hex => "hex",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
@@ -194,4 +258,18 @@ pub trait Backend: Send {
         width: AccessWidth,
         data: &[u64],
     ) -> Result<MemoryVerifyReport, McpError>;
+    fn program_file(
+        &mut self,
+        path: &Path,
+        format: ImageFileFormat,
+        address: u64,
+        verify: bool,
+    ) -> Result<u64, McpError>;
+    fn export_memory(
+        &mut self,
+        path: &Path,
+        format: ExportFormat,
+        address: u64,
+        size: u64,
+    ) -> Result<u64, McpError>;
 }
