@@ -75,11 +75,17 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: dist
-          merge-multiple: true
+      - name: Rename platform binaries
+        shell: bash
+        run: |
+          mkdir -p release
+          cp dist/cmsis-dap-mcp-win32-x64/cmsis-dap-mcp.exe release/cmsis-dap-mcp-win32-x64.exe
+          cp dist/cmsis-dap-mcp-linux-x64/cmsis-dap-mcp release/cmsis-dap-mcp-linux-x64
+          cp dist/cmsis-dap-mcp-darwin-x64/cmsis-dap-mcp release/cmsis-dap-mcp-darwin-x64
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/**
+          files: release/*
   publish-npm:
     needs: build
     runs-on: ubuntu-latest
