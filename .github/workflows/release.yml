@@ -39,17 +39,29 @@ jobs:
         if: env.NPM_TOKEN != ''
         shell: bash
         run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          PACKAGE="@guohj2021/${{ matrix.scope }}"
           echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
           cd "npm/platforms/${{ matrix.scope }}"
-          npm publish --access public
+          if npm view "${PACKAGE}@${VERSION}" version >/dev/null 2>&1; then
+            echo "already published on npmjs: ${PACKAGE}@${VERSION}"
+          else
+            npm publish --access public
+          fi
       - name: Publish platform package to GitHub Packages
         if: env.GH_TOKEN != ''
         shell: bash
         run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          PACKAGE="@guohj2021/${{ matrix.scope }}"
           echo "registry=https://npm.pkg.github.com/" > ~/.npmrc
           echo "//npm.pkg.github.com/:_authToken=${GH_TOKEN}" >> ~/.npmrc
           cd "npm/platforms/${{ matrix.scope }}"
-          npm publish
+          if npm view "${PACKAGE}@${VERSION}" version >/dev/null 2>&1; then
+            echo "already published on GitHub Packages: ${PACKAGE}@${VERSION}"
+          else
+            npm publish
+          fi
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
         with:
@@ -59,7 +71,21 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-
+      - name: Download binaries
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+      - name: Rename platform binaries
+        shell: bash
+        run: |
+          mkdir -p release
+          cp dist/cmsis-dap-mcp-win32-x64/cmsis-dap-mcp.exe release/cmsis-dap-mcp-win32-x64.exe
+          cp dist/cmsis-dap-mcp-linux-x64/cmsis-dap-mcp release/cmsis-dap-mcp-linux-x64
+          cp dist/cmsis-dap-mcp-darwin-x64/cmsis-dap-mcp release/cmsis-dap-mcp-darwin-x64
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
   publish-npm:
     needs: build
     runs-on: ubuntu-latest
@@ -79,6 +105,11 @@ jobs:
         if: env.NPM_TOKEN != ''
         shell: bash
         run: |
+          VERSION="${GITHUB_REF_NAME#v}"
           echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
           cd npm
-          npm publish --access public
+          if npm view "cmsis-dap-mcp@${VERSION}" version >/dev/null 2>&1; then
+            echo "already published on npmjs: cmsis-dap-mcp@${VERSION}"
+          else
+            npm publish --access public
+          fi
