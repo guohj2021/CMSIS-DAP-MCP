@@ -48,8 +48,18 @@ pub trait Backend: Send {
     fn list_probes(&self) -> Result<Vec<ProbeInfo>, McpError>;
     fn connect(&mut self, opts: &ConnectOptions) -> Result<TargetInfo, McpError>;
     fn disconnect(&mut self) -> Result<(), McpError>;
-    fn read_memory(&mut self, address: u64, width: AccessWidth, count: u32) -> Result<Vec<u64>, McpError>;
-    fn write_memory(&mut self, address: u64, width: AccessWidth, data: &[u64]) -> Result<(), McpError>;
+    fn read_memory(
+        &mut self,
+        address: u64,
+        width: AccessWidth,
+        count: u32,
+    ) -> Result<Vec<u64>, McpError>;
+    fn write_memory(
+        &mut self,
+        address: u64,
+        width: AccessWidth,
+        data: &[u64],
+    ) -> Result<(), McpError>;
     fn read_core_register(&mut self, reg: &CoreRegister) -> Result<u64, McpError>;
     fn write_core_register(&mut self, reg: &CoreRegister, value: u64) -> Result<(), McpError>;
     fn halt(&mut self) -> Result<(), McpError>;

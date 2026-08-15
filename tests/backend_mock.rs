@@ -10,8 +10,15 @@ fn mock_lists_one_probe() {
 #[test]
 fn mock_memory_roundtrip() {
     let mut b = MockBackend::new();
-    b.connect(&ConnectOptions { probe_id: None, protocol: Protocol::Swd, speed_khz: None, target: None }).unwrap();
-    b.write_memory(0x2000_0000, AccessWidth::U32, &[0xDEAD_BEEF]).unwrap();
+    b.connect(&ConnectOptions {
+        probe_id: None,
+        protocol: Protocol::Swd,
+        speed_khz: None,
+        target: None,
+    })
+    .unwrap();
+    b.write_memory(0x2000_0000, AccessWidth::U32, &[0xDEAD_BEEF])
+        .unwrap();
     let v = b.read_memory(0x2000_0000, AccessWidth::U32, 1).unwrap();
     assert_eq!(v, vec![0xDEAD_BEEF]);
 }
