@@ -1,15 +1,21 @@
 use crate::backend::{
     register_hint, AccessWidth, Backend, ConnectOptions, CoreRegister, CoreStatusInfo,
-    MemoryMismatch, MemoryRegionSummary, MemoryVerifyReport, ProbeInfo, Protocol, RegisterHint,
-    ResetMode, TargetInfo, WatchAccess, Watchpoint,
+    ExportFormat, ImageFileFormat, MemoryMismatch, MemoryRegionSummary, MemoryVerifyReport,
+    ProbeInfo, Protocol, RegisterHint, ResetMode, TargetInfo, WatchAccess, Watchpoint,
 };
 use crate::error::{ErrorCode, McpError};
 use probe_rs::config::MemoryRegion;
-use probe_rs::flashing::{erase, erase_all, DownloadOptions, FlashProgress};
+use probe_rs::flashing::{
+    build_loader, erase, erase_all, image_format, DownloadOptions, FlashProgress,
+};
 use probe_rs::probe::{list::Lister, WireProtocol};
 use probe_rs::{CoreStatus, MemoryInterface, Permissions, RegisterRole, Session};
 use std::collections::BTreeSet;
 use std::time::Duration;
+
+fn file_error<E: std::fmt::Display>(e: E) -> McpError {
+    McpError::new(ErrorCode::FileError, e.to_string())
+}
 
 pub struct ProbeRsBackend {
     session: Option<Session>,
@@ -699,5 +705,79 @@ impl Backend for ProbeRsBackend {
             verified: mismatches.is_empty(),
             mismatches,
         })
+    }
+
+    fn program_file(
+        &mut self,
+        path: &std::path::Path,
+        format: ImageFileFormat,
+        address: u64,
+        verify: bool,
+    ) -> Result<u64, McpError> {
+        let session = self
+            .session
+            .as_mut()
+            .ok_or_else(|| McpError::new(ErrorCode::NotConnected, "no active session"))?;
+        let mut options = DownloadOptions::default();
+        options.verify = verify;
+        match format {
+            ImageFileFormat::Bin => {
+                let data = std::fs::read(path).map_err(file_error)?;
+                let mut loader = probe_rs::flashing::FlashLoader::new(
+                    session.target().memory_map.clone(),
+                    session.target().source().clone(),
+                );
+                loader.add_data(address, &data).map_err(file_error)?;
+                loader.commit(session, options).map_err(file_error)?;
+                Ok(data.len() as u64)
+            }
+            ImageFileFormat::Elf | ImageFileFormat::Axf => {
+                let factory =
+                    image_format("elf").ok_or_else(|| file_error("elf format is unavailable"))?;
+                let loader = build_loader(session, path, factory.create_loader(None), None)
+                    .map_err(file_error)?;
+                loader.commit(session, options).map_err(file_error)?;
+                Ok(0)
+            }
+            ImageFileFormat::Hex => {
+                let factory =
+                    image_format("hex").ok_or_else(|| file_error("hex format is unavailable"))?;
+                let loader = build_loader(session, path, factory.create_loader(None), None)
+                    .map_err(file_error)?;
+                loader.commit(session, options).map_err(file_error)?;
+                Ok(0)
+            }
+        }
+    }
+
+    fn export_memory(
+        &mut self,
+        path: &std::path::Path,
+        format: ExportFormat,
+        address: u64,
+        size: u64,
+    ) -> Result<u64, McpError> {
+        if size == 0 {
+            return Err(McpError::new(
+                ErrorCode::InvalidArgument,
+                "export size must be greater than zero",
+            ));
+        }
+        let mut bytes = Vec::with_capacity(size as usize);
+        let mut remaining = size;
+        let mut addr = address;
+        while remaining > 0 {
+            let chunk = remaining.min(4096) as u32;
+            let values = self.read_memory(addr, AccessWidth::U8, chunk)?;
+            bytes.extend(values.iter().map(|v| *v as u8));
+            addr += chunk as u64;
+            remaining -= chunk as u64;
+        }
+        match format {
+            ExportFormat::Bin => std::fs::write(path, &bytes).map_err(file_error)?,
+            ExportFormat::Hex => std::fs::write(path, crate::hex::encode_ihex(&bytes, address))
+                .map_err(file_error)?,
+        }
+        Ok(size)
     }
 }

@@ -10,3 +10,7 @@ Flash 擦除、Option 字节修改、读保护与调试解锁可能导致设备�
 
 日志只写入 stderr（或 `--log-file`），绝不写入 stdout，因此不会污染 MCP
 协议流。
+
+`read_memory` 带 `path` 参数时会在主机上你指定的路径写入导出文件（bin/hex）；
+`run_script` 也可能读写主机文件。这与 `load_svd` 相同的信任模型：路径由用户
+提供，并在运行服务器的机器上执行。

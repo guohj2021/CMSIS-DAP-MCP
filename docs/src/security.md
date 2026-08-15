@@ -13,3 +13,8 @@ mode when you explicitly intend to reprogram the target.
 
 Logs are written to stderr (or `--log-file`) only, never to stdout, so they
 cannot corrupt the MCP protocol stream.
+
+`read_memory` with a `path` argument writes an export file (bin/hex) on the
+host at the path you provide; `run_script` may read and write files on the
+host too. This uses the same trust model as `load_svd`: the paths come from
+the user and are executed on the machine running the server.

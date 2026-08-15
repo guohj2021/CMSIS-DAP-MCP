@@ -3,8 +3,8 @@ use cmsis_dap_mcp::backend::{ConnectOptions, Protocol};
 use cmsis_dap_mcp::mcp::{
     ClearWatchpointsParams, CmsisDapMcp, ConnectParams, DisconnectParams, EraseFlashParams,
     GetCoreStatusParams, HaltParams, ListCoreRegistersParams, ListWatchpointsParams,
-    ProgramFlashParams, ReadMemoryParams, ResetParams, ResumeParams, SetWatchpointParams,
-    VerifyMemoryParams, WriteMemoryParams,
+    ProgramFlashParams, ReadMemoryParams, ResetParams, ResumeParams, RunScriptParams,
+    SetWatchpointParams, VerifyMemoryParams, WriteMemoryParams,
 };
 use cmsis_dap_mcp::security::SecurityPolicy;
 use cmsis_dap_mcp::session::SessionManager;
@@ -239,8 +239,10 @@ async fn program_flash_accepts_verify_flag() {
     let res = mcp
         .program_flash(Parameters(ProgramFlashParams {
             address: 0x0800_0000,
-            data: vec![0xAA, 0xBB],
+            data: Some(vec![0xAA, 0xBB]),
             verify: Some(true),
+            path: None,
+            format: None,
         }))
         .await;
     assert!(!res.is_error.unwrap_or(true));
@@ -310,7 +312,140 @@ async fn read_memory_still_works_after_width_parsing_changes() {
             address: 0x2000_0000,
             width: "u8".into(),
             count: 1,
+            path: None,
+            format: None,
         }))
         .await;
     assert!(!res.is_error.unwrap_or(true));
+}
+
+#[tokio::test]
+async fn run_script_inline_with_mock() {
+    let mcp = mcp(false);
+    connect(&mcp);
+    let res = mcp
+        .run_script(Parameters(RunScriptParams {
+            path: None,
+            script: Some("halt\ngo\n".into()),
+        }))
+        .await;
+    assert!(!res.is_error.unwrap_or(true));
+    let structured = res.structured_content.unwrap();
+    assert_eq!(structured["ok"], serde_json::json!(true));
+    assert_eq!(structured["commands"], serde_json::json!(2));
+}
+
+#[tokio::test]
+async fn run_script_requires_path_or_script() {
+    let mcp = mcp(false);
+    let res = mcp
+        .run_script(Parameters(RunScriptParams {
+            path: None,
+            script: None,
+        }))
+        .await;
+    assert!(res.is_error.unwrap_or(false));
+    assert_eq!(
+        res.structured_content.unwrap()["code"],
+        serde_json::json!("InvalidArgument")
+    );
+}
+
+#[tokio::test]
+async fn program_flash_accepts_bin_file() {
+    use std::io::Write;
+    let mcp = mcp(true);
+    connect(&mcp);
+    let mut f = tempfile::NamedTempFile::new().unwrap();
+    f.write_all(&[0xAA, 0xBB, 0xCC, 0xDD]).unwrap();
+    let path = f.path().to_string_lossy().to_string();
+    let res = mcp
+        .program_flash(Parameters(ProgramFlashParams {
+            address: 0x0800_0000,
+            data: None,
+            verify: Some(true),
+            path: Some(path),
+            format: Some("bin".into()),
+        }))
+        .await;
+    assert!(!res.is_error.unwrap_or(true), "{res:?}");
+    let res = mcp
+        .read_memory(Parameters(ReadMemoryParams {
+            address: 0x0800_0000,
+            width: "u8".into(),
+            count: 4,
+            path: None,
+            format: None,
+        }))
+        .await;
+    let structured = res.structured_content.unwrap();
+    assert_eq!(structured["values"][0].as_u64(), Some(0xAA));
+    assert_eq!(structured["values"][3].as_u64(), Some(0xDD));
+}
+
+#[tokio::test]
+async fn program_flash_path_missing_file_returns_file_error() {
+    let mcp = mcp(true);
+    connect(&mcp);
+    let res = mcp
+        .program_flash(Parameters(ProgramFlashParams {
+            address: 0x0800_0000,
+            data: None,
+            verify: None,
+            path: Some("Z:/definitely/missing/file.bin".into()),
+            format: Some("bin".into()),
+        }))
+        .await;
+    assert!(res.is_error.unwrap_or(false));
+    assert_eq!(
+        res.structured_content.unwrap()["code"],
+        serde_json::json!("FileError")
+    );
+}
+
+#[tokio::test]
+async fn read_memory_exports_bin_file() {
+    let mcp = mcp(false);
+    connect(&mcp);
+    mcp.write_memory(Parameters(WriteMemoryParams {
+        address: 0x2000_0000,
+        width: "u32".into(),
+        values: vec![0x1122_3344],
+    }))
+    .await;
+    let dir = tempfile::tempdir().unwrap();
+    let out = dir.path().join("dump.bin");
+    let res = mcp
+        .read_memory(Parameters(ReadMemoryParams {
+            address: 0x2000_0000,
+            width: "u8".into(),
+            count: 4,
+            path: Some(out.to_string_lossy().to_string()),
+            format: Some("bin".into()),
+        }))
+        .await;
+    assert!(!res.is_error.unwrap_or(true), "{res:?}");
+    let bytes = std::fs::read(&out).unwrap();
+    assert_eq!(bytes, vec![0x44, 0x33, 0x22, 0x11]);
+}
+
+#[tokio::test]
+async fn read_memory_exports_hex_file() {
+    let mcp = mcp(false);
+    connect(&mcp);
+    let dir = tempfile::tempdir().unwrap();
+    let out = dir.path().join("dump.hex");
+    let res = mcp
+        .read_memory(Parameters(ReadMemoryParams {
+            address: 0x0800_0000,
+            width: "u8".into(),
+            count: 1,
+            path: Some(out.to_string_lossy().to_string()),
+            format: Some("hex".into()),
+        }))
+        .await;
+    assert!(!res.is_error.unwrap_or(true), "{res:?}");
+    let text = std::fs::read_to_string(&out).unwrap();
+    assert!(text.starts_with(':'));
+    assert!(text.ends_with(":00000001FF\n"));
 }

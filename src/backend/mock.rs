@@ -1,7 +1,7 @@
 use crate::backend::{
-    AccessWidth, Backend, ConnectOptions, CoreRegister, CoreStatusInfo, MemoryMismatch,
-    MemoryRegionSummary, MemoryVerifyReport, ProbeInfo, ResetMode, TargetInfo, WatchAccess,
-    Watchpoint,
+    AccessWidth, Backend, ConnectOptions, CoreRegister, CoreStatusInfo, ExportFormat,
+    ImageFileFormat, MemoryMismatch, MemoryRegionSummary, MemoryVerifyReport, ProbeInfo, ResetMode,
+    TargetInfo, WatchAccess, Watchpoint,
 };
 use crate::error::{ErrorCode, McpError};
 use std::collections::HashMap;
@@ -112,9 +112,40 @@ impl Backend for MockBackend {
             return Err(not_connected());
         }
         let step = width_bytes(width);
-        Ok((0..count)
-            .map(|i| *self.memory.get(&(address + i as u64 * step)).unwrap_or(&0))
-            .collect())
+        Ok(match width {
+            AccessWidth::U8 => (0..count)
+                .map(|i| {
+                    let a = address + i as u64;
+                    if let Some(v) = self.memory.get(&a) {
+                        *v & 0xFF
+                    } else {
+                        self.memory
+                            .get(&(a & !3))
+                            .map(|w| (*w >> ((a & 3) * 8)) & 0xFF)
+                            .unwrap_or(0)
+                    }
+                })
+                .collect(),
+            AccessWidth::U16 => (0..count)
+                .map(|i| {
+                    let a = address + i as u64 * 2;
+                    if let Some(v) = self.memory.get(&a) {
+                        *v & 0xFFFF
+                    } else {
+                        self.memory
+                            .get(&(a & !1))
+                            .map(|w| (*w >> ((a & 1) * 16)) & 0xFFFF)
+                            .unwrap_or(0)
+                    }
+                })
+                .collect(),
+            AccessWidth::U32 => (0..count)
+                .map(|i| *self.memory.get(&(address + i as u64 * step)).unwrap_or(&0))
+                .collect(),
+            AccessWidth::U64 => (0..count)
+                .map(|i| *self.memory.get(&(address + i as u64 * step)).unwrap_or(&0))
+                .collect(),
+        })
     }
 
     fn write_memory(
@@ -252,6 +283,10 @@ impl Backend for MockBackend {
                 "erase size must be greater than zero",
             ));
         }
+        if size == u64::MAX {
+            self.memory.clear();
+            return Ok(());
+        }
         for i in 0..size {
             self.memory.insert(address + i, 0xFF);
         }
@@ -355,5 +390,50 @@ impl Backend for MockBackend {
             verified: mismatches.is_empty(),
             mismatches,
         })
+    }
+
+    fn program_file(
+        &mut self,
+        path: &std::path::Path,
+        _format: ImageFileFormat,
+        address: u64,
+        _verify: bool,
+    ) -> Result<u64, McpError> {
+        if !self.connected {
+            return Err(not_connected());
+        }
+        let data =
+            std::fs::read(path).map_err(|e| McpError::new(ErrorCode::FileError, e.to_string()))?;
+        for (i, b) in data.iter().enumerate() {
+            self.memory.insert(address + i as u64, *b as u64);
+        }
+        Ok(data.len() as u64)
+    }
+
+    fn export_memory(
+        &mut self,
+        path: &std::path::Path,
+        format: ExportFormat,
+        address: u64,
+        size: u64,
+    ) -> Result<u64, McpError> {
+        if !self.connected {
+            return Err(not_connected());
+        }
+        if size == 0 {
+            return Err(McpError::new(
+                ErrorCode::InvalidArgument,
+                "export size must be greater than zero",
+            ));
+        }
+        let values = self.read_memory(address, AccessWidth::U8, size as u32)?;
+        let bytes: Vec<u8> = values.iter().map(|v| *v as u8).collect();
+        match format {
+            ExportFormat::Bin => std::fs::write(path, &bytes)
+                .map_err(|e| McpError::new(ErrorCode::FileError, e.to_string()))?,
+            ExportFormat::Hex => std::fs::write(path, crate::hex::encode_ihex(&bytes, address))
+                .map_err(|e| McpError::new(ErrorCode::FileError, e.to_string()))?,
+        }
+        Ok(size)
     }
 }
