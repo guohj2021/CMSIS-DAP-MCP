@@ -1,0 +1,60 @@
+name: Release
+on:
+  push:
+    tags: ["v*"]
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: cmsis-dap-mcp.exe
+            pkg: cmsis-dap-mcp-win32-x64
+          - os: ubuntu-latest
+            artifact: cmsis-dap-mcp
+            pkg: cmsis-dap-mcp-linux-x64
+          - os: macos-latest
+            artifact: cmsis-dap-mcp
+            pkg: cmsis-dap-mcp-darwin-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release
+      - name: Stage platform package
+        shell: bash
+        run: |
+          mkdir -p npm/platforms/${{ matrix.pkg }}/bin
+          cp target/release/${{ matrix.artifact }} npm/platforms/${{ matrix.pkg }}/bin/
+      - name: Pack npm platform package
+        working-directory: npm/platforms/${{ matrix.pkg }}
+        run: npm pack
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.pkg }}
+          path: |
+            npm/platforms/${{ matrix.pkg }}/*.tgz
+            target/release/${{ matrix.artifact }}
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish to npm
+        if: env.NPM_TOKEN != ''
+        shell: bash
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+          cd npm
+          npm publish --access public
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/**
