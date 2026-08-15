@@ -1,0 +1,9 @@
+{
+  "name": "cmsis-dap-mcp-darwin-x64",
+  "version": "0.1.0",
+  "os": ["darwin"],
+  "cpu": ["x64"],
+  "license": "MIT OR Apache-2.0",
+  "bin": { "cmsis-dap-mcp": "bin/cmsis-dap-mcp" },
+  "files": ["bin"]
+}
