@@ -1,10 +1,11 @@
 use cmsis_dap_mcp::backend::mock::MockBackend;
 use cmsis_dap_mcp::backend::{ConnectOptions, Protocol};
 use cmsis_dap_mcp::mcp::{
-    ClearBreakpointsParams, CmsisDapMcp, EraseFlashParams, HaltParams, ListBreakpointsParams, ReadCoreRegisterParams,
-    ProgramFlashParams, ReadDapParams, WriteDapParams,
-    ReadMemoryParams, ResetParams, ResumeParams, SetBreakpointParams, StepParams,
-    WriteCoreRegisterParams, WriteMemoryParams,
+    ClearBreakpointsParams, CmsisDapMcp, ConnectParams, DisconnectParams, EraseFlashParams,
+    GetProbeInfoParams, GetTargetInfoParams, HaltParams, ListBreakpointsParams, ListProbesParams,
+    ProgramFlashParams, ReadCoreRegisterParams, ReadDapParams, ReadMemoryParams, ResetParams,
+    ResumeParams, SetBreakpointParams, StepParams,
+    WriteCoreRegisterParams, WriteDapParams, WriteMemoryParams,
 };
 use cmsis_dap_mcp::security::SecurityPolicy;
 use cmsis_dap_mcp::session::SessionManager;
@@ -138,4 +139,26 @@ async fn flash_works_with_flag() {
     let structured = res.structured_content.unwrap();
     assert_eq!(structured["values"][0].as_u64(), Some(0xAA));
     assert_eq!(structured["values"][1].as_u64(), Some(0xBB));
+}
+#[tokio::test]
+async fn connect_disconnect_flow() {
+    let mcp = CmsisDapMcp::new(SessionManager::new(Box::new(MockBackend::new())), SecurityPolicy { allow_destructive: false });
+    let res = mcp.list_probes(Parameters(ListProbesParams {})).await;
+    assert!(!res.is_error.unwrap_or(true));
+    assert_eq!(res.structured_content.unwrap()["probes"].as_array().unwrap().len(), 1);
+    let res = mcp.connect(Parameters(ConnectParams { probe_id: None, protocol: Some("swd".into()), speed_khz: None, target: None })).await;
+    assert!(!res.is_error.unwrap_or(true));
+    let res = mcp.get_target_info(Parameters(GetTargetInfoParams {})).await;
+    assert!(!res.is_error.unwrap_or(true));
+    let res = mcp.disconnect(Parameters(DisconnectParams {})).await;
+    assert!(!res.is_error.unwrap_or(true));
+}
+
+#[tokio::test]
+async fn get_probe_info_filters_by_id() {
+    let mcp = CmsisDapMcp::new(SessionManager::new(Box::new(MockBackend::new())), SecurityPolicy { allow_destructive: false });
+    let res = mcp.get_probe_info(Parameters(GetProbeInfoParams { probe_id: Some("mock".into()) })).await;
+    assert!(!res.is_error.unwrap_or(true));
+    let res = mcp.get_probe_info(Parameters(GetProbeInfoParams { probe_id: Some("missing".into()) })).await;
+    assert!(res.is_error.unwrap_or(false));
 }
