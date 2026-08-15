@@ -52,16 +52,25 @@ impl ProbeRsBackend {
     ) -> Result<probe_rs::RegisterId, McpError> {
         match reg {
             CoreRegister::Number(n) => Ok(probe_rs::RegisterId(*n)),
-            CoreRegister::Name(name) => core
-                .registers()
-                .other_by_name(name)
-                .map(|r| r.id())
-                .ok_or_else(|| {
+            CoreRegister::Name(name) => {
+                let found = match name.to_ascii_lowercase().as_str() {
+                    "pc" => Some(core.program_counter()),
+                    "sp" => Some(core.stack_pointer()),
+                    "fp" => Some(core.frame_pointer()),
+                    "lr" | "ra" => Some(core.return_address()),
+                    "psr" => core.registers().psr(),
+                    _ => core
+                        .registers()
+                        .all_registers()
+                        .find(|r| r.name().eq_ignore_ascii_case(name)),
+                };
+                found.map(|r| r.id()).ok_or_else(|| {
                     McpError::new(
                         ErrorCode::InvalidArgument,
                         format!("unknown core register {name}"),
                     )
-                }),
+                })
+            }
         }
     }
 }
