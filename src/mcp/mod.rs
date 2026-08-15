@@ -2,9 +2,10 @@ pub mod tools_core;
 pub mod tools_dap;
 pub mod tools_flash;
 pub mod tools_memory;
+pub mod tools_probe;
 pub mod tools_svd;
 
-use crate::backend::CoreRegister;
+use crate::backend::{CoreRegister, Protocol};
 use crate::error::ErrorCode;
 use crate::security::{SecurityLevel, SecurityPolicy};
 use crate::session::SessionManager;
@@ -20,6 +21,7 @@ pub use tools_core::{
 pub use tools_dap::{ReadDapParams, WriteDapParams};
 pub use tools_flash::{EraseFlashParams, ProgramFlashParams};
 pub use tools_memory::{ReadMemoryParams, WriteMemoryParams};
+pub use tools_probe::{ConnectParams, DisconnectParams, GetProbeInfoParams, GetTargetInfoParams, ListProbesParams};
 pub use tools_svd::{ListPeripheralsParams, LoadSvdParams, ReadPeripheralParams, WritePeripheralParams};
 
 pub const SERVER_INSTRUCTIONS: &str = "CMSIS-DAP MCP server for Cortex-M targets. \
@@ -293,6 +295,66 @@ impl CmsisDapMcp {
         match self.session.lock().unwrap().backend().program_flash(params.address, &params.data) {
             Ok(()) => CallToolResult::structured(serde_json::json!({ "programmed": true, "address": params.address, "bytes": params.data.len() })),
             Err(e) => error_result(e.code, e.message),
+        }
+    }
+
+    #[tool(description = "List connected CMSIS-DAP debug probes.", annotations(title = "List probes", read_only_hint = true, destructive_hint = false, idempotent_hint = true, open_world_hint = false))]
+    pub async fn list_probes(&self, Parameters(_): Parameters<ListProbesParams>) -> CallToolResult {
+        match self.session.lock().unwrap().backend().list_probes() {
+            Ok(probes) => CallToolResult::structured(serde_json::json!({ "probes": probes })),
+            Err(e) => error_result(e.code, e.message),
+        }
+    }
+
+    #[tool(description = "Get information about one probe by id (or the first probe if omitted).", annotations(title = "Get probe info", read_only_hint = true, destructive_hint = false, idempotent_hint = true, open_world_hint = false))]
+    pub async fn get_probe_info(&self, Parameters(params): Parameters<GetProbeInfoParams>) -> CallToolResult {
+        let probes = match self.session.lock().unwrap().backend().list_probes() {
+            Ok(probes) => probes,
+            Err(e) => return error_result(e.code, e.message),
+        };
+        let probe = match &params.probe_id {
+            Some(id) => probes.iter().find(|p| p.id == *id || p.serial.as_deref() == Some(id.as_str())),
+            None => probes.first(),
+        };
+        match probe {
+            Some(info) => CallToolResult::structured(serde_json::json!({ "probe": info })),
+            None => error_result(ErrorCode::ProbeNotFound, format!("no probe with id {:?}", params.probe_id)),
+        }
+    }
+
+    #[tool(description = "Connect to a target through a probe. protocol is swd (default) or jtag; target is optional (generic Cortex-M if omitted).", annotations(title = "Connect", read_only_hint = false, destructive_hint = false, idempotent_hint = false, open_world_hint = false))]
+    pub async fn connect(&self, Parameters(params): Parameters<ConnectParams>) -> CallToolResult {
+        let protocol = match params.protocol.as_deref() {
+            None | Some("swd") => Protocol::Swd,
+            Some("jtag") => Protocol::Jtag,
+            Some(other) => return error_result(ErrorCode::InvalidArgument, format!("protocol must be swd or jtag, got {other}")),
+        };
+        let opts = crate::backend::ConnectOptions {
+            probe_id: params.probe_id,
+            protocol,
+            speed_khz: params.speed_khz,
+            target: params.target,
+        };
+        match self.session.lock().unwrap().connect(&opts) {
+            Ok(info) => CallToolResult::structured(serde_json::json!({ "target": info })),
+            Err(e) => error_result(e.code, e.message),
+        }
+    }
+
+    #[tool(description = "Disconnect from the target.", annotations(title = "Disconnect", read_only_hint = false, destructive_hint = false, idempotent_hint = true, open_world_hint = false))]
+    pub async fn disconnect(&self, Parameters(_): Parameters<DisconnectParams>) -> CallToolResult {
+        match self.session.lock().unwrap().disconnect() {
+            Ok(()) => CallToolResult::structured(serde_json::json!({ "disconnected": true })),
+            Err(e) => error_result(e.code, e.message),
+        }
+    }
+
+    #[tool(description = "Get information about the connected target (core type and memory regions).", annotations(title = "Get target info", read_only_hint = true, destructive_hint = false, idempotent_hint = true, open_world_hint = false))]
+    pub async fn get_target_info(&self, Parameters(_): Parameters<GetTargetInfoParams>) -> CallToolResult {
+        let session = self.session.lock().unwrap();
+        match session.target_info() {
+            Some(info) => CallToolResult::structured(serde_json::json!({ "target": info })),
+            None => error_result(ErrorCode::NotConnected, "no active session; call connect first".into()),
         }
     }
 }

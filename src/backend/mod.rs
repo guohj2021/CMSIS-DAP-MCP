@@ -10,7 +10,7 @@ pub enum AccessWidth {
     U64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct ProbeInfo {
     pub id: String,
     pub vendor: String,
@@ -32,7 +32,7 @@ pub struct ConnectOptions {
     pub target: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct TargetInfo {
     pub core_type: String,
     pub ap_count: usize,
