@@ -62,9 +62,9 @@ impl SvdDatabase {
                             .clone()
                             .unwrap_or_default()
                             .into_iter()
-                            .filter_map(|f| match f {
-                                svd_parser::svd::MaybeArray::Single(info) => Some(info),
-                                svd_parser::svd::MaybeArray::Array(info, _) => Some(info),
+                            .map(|f| match f {
+                                svd_parser::svd::MaybeArray::Single(info) => info,
+                                svd_parser::svd::MaybeArray::Array(info, _) => info,
                             })
                             .map(|info| SvdField {
                                 name: info.name.clone(),
@@ -76,11 +76,17 @@ impl SvdDatabase {
                     .collect(),
             })
             .collect();
-        Ok(Self { name: parsed.name.clone(), peripherals })
+        Ok(Self {
+            name: parsed.name.clone(),
+            peripherals,
+        })
     }
 
     pub fn summary(&self) -> SvdSummary {
-        SvdSummary { name: self.name.clone(), peripherals: self.peripherals.len() }
+        SvdSummary {
+            name: self.name.clone(),
+            peripherals: self.peripherals.len(),
+        }
     }
 
     pub fn list_peripherals(&self) -> Vec<String> {
@@ -97,12 +103,22 @@ impl SvdDatabase {
             .peripherals
             .iter()
             .find(|p| p.name.eq_ignore_ascii_case(peripheral))
-            .ok_or_else(|| McpError::new(ErrorCode::InvalidArgument, format!("peripheral {peripheral} not found")))?;
+            .ok_or_else(|| {
+                McpError::new(
+                    ErrorCode::InvalidArgument,
+                    format!("peripheral {peripheral} not found"),
+                )
+            })?;
         let r = p
             .registers
             .iter()
             .find(|r| r.name.eq_ignore_ascii_case(register))
-            .ok_or_else(|| McpError::new(ErrorCode::InvalidArgument, format!("register {register} not found")))?;
+            .ok_or_else(|| {
+                McpError::new(
+                    ErrorCode::InvalidArgument,
+                    format!("register {register} not found"),
+                )
+            })?;
         let addr = p.base + r.offset;
         match field {
             None => Ok((addr, None)),
@@ -111,8 +127,17 @@ impl SvdDatabase {
                     .fields
                     .iter()
                     .find(|f| f.name.eq_ignore_ascii_case(name))
-                    .ok_or_else(|| McpError::new(ErrorCode::InvalidArgument, format!("field {name} not found")))?;
-                let mask = if f.width >= 32 { u32::MAX } else { (1u32 << f.width) - 1 };
+                    .ok_or_else(|| {
+                        McpError::new(
+                            ErrorCode::InvalidArgument,
+                            format!("field {name} not found"),
+                        )
+                    })?;
+                let mask = if f.width >= 32 {
+                    u32::MAX
+                } else {
+                    (1u32 << f.width) - 1
+                };
                 Ok((addr, Some((mask, f.offset))))
             }
         }

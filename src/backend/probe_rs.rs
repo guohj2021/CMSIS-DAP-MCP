@@ -1,4 +1,6 @@
-use crate::backend::{AccessWidth, Backend, ConnectOptions, CoreRegister, ProbeInfo, Protocol, TargetInfo};
+use crate::backend::{
+    AccessWidth, Backend, ConnectOptions, CoreRegister, ProbeInfo, Protocol, TargetInfo,
+};
 use crate::error::{ErrorCode, McpError};
 use probe_rs::probe::{list::Lister, WireProtocol};
 use probe_rs::{MemoryInterface, Permissions, Session};
@@ -10,9 +12,19 @@ pub struct ProbeRsBackend {
     breakpoints: Vec<u64>,
 }
 
+impl Default for ProbeRsBackend {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ProbeRsBackend {
     pub fn new() -> Self {
-        Self { session: None, core_index: 0, breakpoints: Vec::new() }
+        Self {
+            session: None,
+            core_index: 0,
+            breakpoints: Vec::new(),
+        }
     }
 
     fn core(&mut self) -> Result<probe_rs::Core<'_>, McpError> {
@@ -23,14 +35,22 @@ impl ProbeRsBackend {
             .map_err(|e| McpError::new(ErrorCode::ConnectFailed, e.to_string()))
     }
 
-    fn resolve_register(core: &probe_rs::Core<'_>, reg: &CoreRegister) -> Result<probe_rs::RegisterId, McpError> {
+    fn resolve_register(
+        core: &probe_rs::Core<'_>,
+        reg: &CoreRegister,
+    ) -> Result<probe_rs::RegisterId, McpError> {
         match reg {
             CoreRegister::Number(n) => Ok(probe_rs::RegisterId(*n)),
             CoreRegister::Name(name) => core
                 .registers()
                 .other_by_name(name)
                 .map(|r| r.id())
-                .ok_or_else(|| McpError::new(ErrorCode::InvalidArgument, format!("unknown core register {name}"))),
+                .ok_or_else(|| {
+                    McpError::new(
+                        ErrorCode::InvalidArgument,
+                        format!("unknown core register {name}"),
+                    )
+                }),
         }
     }
 }
@@ -42,7 +62,10 @@ impl Backend for ProbeRsBackend {
         Ok(probes
             .into_iter()
             .map(|p| ProbeInfo {
-                id: p.serial_number.clone().unwrap_or_else(|| p.identifier.clone()),
+                id: p
+                    .serial_number
+                    .clone()
+                    .unwrap_or_else(|| p.identifier.clone()),
                 vendor: format!("{:04x}", p.vendor_id),
                 product: p.identifier,
                 serial: p.serial_number,
@@ -60,7 +83,9 @@ impl Backend for ProbeRsBackend {
             Some(id) => probes
                 .iter()
                 .find(|p| p.serial_number.as_deref() == Some(id.as_str()) || p.identifier == *id)
-                .ok_or_else(|| McpError::new(ErrorCode::ProbeNotFound, format!("no probe with id {id}")))?,
+                .ok_or_else(|| {
+                    McpError::new(ErrorCode::ProbeNotFound, format!("no probe with id {id}"))
+                })?,
             None => probes
                 .first()
                 .ok_or_else(|| McpError::new(ErrorCode::ProbeNotFound, "no probe found"))?,
@@ -87,7 +112,10 @@ impl Backend for ProbeRsBackend {
                     .attach_to_unspecified()
                     .map_err(|e| McpError::new(ErrorCode::ConnectFailed, e.to_string()))?;
                 probe
-                    .attach(probe_rs::config::TargetSelector::Auto, Permissions::default())
+                    .attach(
+                        probe_rs::config::TargetSelector::Auto,
+                        Permissions::default(),
+                    )
                     .map_err(|e| McpError::new(ErrorCode::ConnectFailed, e.to_string()))?
             }
         };
@@ -100,7 +128,10 @@ impl Backend for ProbeRsBackend {
         let ap_count = session.target().memory_map.len();
         self.breakpoints.clear();
         self.session = Some(session);
-        Ok(TargetInfo { core_type, ap_count })
+        Ok(TargetInfo {
+            core_type,
+            ap_count,
+        })
     }
 
     fn disconnect(&mut self) -> Result<(), McpError> {
@@ -109,7 +140,12 @@ impl Backend for ProbeRsBackend {
         Ok(())
     }
 
-    fn read_memory(&mut self, address: u64, width: AccessWidth, count: u32) -> Result<Vec<u64>, McpError> {
+    fn read_memory(
+        &mut self,
+        address: u64,
+        width: AccessWidth,
+        count: u32,
+    ) -> Result<Vec<u64>, McpError> {
         let mut core = self.core()?;
         let mut out = Vec::with_capacity(count as usize);
         let map_err = |e: probe_rs::Error| McpError::new(ErrorCode::MemoryFault, e.to_string());
@@ -138,7 +174,12 @@ impl Backend for ProbeRsBackend {
         Ok(out)
     }
 
-    fn write_memory(&mut self, address: u64, width: AccessWidth, data: &[u64]) -> Result<(), McpError> {
+    fn write_memory(
+        &mut self,
+        address: u64,
+        width: AccessWidth,
+        data: &[u64],
+    ) -> Result<(), McpError> {
         let mut core = self.core()?;
         let map_err = |e: probe_rs::Error| McpError::new(ErrorCode::MemoryFault, e.to_string());
         match width {
@@ -155,7 +196,7 @@ impl Backend for ProbeRsBackend {
                 core.write_32(address, &buf).map_err(map_err)?;
             }
             AccessWidth::U64 => {
-                let buf: Vec<u64> = data.iter().map(|v| *v).collect();
+                let buf: Vec<u64> = data.to_vec();
                 core.write_64(address, &buf).map_err(map_err)?;
             }
         }
@@ -165,8 +206,7 @@ impl Backend for ProbeRsBackend {
     fn read_core_register(&mut self, reg: &CoreRegister) -> Result<u64, McpError> {
         let mut core = self.core()?;
         let id = Self::resolve_register(&core, reg)?;
-        core
-            .read_core_reg::<u32>(id)
+        core.read_core_reg::<u32>(id)
             .map(|v| v as u64)
             .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))
     }
@@ -174,8 +214,7 @@ impl Backend for ProbeRsBackend {
     fn write_core_register(&mut self, reg: &CoreRegister, value: u64) -> Result<(), McpError> {
         let mut core = self.core()?;
         let id = Self::resolve_register(&core, reg)?;
-        core
-            .write_core_reg(id, value as u32)
+        core.write_core_reg(id, value as u32)
             .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))
     }
 
@@ -235,7 +274,10 @@ impl Backend for ProbeRsBackend {
     }
 
     fn read_dap(&mut self, address: u32) -> Result<u32, McpError> {
-        let session = self.session.as_mut().ok_or_else(|| McpError::new(ErrorCode::NotConnected, "no active session"))?;
+        let session = self
+            .session
+            .as_mut()
+            .ok_or_else(|| McpError::new(ErrorCode::NotConnected, "no active session"))?;
         let iface = session
             .get_arm_interface()
             .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))?;
@@ -243,7 +285,12 @@ impl Backend for ProbeRsBackend {
             let apsel = ((address >> 24) & 0xFF) as u8;
             let ap_addr = (address & 0xFF) as u64;
             iface
-                .read_raw_ap_register(&probe_rs::architecture::arm::FullyQualifiedApAddress::v1_with_default_dp(apsel), ap_addr)
+                .read_raw_ap_register(
+                    &probe_rs::architecture::arm::FullyQualifiedApAddress::v1_with_default_dp(
+                        apsel,
+                    ),
+                    ap_addr,
+                )
                 .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))?
         } else {
             let dp_addr = probe_rs::architecture::arm::dp::DpRegisterAddress {
@@ -258,7 +305,10 @@ impl Backend for ProbeRsBackend {
     }
 
     fn write_dap(&mut self, address: u32, value: u32) -> Result<(), McpError> {
-        let session = self.session.as_mut().ok_or_else(|| McpError::new(ErrorCode::NotConnected, "no active session"))?;
+        let session = self
+            .session
+            .as_mut()
+            .ok_or_else(|| McpError::new(ErrorCode::NotConnected, "no active session"))?;
         let iface = session
             .get_arm_interface()
             .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))?;
@@ -266,7 +316,13 @@ impl Backend for ProbeRsBackend {
             let apsel = ((address >> 24) & 0xFF) as u8;
             let ap_addr = (address & 0xFF) as u64;
             iface
-                .write_raw_ap_register(&probe_rs::architecture::arm::FullyQualifiedApAddress::v1_with_default_dp(apsel), ap_addr, value)
+                .write_raw_ap_register(
+                    &probe_rs::architecture::arm::FullyQualifiedApAddress::v1_with_default_dp(
+                        apsel,
+                    ),
+                    ap_addr,
+                    value,
+                )
                 .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))?
         } else {
             let dp_addr = probe_rs::architecture::arm::dp::DpRegisterAddress {
@@ -274,32 +330,48 @@ impl Backend for ProbeRsBackend {
                 bank: Some(((address >> 4) & 0x0F) as u8),
             };
             iface
-                .write_raw_dp_register(probe_rs::architecture::arm::dp::DpAddress::Default, dp_addr, value)
+                .write_raw_dp_register(
+                    probe_rs::architecture::arm::dp::DpAddress::Default,
+                    dp_addr,
+                    value,
+                )
                 .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))?
         }
         Ok(())
     }
 
     fn erase_flash(&mut self, _address: u64, _size: u64) -> Result<(), McpError> {
-        let session = self.session.as_mut().ok_or_else(|| McpError::new(ErrorCode::NotConnected, "no active session"))?;
+        let session = self
+            .session
+            .as_mut()
+            .ok_or_else(|| McpError::new(ErrorCode::NotConnected, "no active session"))?;
         let mut progress = probe_rs::flashing::FlashProgress::new(|_| {});
-        probe_rs::flashing::erase_all(session, &mut progress, false)
-            .map_err(|e| McpError::new(ErrorCode::ProtocolError, format!("flash erase failed: {e}")))?;
+        probe_rs::flashing::erase_all(session, &mut progress, false).map_err(|e| {
+            McpError::new(ErrorCode::ProtocolError, format!("flash erase failed: {e}"))
+        })?;
         Ok(())
     }
 
     fn program_flash(&mut self, address: u64, data: &[u8]) -> Result<(), McpError> {
-        let session = self.session.as_mut().ok_or_else(|| McpError::new(ErrorCode::NotConnected, "no active session"))?;
+        let session = self
+            .session
+            .as_mut()
+            .ok_or_else(|| McpError::new(ErrorCode::NotConnected, "no active session"))?;
         let mut loader = probe_rs::flashing::FlashLoader::new(
             session.target().memory_map.clone(),
             session.target().source().clone(),
         );
-        loader
-            .add_data(address, data)
-            .map_err(|e| McpError::new(ErrorCode::ProtocolError, format!("flash data invalid: {e}")))?;
+        loader.add_data(address, data).map_err(|e| {
+            McpError::new(ErrorCode::ProtocolError, format!("flash data invalid: {e}"))
+        })?;
         loader
             .commit(session, probe_rs::flashing::DownloadOptions::default())
-            .map_err(|e| McpError::new(ErrorCode::ProtocolError, format!("flash programming failed: {e}")))?;
+            .map_err(|e| {
+                McpError::new(
+                    ErrorCode::ProtocolError,
+                    format!("flash programming failed: {e}"),
+                )
+            })?;
         Ok(())
     }
 }
