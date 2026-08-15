@@ -4,6 +4,7 @@
 - [Quickstart](./quickstart.md)
 - [AI client configuration](./ai-clients.md)
 - [Tools](./tools.md)
+- [Scripting](./scripting.md)
 - [SWD and JTAG](./swd-jtag.md)
 - [SVD and Flash](./svd-flash.md)
 - [Security](./security.md)
