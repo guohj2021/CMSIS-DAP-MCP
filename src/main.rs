@@ -25,9 +25,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .init();
         }
     }
-    tracing::info!("starting cmsis-dap-mcp (destructive={})", cfg.allow_destructive);
+    tracing::info!(
+        "starting cmsis-dap-mcp (destructive={})",
+        cfg.allow_destructive
+    );
     let session = SessionManager::new(Box::new(ProbeRsBackend::new()));
-    let policy = SecurityPolicy { allow_destructive: cfg.allow_destructive };
+    let policy = SecurityPolicy {
+        allow_destructive: cfg.allow_destructive,
+    };
     let mcp = CmsisDapMcp::new(session, policy);
     mcp.serve(rmcp::transport::stdio()).await?;
     Ok(())

@@ -11,7 +11,11 @@ pub struct SessionManager {
 
 impl SessionManager {
     pub fn new(backend: Box<dyn Backend>) -> Self {
-        Self { backend, connected: None, svd: None }
+        Self {
+            backend,
+            connected: None,
+            svd: None,
+        }
     }
 
     pub fn connect(&mut self, opts: &ConnectOptions) -> Result<TargetInfo, McpError> {
@@ -51,9 +55,12 @@ impl SessionManager {
     }
 
     pub fn svd(&self) -> Result<&SvdDatabase, McpError> {
-        self.svd
-            .as_ref()
-            .ok_or_else(|| McpError::new(ErrorCode::SvdNotLoaded, "load an SVD file with load_svd first"))
+        self.svd.as_ref().ok_or_else(|| {
+            McpError::new(
+                ErrorCode::SvdNotLoaded,
+                "load an SVD file with load_svd first",
+            )
+        })
     }
 
     pub fn target_info(&self) -> Option<&TargetInfo> {
