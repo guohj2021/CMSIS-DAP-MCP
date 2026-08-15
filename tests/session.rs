@@ -11,6 +11,7 @@ fn connect_sets_state_and_auto_disconnects() {
         protocol: Protocol::Swd,
         speed_khz: None,
         target: None,
+        under_reset: false,
     };
     sm.connect(&opts).unwrap();
     sm.connect(&opts).unwrap();

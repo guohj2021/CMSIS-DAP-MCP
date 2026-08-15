@@ -11,4 +11,6 @@ pub struct EraseFlashParams {
 pub struct ProgramFlashParams {
     pub address: u64,
     pub data: Vec<u8>,
+    /// Read back and verify the programmed data after writing.
+    pub verify: Option<bool>,
 }
