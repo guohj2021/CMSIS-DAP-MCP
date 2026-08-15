@@ -2,6 +2,9 @@ name: Release
 on:
   push:
     tags: ["v*"]
+permissions:
+  contents: write
+  packages: write
 jobs:
   build:
     strategy:
@@ -20,6 +23,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.97.1
@@ -31,13 +35,21 @@ jobs:
           mkdir -p "npm/platforms/${{ matrix.scope }}/bin"
           cp "target/release/${{ matrix.artifact }}" "npm/platforms/${{ matrix.scope }}/bin/"
           npm --prefix "npm/platforms/${{ matrix.scope }}" pkg set version="$VERSION"
-      - name: Publish npm platform package
+      - name: Publish platform package to npmjs
         if: env.NPM_TOKEN != ''
         shell: bash
         run: |
           echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
           cd "npm/platforms/${{ matrix.scope }}"
           npm publish --access public
+      - name: Publish platform package to GitHub Packages
+        if: env.GH_TOKEN != ''
+        shell: bash
+        run: |
+          echo "registry=https://npm.pkg.github.com/" > ~/.npmrc
+          echo "//npm.pkg.github.com/:_authToken=${GH_TOKEN}" >> ~/.npmrc
+          cd "npm/platforms/${{ matrix.scope }}"
+          npm publish
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
         with:
@@ -58,7 +70,7 @@ jobs:
           npm --prefix npm pkg set "optionalDependencies.@guohj2021/cmsis-dap-mcp-win32-x64=$VERSION"
           npm --prefix npm pkg set "optionalDependencies.@guohj2021/cmsis-dap-mcp-linux-x64=$VERSION"
           npm --prefix npm pkg set "optionalDependencies.@guohj2021/cmsis-dap-mcp-darwin-x64=$VERSION"
-      - name: Publish meta package
+      - name: Publish meta package to npmjs
         if: env.NPM_TOKEN != ''
         shell: bash
         run: |
