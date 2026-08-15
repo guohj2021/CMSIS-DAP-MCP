@@ -1,5 +1,5 @@
 {
-  "name": "cmsis-dap-mcp-win32-x64",
+  "name": "@guohj2021/cmsis-dap-mcp-win32-x64",
   "version": "0.1.0",
   "os": ["win32"],
   "cpu": ["x64"],
