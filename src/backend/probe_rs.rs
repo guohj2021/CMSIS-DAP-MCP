@@ -1,16 +1,18 @@
 use crate::backend::{AccessWidth, Backend, ConnectOptions, CoreRegister, ProbeInfo, Protocol, TargetInfo};
 use crate::error::{ErrorCode, McpError};
-use probe_rs::probe::{list::Lister, Probe, WireProtocol};
+use probe_rs::probe::{list::Lister, WireProtocol};
 use probe_rs::{MemoryInterface, Permissions, Session};
+use std::time::Duration;
 
 pub struct ProbeRsBackend {
     session: Option<Session>,
     core_index: usize,
+    breakpoints: Vec<u64>,
 }
 
 impl ProbeRsBackend {
     pub fn new() -> Self {
-        Self { session: None, core_index: 0 }
+        Self { session: None, core_index: 0, breakpoints: Vec::new() }
     }
 
     fn core(&mut self) -> Result<probe_rs::Core<'_>, McpError> {
@@ -19,6 +21,17 @@ impl ProbeRsBackend {
             .ok_or_else(|| McpError::new(ErrorCode::NotConnected, "no active session"))?
             .core(self.core_index)
             .map_err(|e| McpError::new(ErrorCode::ConnectFailed, e.to_string()))
+    }
+
+    fn resolve_register(core: &probe_rs::Core<'_>, reg: &CoreRegister) -> Result<probe_rs::RegisterId, McpError> {
+        match reg {
+            CoreRegister::Number(n) => Ok(probe_rs::RegisterId(*n)),
+            CoreRegister::Name(name) => core
+                .registers()
+                .other_by_name(name)
+                .map(|r| r.id())
+                .ok_or_else(|| McpError::new(ErrorCode::InvalidArgument, format!("unknown core register {name}"))),
+        }
     }
 }
 
@@ -46,10 +59,7 @@ impl Backend for ProbeRsBackend {
         let selected = match &opts.probe_id {
             Some(id) => probes
                 .iter()
-                .find(|p| {
-                    p.serial_number.as_deref() == Some(id.as_str())
-                        || p.identifier == *id
-                })
+                .find(|p| p.serial_number.as_deref() == Some(id.as_str()) || p.identifier == *id)
                 .ok_or_else(|| McpError::new(ErrorCode::ProbeNotFound, format!("no probe with id {id}")))?,
             None => probes
                 .first()
@@ -88,12 +98,14 @@ impl Backend for ProbeRsBackend {
             .map(|c| format!("{:?}", c.core_type))
             .unwrap_or_else(|| "unknown".into());
         let ap_count = session.target().memory_map.len();
+        self.breakpoints.clear();
         self.session = Some(session);
         Ok(TargetInfo { core_type, ap_count })
     }
 
     fn disconnect(&mut self) -> Result<(), McpError> {
         self.session.take();
+        self.breakpoints.clear();
         Ok(())
     }
 
@@ -150,40 +162,76 @@ impl Backend for ProbeRsBackend {
         Ok(())
     }
 
-    fn read_core_register(&mut self, _reg: &CoreRegister) -> Result<u64, McpError> {
-        Err(McpError::new(ErrorCode::UnsupportedFeature, "not implemented yet"))
+    fn read_core_register(&mut self, reg: &CoreRegister) -> Result<u64, McpError> {
+        let mut core = self.core()?;
+        let id = Self::resolve_register(&core, reg)?;
+        core
+            .read_core_reg::<u32>(id)
+            .map(|v| v as u64)
+            .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))
     }
 
-    fn write_core_register(&mut self, _reg: &CoreRegister, _value: u64) -> Result<(), McpError> {
-        Err(McpError::new(ErrorCode::UnsupportedFeature, "not implemented yet"))
+    fn write_core_register(&mut self, reg: &CoreRegister, value: u64) -> Result<(), McpError> {
+        let mut core = self.core()?;
+        let id = Self::resolve_register(&core, reg)?;
+        core
+            .write_core_reg(id, value as u32)
+            .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))
     }
 
     fn halt(&mut self) -> Result<(), McpError> {
-        Err(McpError::new(ErrorCode::UnsupportedFeature, "not implemented yet"))
+        self.core()?
+            .halt(Duration::from_secs(1))
+            .map(|_| ())
+            .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))
     }
 
     fn resume(&mut self) -> Result<(), McpError> {
-        Err(McpError::new(ErrorCode::UnsupportedFeature, "not implemented yet"))
+        self.core()?
+            .run()
+            .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))
     }
 
     fn step(&mut self) -> Result<(), McpError> {
-        Err(McpError::new(ErrorCode::UnsupportedFeature, "not implemented yet"))
+        self.core()?
+            .step()
+            .map(|_| ())
+            .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))
     }
 
-    fn set_breakpoint(&mut self, _address: u64) -> Result<(), McpError> {
-        Err(McpError::new(ErrorCode::UnsupportedFeature, "not implemented yet"))
+    fn set_breakpoint(&mut self, address: u64) -> Result<(), McpError> {
+        let mut core = self.core()?;
+        core.set_hw_breakpoint(address)
+            .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))?;
+        drop(core);
+        if !self.breakpoints.contains(&address) {
+            self.breakpoints.push(address);
+            self.breakpoints.sort_unstable();
+        }
+        Ok(())
     }
 
     fn clear_breakpoints(&mut self) -> Result<(), McpError> {
-        Err(McpError::new(ErrorCode::UnsupportedFeature, "not implemented yet"))
+        let addresses = self.breakpoints.clone();
+        let mut core = self.core()?;
+        for address in &addresses {
+            core.clear_hw_breakpoint(*address)
+                .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))?;
+        }
+        drop(core);
+        self.breakpoints.clear();
+        Ok(())
     }
 
     fn list_breakpoints(&mut self) -> Result<Vec<u64>, McpError> {
-        Err(McpError::new(ErrorCode::UnsupportedFeature, "not implemented yet"))
+        self.core()?;
+        Ok(self.breakpoints.clone())
     }
 
     fn reset(&mut self) -> Result<(), McpError> {
-        Err(McpError::new(ErrorCode::UnsupportedFeature, "not implemented yet"))
+        self.core()?
+            .reset()
+            .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))
     }
 
     fn read_dap(&mut self, _address: u32) -> Result<u32, McpError> {

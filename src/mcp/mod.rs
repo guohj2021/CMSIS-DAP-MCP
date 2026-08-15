@@ -1,14 +1,19 @@
+pub mod tools_core;
 pub mod tools_memory;
 
+use crate::backend::CoreRegister;
 use crate::error::ErrorCode;
 use crate::security::SecurityPolicy;
 use crate::session::SessionManager;
-use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{CallToolResult, ServerCapabilities, ServerInfo};
 use rmcp::{ServerHandler, tool, tool_router};
 use std::sync::Mutex;
 
+pub use tools_core::{
+    ClearBreakpointsParams, HaltParams, ListBreakpointsParams, ReadCoreRegisterParams, ResetParams,
+    ResumeParams, SetBreakpointParams, StepParams, WriteCoreRegisterParams,
+};
 pub use tools_memory::{ReadMemoryParams, WriteMemoryParams};
 
 pub const SERVER_INSTRUCTIONS: &str = "CMSIS-DAP MCP server for Cortex-M targets. \
@@ -29,19 +34,25 @@ pub fn error_result(code: ErrorCode, message: String) -> CallToolResult {
     }))
 }
 
+fn register_params(name: Option<String>, number: Option<u16>) -> Result<CoreRegister, CallToolResult> {
+    match (name, number) {
+        (Some(n), None) => Ok(CoreRegister::Name(n)),
+        (None, Some(n)) => Ok(CoreRegister::Number(n)),
+        _ => Err(error_result(
+            ErrorCode::InvalidArgument,
+            "provide exactly one of name or number".into(),
+        )),
+    }
+}
+
 pub struct CmsisDapMcp {
-    tool_router: ToolRouter<Self>,
     pub session: Mutex<SessionManager>,
     pub policy: SecurityPolicy,
 }
 
 impl CmsisDapMcp {
     pub fn new(session: SessionManager, policy: SecurityPolicy) -> Self {
-        Self {
-            tool_router: Self::tool_router(),
-            session: Mutex::new(session),
-            policy,
-        }
+        Self { session: Mutex::new(session), policy }
     }
 }
 
@@ -79,8 +90,89 @@ impl CmsisDapMcp {
             Err(e) => error_result(e.code, e.message),
         }
     }
+
+    #[tool(description = "Read a core register by name (e.g. r0, sp, pc, xpsr) or by architecture-specific number. Provide exactly one of name or number.", annotations(title = "Read core register", read_only_hint = true, destructive_hint = false, idempotent_hint = true, open_world_hint = false))]
+    pub async fn read_core_register(&self, Parameters(params): Parameters<ReadCoreRegisterParams>) -> CallToolResult {
+        let reg = match register_params(params.name, params.number) {
+            Ok(r) => r,
+            Err(e) => return e,
+        };
+        match self.session.lock().unwrap().backend().read_core_register(&reg) {
+            Ok(value) => CallToolResult::structured(serde_json::json!({ "register": format!("{reg:?}"), "value": value })),
+            Err(e) => error_result(e.code, e.message),
+        }
+    }
+
+    #[tool(description = "Write a core register by name or number. Provide exactly one of name or number.", annotations(title = "Write core register", read_only_hint = false, destructive_hint = false, idempotent_hint = true, open_world_hint = false))]
+    pub async fn write_core_register(&self, Parameters(params): Parameters<WriteCoreRegisterParams>) -> CallToolResult {
+        let reg = match register_params(params.name, params.number) {
+            Ok(r) => r,
+            Err(e) => return e,
+        };
+        match self.session.lock().unwrap().backend().write_core_register(&reg, params.value) {
+            Ok(()) => CallToolResult::structured(serde_json::json!({ "register": format!("{reg:?}"), "value": params.value, "written": true })),
+            Err(e) => error_result(e.code, e.message),
+        }
+    }
+
+    #[tool(description = "Halt the connected core.", annotations(title = "Halt", read_only_hint = false, destructive_hint = false, idempotent_hint = false, open_world_hint = false))]
+    pub async fn halt(&self, Parameters(_): Parameters<HaltParams>) -> CallToolResult {
+        match self.session.lock().unwrap().backend().halt() {
+            Ok(()) => CallToolResult::structured(serde_json::json!({ "halted": true })),
+            Err(e) => error_result(e.code, e.message),
+        }
+    }
+
+    #[tool(description = "Resume execution of the connected core.", annotations(title = "Resume", read_only_hint = false, destructive_hint = false, idempotent_hint = false, open_world_hint = false))]
+    pub async fn resume(&self, Parameters(_): Parameters<ResumeParams>) -> CallToolResult {
+        match self.session.lock().unwrap().backend().resume() {
+            Ok(()) => CallToolResult::structured(serde_json::json!({ "running": true })),
+            Err(e) => error_result(e.code, e.message),
+        }
+    }
+
+    #[tool(description = "Single-step the connected core.", annotations(title = "Step", read_only_hint = false, destructive_hint = false, idempotent_hint = false, open_world_hint = false))]
+    pub async fn step(&self, Parameters(_): Parameters<StepParams>) -> CallToolResult {
+        match self.session.lock().unwrap().backend().step() {
+            Ok(()) => CallToolResult::structured(serde_json::json!({ "stepped": true })),
+            Err(e) => error_result(e.code, e.message),
+        }
+    }
+
+    #[tool(description = "Set a hardware breakpoint at the given address.", annotations(title = "Set breakpoint", read_only_hint = false, destructive_hint = false, idempotent_hint = true, open_world_hint = false))]
+    pub async fn set_breakpoint(&self, Parameters(params): Parameters<SetBreakpointParams>) -> CallToolResult {
+        match self.session.lock().unwrap().backend().set_breakpoint(params.address) {
+            Ok(()) => CallToolResult::structured(serde_json::json!({ "address": params.address, "set": true })),
+            Err(e) => error_result(e.code, e.message),
+        }
+    }
+
+    #[tool(description = "Clear all hardware breakpoints.", annotations(title = "Clear breakpoints", read_only_hint = false, destructive_hint = false, idempotent_hint = true, open_world_hint = false))]
+    pub async fn clear_breakpoints(&self, Parameters(_): Parameters<ClearBreakpointsParams>) -> CallToolResult {
+        match self.session.lock().unwrap().backend().clear_breakpoints() {
+            Ok(()) => CallToolResult::structured(serde_json::json!({ "cleared": true })),
+            Err(e) => error_result(e.code, e.message),
+        }
+    }
+
+    #[tool(description = "List currently set hardware breakpoints.", annotations(title = "List breakpoints", read_only_hint = true, destructive_hint = false, idempotent_hint = true, open_world_hint = false))]
+    pub async fn list_breakpoints(&self, Parameters(_): Parameters<ListBreakpointsParams>) -> CallToolResult {
+        match self.session.lock().unwrap().backend().list_breakpoints() {
+            Ok(addresses) => CallToolResult::structured(serde_json::json!({ "breakpoints": addresses })),
+            Err(e) => error_result(e.code, e.message),
+        }
+    }
+
+    #[tool(description = "Reset the connected target. Can interrupt running firmware.", annotations(title = "Reset", read_only_hint = false, destructive_hint = true, idempotent_hint = false, open_world_hint = false))]
+    pub async fn reset(&self, Parameters(_): Parameters<ResetParams>) -> CallToolResult {
+        match self.session.lock().unwrap().backend().reset() {
+            Ok(()) => CallToolResult::structured(serde_json::json!({ "reset": true })),
+            Err(e) => error_result(e.code, e.message),
+        }
+    }
 }
 
+#[rmcp::tool_handler(router = Self::tool_router())]
 impl ServerHandler for CmsisDapMcp {
     fn get_info(&self) -> ServerInfo {
         ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
