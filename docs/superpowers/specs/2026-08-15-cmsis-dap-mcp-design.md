@@ -18,8 +18,8 @@
 - 提供 SVD 后可进行命名外设访问；提供 CMSIS-Pack/FLM 或等价 target 描述后可进行 Flash 擦写。
 - 默认安全：只读操作放行，写/调试控制按客户端策略确认，破坏性操作默认禁用并需显式 `--allow-destructive`。
 - 三平台（Windows / Linux / macOS）CI 构建与测试，GitHub Release 发布，GitHub Pages 文档。
-- GitFlow：`feature -> develop -> main`，本地 ALB32F033C8 实机验证通过后才推送与发布。
-- 公开仓库不包含 ALB32 专有内容，也不绑定任何具体芯片。
+- GitFlow：`feature -> develop -> main`，本地 Cortex-M0 实机验证通过后才推送与发布。
+- 公开仓库不包含任何厂商专有内容，也不绑定任何具体芯片。
 
 ## 2. 范围与非目标
 
@@ -187,7 +187,7 @@ cmsis-dap-mcp [--allow-destructive] [--log-level debug|info|warn|error]
 - 单元测试：SVD 解析、地址解析、安全策略、错误映射、CLI 参数。
 - 后端测试：使用 probe-rs 的模拟/伪探针验证连接、内存读写、核心控制流程。
 - CI：`cargo fmt --check`、`cargo clippy`、`cargo test`；无硬件依赖。
-- 本地实机验证（不入 CI、不入库）：ALB32F033C8 + 现有 CMSIS-DAP v1 探针（VID 0416 / PID 5051），使用 SDK 的 SVD 与 FLM 生成本地 target 描述，验证读 RAM、写 RAM、核心暂停/恢复、SVD 命名访问；破坏性验证在用户确认下进行。
+- 本地实机验证（不入 CI、不入库）：本地 Cortex-M0 验证板 + 现有 CMSIS-DAP v1 探针，使用厂商 SDK（仓库外）的 SVD 与 FLM 生成本地 target 描述，验证读 RAM、写 RAM、核心暂停/恢复、SVD 命名访问；破坏性验证在用户确认下进行。
 - 发布前验证清单：三平台构建产物、npm 包 dry-run、Pages 构建、GitFlow 合并结果、`git diff --check`、仓库无厂商内容扫描。
 
 ## 12. 打包与发布
@@ -230,7 +230,7 @@ LICENSE-APACHE / LICENSE-MIT
 | M0 | 安装 Rust 工具链、初始化仓库、Cargo 骨架、MCP hello | `cargo test` 通过 |
 | M1 | 探针枚举 + connect + 内存读写 | 模拟后端测试通过；实机读 RAM |
 | M2 | 核心控制：halt/resume/step/断点/寄存器/复位 | 实机验证通过 |
-| M3 | SVD 加载与命名外设访问 | ALB32F0xx.svd 本地解析与命名读取 |
+| M3 | SVD 加载与命名外设访问 | 厂商 SVD（仓库外）本地解析与命名读取 |
 | M4 | Flash 擦写（destructive） | 本地目标描述验证（用户确认后） |
 | M5 | npm 包装 + 三平台 CI + Pages 文档 | 三平台产物与 npm dry-run 通过 |
 | M6 | 本地全量验证 + GitFlow 合并 | `feature -> develop -> main` |
@@ -244,7 +244,7 @@ LICENSE-APACHE / LICENSE-MIT
 
 ## 18. 本地验证环境（仅本机，不入库）
 
-- 芯片：ALB32F033C8（Cortex-M0）。
+- 芯片：本地 Cortex-M0 验证板。
 - 探针：当前 CMSIS-DAP v1 复合设备，VID 0416 / PID 5051，固件 1.2.0，序列号 CDAB1A795BBD42E239E339E3。
-- 资料：`C:\Workspace\ALB32MCU\workspace\ALB32F0xx_SDK`（SVD、DFP、FLM），仅用于本地验证与生成 target 描述。
+- 资料：厂商 SDK（路径保持在仓库外）提供的 SVD、DFP、FLM，仅用于本地验证与生成 target 描述。
 - 验证方式：从 SDK 资料生成 probe-rs target 描述置于仓库外目录；所有验证命令与结果记录在本地，不提交。
