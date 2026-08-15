@@ -25,6 +25,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .init();
         }
     }
+    if let Some(path) = &cfg.target_yaml {
+        let yaml = std::fs::read_to_string(path)?;
+        let mut registry = probe_rs::config::registry::Registry::new();
+        let name = registry
+            .add_target_family_from_yaml(&yaml)
+            .map_err(|e| format!("failed to parse target yaml {}: {e}", path.display()))?;
+        for family in registry.families() {
+            probe_rs::config::registry::add_builtin_target(family.clone());
+        }
+        tracing::info!("loaded target family {name} from {}", path.display());
+    }
     tracing::info!(
         "starting cmsis-dap-mcp (destructive={})",
         cfg.allow_destructive
