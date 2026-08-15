@@ -107,17 +107,9 @@ impl Backend for ProbeRsBackend {
             Some(name) => probe
                 .attach(name, Permissions::default())
                 .map_err(|e| McpError::new(ErrorCode::ConnectFailed, e.to_string()))?,
-            None => {
-                probe
-                    .attach_to_unspecified()
-                    .map_err(|e| McpError::new(ErrorCode::ConnectFailed, e.to_string()))?;
-                probe
-                    .attach(
-                        probe_rs::config::TargetSelector::Auto,
-                        Permissions::default(),
-                    )
-                    .map_err(|e| McpError::new(ErrorCode::ConnectFailed, e.to_string()))?
-            }
+            None => probe
+                .attach("Cortex-M0", Permissions::default())
+                .map_err(|e| McpError::new(ErrorCode::ConnectFailed, e.to_string()))?,
         };
         let core_type = session
             .target()
