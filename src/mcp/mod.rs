@@ -1,6 +1,7 @@
 pub mod tools_core;
 pub mod tools_dap;
 pub mod tools_memory;
+pub mod tools_svd;
 
 use crate::backend::CoreRegister;
 use crate::error::ErrorCode;
@@ -17,6 +18,7 @@ pub use tools_core::{
 };
 pub use tools_dap::{ReadDapParams, WriteDapParams};
 pub use tools_memory::{ReadMemoryParams, WriteMemoryParams};
+pub use tools_svd::{ListPeripheralsParams, LoadSvdParams, ReadPeripheralParams, WritePeripheralParams};
 
 pub const SERVER_INSTRUCTIONS: &str = "CMSIS-DAP MCP server for Cortex-M targets. \
 Security tiers: ReadOnly tools (list_probes, get_target_info, read_memory, read_core_register, \
@@ -188,8 +190,88 @@ impl CmsisDapMcp {
             Err(e) => error_result(e.code, e.message),
         }
     }
-}
 
+    #[tool(description = "Load an SVD file (user-provided path) for named peripheral access.", annotations(title = "Load SVD", read_only_hint = false, destructive_hint = false, idempotent_hint = false, open_world_hint = false))]
+    pub async fn load_svd(&self, Parameters(params): Parameters<LoadSvdParams>) -> CallToolResult {
+        match self.session.lock().unwrap().load_svd(std::path::Path::new(&params.path)) {
+            Ok(summary) => CallToolResult::structured(serde_json::json!({
+                "name": summary.name,
+                "peripherals": summary.peripherals,
+            })),
+            Err(e) => error_result(e.code, e.message),
+        }
+    }
+
+    #[tool(description = "List peripherals from the loaded SVD.", annotations(title = "List peripherals", read_only_hint = true, destructive_hint = false, idempotent_hint = true, open_world_hint = false))]
+    pub async fn list_peripherals(&self, Parameters(_): Parameters<ListPeripheralsParams>) -> CallToolResult {
+        match self.session.lock().unwrap().svd() {
+            Ok(db) => CallToolResult::structured(serde_json::json!({ "peripherals": db.list_peripherals() })),
+            Err(e) => error_result(e.code, e.message),
+        }
+    }
+
+    #[tool(description = "Read a peripheral register (or one bit field of it) by name from the loaded SVD.", annotations(title = "Read peripheral register", read_only_hint = true, destructive_hint = false, idempotent_hint = true, open_world_hint = false))]
+    pub async fn read_peripheral(&self, Parameters(params): Parameters<ReadPeripheralParams>) -> CallToolResult {
+        let mut session = self.session.lock().unwrap();
+        let db = match session.svd() {
+            Ok(db) => db.clone(),
+            Err(e) => return error_result(e.code, e.message),
+        };
+        let (addr, field) = match db.resolve(&params.peripheral, &params.register, params.field.as_deref()) {
+            Ok(v) => v,
+            Err(e) => return error_result(e.code, e.message),
+        };
+        match session.backend().read_memory(addr, crate::backend::AccessWidth::U32, 1) {
+            Ok(values) => {
+                let raw = values[0];
+                let value = match field {
+                    Some((mask, shift)) => (raw & mask as u64) >> shift,
+                    None => raw,
+                };
+                CallToolResult::structured(serde_json::json!({
+                    "peripheral": params.peripheral,
+                    "register": params.register,
+                    "address": addr,
+                    "value": value,
+                }))
+            }
+            Err(e) => error_result(e.code, e.message),
+        }
+    }
+
+    #[tool(description = "Write a peripheral register (or one bit field of it) by name from the loaded SVD. Field writes are read-modify-write.", annotations(title = "Write peripheral register", read_only_hint = false, destructive_hint = false, idempotent_hint = true, open_world_hint = false))]
+    pub async fn write_peripheral(&self, Parameters(params): Parameters<WritePeripheralParams>) -> CallToolResult {
+        let mut session = self.session.lock().unwrap();
+        let db = match session.svd() {
+            Ok(db) => db.clone(),
+            Err(e) => return error_result(e.code, e.message),
+        };
+        let (addr, field) = match db.resolve(&params.peripheral, &params.register, params.field.as_deref()) {
+            Ok(v) => v,
+            Err(e) => return error_result(e.code, e.message),
+        };
+        let result = match field {
+            Some((mask, shift)) => {
+                let current = match session.backend().read_memory(addr, crate::backend::AccessWidth::U32, 1) {
+                    Ok(values) => values[0],
+                    Err(e) => return error_result(e.code, e.message),
+                };
+                let updated = (current & !((mask as u64) << shift)) | ((params.value & mask as u64) << shift);
+                session.backend().write_memory(addr, crate::backend::AccessWidth::U32, &[updated])
+            }
+            None => session.backend().write_memory(addr, crate::backend::AccessWidth::U32, &[params.value]),
+        };
+        match result {
+            Ok(()) => CallToolResult::structured(serde_json::json!({
+                "peripheral": params.peripheral,
+                "register": params.register,
+                "address": addr,
+                "written": true,
+            })),
+            Err(e) => error_result(e.code, e.message),
+        }
+    }
+}
 #[rmcp::tool_handler(router = Self::tool_router())]
 impl ServerHandler for CmsisDapMcp {
     fn get_info(&self) -> ServerInfo {

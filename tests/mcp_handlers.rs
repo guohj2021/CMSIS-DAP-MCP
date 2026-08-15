@@ -79,3 +79,43 @@ async fn dap_read_write_with_mock() {
     let res = mcp.read_dap(Parameters(ReadDapParams { address: 0x4 })).await;
     assert_eq!(res.structured_content.unwrap()["value"].as_u64(), Some(0x1));
 }
+const MINI_SVD: &str = r#"<?xml version="1.0"?>
+<device schemaVersion="1.1">
+<vendor>Test</vendor><name>TestDevice</name><version>1.0</version><description>test device</description>
+<addressUnitBits>8</addressUnitBits><width>32</width><size>32</size><access>read-write</access>
+<resetValue>0x00000000</resetValue><resetMask>0xFFFFFFFF</resetMask>
+<peripherals>
+<peripheral><name>GPIOA</name><description>GPIO A</description><baseAddress>0x48000000</baseAddress>
+<addressBlock><offset>0x0</offset><size>0x400</size><usage>registers</usage></addressBlock>
+<registers><register><name>ODR</name><description>output data</description><addressOffset>0x14</addressOffset>
+<size>32</size><access>read-write</access><resetValue>0x0</resetValue>
+<fields><field><name>ODR0</name><bitOffset>0</bitOffset><bitWidth>1</bitWidth></field></fields>
+</register></registers></peripheral>
+</peripherals></device>"#;
+
+#[tokio::test]
+async fn peripheral_read_write_with_mock() {
+    use cmsis_dap_mcp::mcp::{LoadSvdParams, ReadPeripheralParams, WritePeripheralParams};
+    use std::io::Write;
+
+    let mut f = tempfile::NamedTempFile::new().unwrap();
+    f.write_all(MINI_SVD.as_bytes()).unwrap();
+    let mcp = CmsisDapMcp::new(SessionManager::new(Box::new(MockBackend::new())), SecurityPolicy { allow_destructive: false });
+    connect(&mcp);
+    let path = f.path().to_string_lossy().to_string();
+    let res = mcp.load_svd(Parameters(LoadSvdParams { path })).await;
+    assert!(!res.is_error.unwrap_or(true));
+    let res = mcp.write_peripheral(Parameters(WritePeripheralParams {
+        peripheral: "GPIOA".into(),
+        register: "ODR".into(),
+        field: Some("ODR0".into()),
+        value: 1,
+    })).await;
+    assert!(!res.is_error.unwrap_or(true));
+    let res = mcp.read_peripheral(Parameters(ReadPeripheralParams {
+        peripheral: "GPIOA".into(),
+        register: "ODR".into(),
+        field: Some("ODR0".into()),
+    })).await;
+    assert_eq!(res.structured_content.unwrap()["value"].as_u64(), Some(1));
+}
