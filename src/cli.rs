@@ -30,6 +30,8 @@ pub struct AppConfig {
     pub target: Option<String>,
     #[arg(long)]
     pub svd: Option<PathBuf>,
+    #[arg(long)]
+    pub target_yaml: Option<PathBuf>,
 }
 
 impl AppConfig {

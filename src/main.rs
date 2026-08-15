@@ -25,11 +25,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .init();
         }
     }
+    let backend = match &cfg.target_yaml {
+        Some(path) => {
+            let yaml = std::fs::read_to_string(path)?;
+            let mut registry = probe_rs::config::Registry::from_builtin_families();
+            let name = registry
+                .add_target_family_from_yaml(&yaml)
+                .map_err(|e| format!("failed to parse target yaml {}: {e}", path.display()))?;
+            tracing::info!("loaded target family {name} from {}", path.display());
+            ProbeRsBackend::with_registry(registry)
+        }
+        None => ProbeRsBackend::new(),
+    };
     tracing::info!(
         "starting cmsis-dap-mcp (destructive={})",
         cfg.allow_destructive
     );
-    let session = SessionManager::new(Box::new(ProbeRsBackend::new()));
+    let session = SessionManager::new(Box::new(backend));
     let policy = SecurityPolicy {
         allow_destructive: cfg.allow_destructive,
     };
