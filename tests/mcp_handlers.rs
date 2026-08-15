@@ -2,6 +2,7 @@ use cmsis_dap_mcp::backend::mock::MockBackend;
 use cmsis_dap_mcp::backend::{ConnectOptions, Protocol};
 use cmsis_dap_mcp::mcp::{
     ClearBreakpointsParams, CmsisDapMcp, HaltParams, ListBreakpointsParams, ReadCoreRegisterParams,
+    ReadDapParams, WriteDapParams,
     ReadMemoryParams, ResetParams, ResumeParams, SetBreakpointParams, StepParams,
     WriteCoreRegisterParams, WriteMemoryParams,
 };
@@ -68,4 +69,13 @@ async fn core_register_roundtrip_with_mock() {
 #[test]
 fn instructions_are_self_contained() {
     assert!(cmsis_dap_mcp::mcp::SERVER_INSTRUCTIONS.len() >= 512);
+}
+#[tokio::test]
+async fn dap_read_write_with_mock() {
+    let mcp = CmsisDapMcp::new(SessionManager::new(Box::new(MockBackend::new())), SecurityPolicy { allow_destructive: false });
+    connect(&mcp);
+    let res = mcp.write_dap(Parameters(WriteDapParams { address: 0x4, value: 0x1 })).await;
+    assert!(!res.is_error.unwrap_or(true));
+    let res = mcp.read_dap(Parameters(ReadDapParams { address: 0x4 })).await;
+    assert_eq!(res.structured_content.unwrap()["value"].as_u64(), Some(0x1));
 }
