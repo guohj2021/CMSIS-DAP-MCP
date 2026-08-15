@@ -179,6 +179,32 @@ program_flash { "address": 0x08000000, "data": [0x00, 0x11, ...], "verify": true
 `verify: true` reads the data back after programming. `erase_flash` erases
 only the sectors overlapping the requested range.
 
+### Firmware files and scripts
+
+Instead of raw `data`, `program_flash` accepts a firmware file via `path`:
+
+```text
+program_flash { "address": 0x08004000, "path": "fw.hex", "format": "hex", "verify": true }
+```
+
+Supported formats: `elf`, `axf`, `bin` (requires `address`), `hex`/`ihex`/
+`intelhex`, or `auto` (default, inferred from the extension).
+
+`read_memory` can export a range to a file:
+
+```text
+read_memory { "address": 0x08000000, "width": "u8", "count": 0x1000, "path": "fw.bin", "format": "bin" }
+```
+
+`run_script` executes a linear debug script with a J-Link Commander / OpenOCD
+style command subset (see the documentation for the full command reference):
+
+```text
+run_script { "script": "connect\nhalt\nreg pc\nsavebin C:/dump.bin 0x20000000 0x100\nresume" }
+```
+
+Destructive script commands require `--allow-destructive`.
+
 ## Security
 
 - Read-only tools are always available.
@@ -385,6 +411,32 @@ program_flash { "address": 0x08000000, "data": [0x00, 0x11, ...], "verify": true
 ```
 
 `verify: true` 会在烧写后读回校验。`erase_flash` 只擦除与请求范围重叠的扇区。
+
+### 固件文件与脚本
+
+`program_flash` 除了原始 `data`，还可以用 `path` 传入固件文件：
+
+```text
+program_flash { "address": 0x08004000, "path": "fw.hex", "format": "hex", "verify": true }
+```
+
+支持格式：`elf`、`axf`、`bin`（必须给 `address`）、`hex`/`ihex`/`intelhex`，
+或 `auto`（默认，按扩展名推断）。
+
+`read_memory` 可以把范围导出为文件：
+
+```text
+read_memory { "address": 0x08000000, "width": "u8", "count": 0x1000, "path": "fw.bin", "format": "bin" }
+```
+
+`run_script` 用 J-Link Commander / OpenOCD 风格命令子集执行线性调试脚本
+（完整命令参考见文档）：
+
+```text
+run_script { "script": "connect\nhalt\nreg pc\nsavebin C:/dump.bin 0x20000000 0x100\nresume" }
+```
+
+脚本内的破坏性命令需要 `--allow-destructive`。
 
 ## 安全
 

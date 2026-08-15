@@ -9,6 +9,7 @@ pub enum ErrorCode {
     Timeout,
     MemoryFault,
     SvdNotLoaded,
+    FileError,
     UnsupportedFeature,
     DestructiveDisabled,
     InvalidArgument,
