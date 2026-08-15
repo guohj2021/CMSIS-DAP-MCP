@@ -31,6 +31,14 @@ DPIDR and a memory map summary (RAM/NVM regions).
 `verify_memory` reads back the given range and compares it with `data`,
 returning `verified` and a list of `mismatches`.
 
+`read_memory` can also export a range to a file: pass `path` plus
+`format` (`bin` default or `hex`) and `count` becomes the number of **bytes**
+to read. Example:
+
+```text
+read_memory { "address": 0x08000000, "width": "u8", "count": 0x1000, "path": "firmware.bin", "format": "bin" }
+```
+
 ## Core
 
 | Tool | Params | Level |
@@ -94,15 +102,34 @@ Field writes are read-modify-write.
 | Tool | Params | Level |
 | --- | --- | --- |
 | `erase_flash` | `address`, `size` | Destructive |
-| `program_flash` | `address`, `data`, `verify` (optional) | Destructive |
+| `program_flash` | `address`, `data` **or** `path`, `format` (optional), `verify` (optional) | Destructive |
 
 `erase_flash` erases only the sectors overlapping `[address, address+size)`;
 pass the full flash range to erase the whole chip. `program_flash` with
-`verify: true` reads the data back after programming.
+`verify: true` reads the data back after programming. Instead of raw `data`
+you can pass a firmware file via `path`:
+
+```text
+program_flash { "address": 0x08004000, "path": "/path/to/fw.hex", "format": "hex", "verify": true }
+```
+
+Supported formats: `elf`, `axf` (same container as ELF), `bin` (requires
+`address`), `hex`/`ihex`/`intelhex`, or `auto` (default, inferred from the
+file extension `.elf`/`.axf`/`.bin`/`.hex`/`.ihx`).
+
+## Scripts
+
+| Tool | Params | Level |
+| --- | --- | --- |
+| `run_script` | `path` **or** `script` | Write |
+
+`run_script` executes a linear debug script using a J-Link Commander /
+OpenOCD style command subset. See [Scripting](./scripting.md) for the full
+command reference and examples.
 
 ## Error codes
 
 Errors return structured JSON with `code` and `message`:
 `ProbeNotFound`, `ConnectFailed`, `NotConnected`, `ProtocolError`, `Timeout`,
-`MemoryFault`, `SvdNotLoaded`, `UnsupportedFeature`, `DestructiveDisabled`,
-`InvalidArgument`, `InternalError`.
+`MemoryFault`, `SvdNotLoaded`, `FileError`, `UnsupportedFeature`,
+`DestructiveDisabled`, `InvalidArgument`, `InternalError`.

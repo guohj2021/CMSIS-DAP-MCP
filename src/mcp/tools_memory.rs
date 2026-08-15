@@ -8,6 +8,10 @@ pub struct ReadMemoryParams {
     pub width: String,
     #[schemars(default = "default_count")]
     pub count: u32,
+    /// Export mode: path of the file to write (bin or hex). When set, count is the number of bytes to read.
+    pub path: Option<String>,
+    /// Export format: "bin" (default) or "hex".
+    pub format: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
