@@ -17,6 +17,7 @@ fn connect(mcp: &CmsisDapMcp) {
         protocol: Protocol::Swd,
         speed_khz: None,
         target: None,
+        under_reset: false,
     };
     mcp.session.lock().unwrap().connect(&opts).unwrap();
 }
@@ -121,7 +122,7 @@ async fn core_control_flow_with_mock() {
         0
     );
     assert!(!mcp
-        .reset(Parameters(ResetParams {}))
+        .reset(Parameters(ResetParams { mode: None }))
         .await
         .is_error
         .unwrap_or(true));
@@ -263,6 +264,7 @@ async fn flash_works_with_flag() {
         .program_flash(Parameters(ProgramFlashParams {
             address: 0x0800_0000,
             data: vec![0xAA, 0xBB],
+            verify: None,
         }))
         .await;
     assert!(!res.is_error.unwrap_or(true));
@@ -300,6 +302,7 @@ async fn connect_disconnect_flow() {
             protocol: Some("swd".into()),
             speed_khz: None,
             target: None,
+            under_reset: None,
         }))
         .await;
     assert!(!res.is_error.unwrap_or(true));

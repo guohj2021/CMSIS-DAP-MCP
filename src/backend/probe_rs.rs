@@ -1,15 +1,21 @@
 use crate::backend::{
-    AccessWidth, Backend, ConnectOptions, CoreRegister, ProbeInfo, Protocol, TargetInfo,
+    register_hint, AccessWidth, Backend, ConnectOptions, CoreRegister, CoreStatusInfo,
+    MemoryMismatch, MemoryRegionSummary, MemoryVerifyReport, ProbeInfo, Protocol, RegisterHint,
+    ResetMode, TargetInfo, WatchAccess, Watchpoint,
 };
 use crate::error::{ErrorCode, McpError};
+use probe_rs::config::MemoryRegion;
+use probe_rs::flashing::{erase, erase_all, DownloadOptions, FlashProgress};
 use probe_rs::probe::{list::Lister, WireProtocol};
-use probe_rs::{MemoryInterface, Permissions, Session};
+use probe_rs::{CoreStatus, MemoryInterface, Permissions, RegisterRole, Session};
+use std::collections::BTreeSet;
 use std::time::Duration;
 
 pub struct ProbeRsBackend {
     session: Option<Session>,
     core_index: usize,
     breakpoints: Vec<u64>,
+    watchpoints: Vec<Watchpoint>,
     registry: Option<probe_rs::config::Registry>,
 }
 
@@ -25,6 +31,7 @@ impl ProbeRsBackend {
             session: None,
             core_index: 0,
             breakpoints: Vec::new(),
+            watchpoints: Vec::new(),
             registry: None,
         }
     }
@@ -34,6 +41,7 @@ impl ProbeRsBackend {
             session: None,
             core_index: 0,
             breakpoints: Vec::new(),
+            watchpoints: Vec::new(),
             registry: Some(registry),
         }
     }
@@ -53,16 +61,21 @@ impl ProbeRsBackend {
         match reg {
             CoreRegister::Number(n) => Ok(probe_rs::RegisterId(*n)),
             CoreRegister::Name(name) => {
-                let found = match name.to_ascii_lowercase().as_str() {
-                    "pc" => Some(core.program_counter()),
-                    "sp" => Some(core.stack_pointer()),
-                    "fp" => Some(core.frame_pointer()),
-                    "lr" | "ra" => Some(core.return_address()),
-                    "psr" => core.registers().psr(),
-                    _ => core
-                        .registers()
+                let regs = core.registers();
+                let found = match register_hint(name) {
+                    RegisterHint::ProgramCounter => Some(core.program_counter()),
+                    RegisterHint::StackPointer => Some(core.stack_pointer()),
+                    RegisterHint::FramePointer => Some(core.frame_pointer()),
+                    RegisterHint::ReturnAddress => Some(core.return_address()),
+                    RegisterHint::ProcessorStatus => regs.psr(),
+                    RegisterHint::MainStackPointer => regs.msp(),
+                    RegisterHint::ProcessStackPointer => regs.psp(),
+                    RegisterHint::FpuStatus => regs.fpsr(),
+                    RegisterHint::GeneralIndex(index) => regs.get_core_register(index),
+                    RegisterHint::ByName => regs
                         .all_registers()
-                        .find(|r| r.name().eq_ignore_ascii_case(name)),
+                        .find(|r| r.name().eq_ignore_ascii_case(name))
+                        .or_else(|| regs.other_by_name(name)),
                 };
                 found.map(|r| r.id()).ok_or_else(|| {
                     McpError::new(
@@ -73,6 +86,54 @@ impl ProbeRsBackend {
             }
         }
     }
+
+    fn register_names(core: &probe_rs::Core<'_>) -> Vec<String> {
+        let mut names = BTreeSet::new();
+        for r in core.registers().all_registers() {
+            let primary = r.name();
+            if primary != "Unknown" {
+                names.insert(primary.to_ascii_lowercase());
+            }
+            for role in r.roles {
+                match role {
+                    RegisterRole::ProgramCounter => {
+                        names.insert("pc".to_string());
+                    }
+                    RegisterRole::StackPointer => {
+                        names.insert("sp".to_string());
+                    }
+                    RegisterRole::MainStackPointer => {
+                        names.insert("msp".to_string());
+                    }
+                    RegisterRole::ProcessStackPointer => {
+                        names.insert("psp".to_string());
+                    }
+                    RegisterRole::ProcessorStatus => {
+                        names.insert("xpsr".to_string());
+                        names.insert("psr".to_string());
+                    }
+                    RegisterRole::ReturnAddress => {
+                        names.insert("lr".to_string());
+                        names.insert("ra".to_string());
+                    }
+                    RegisterRole::FramePointer => {
+                        names.insert("fp".to_string());
+                    }
+                    RegisterRole::Other(n) => {
+                        names.insert(n.to_ascii_lowercase());
+                    }
+                    RegisterRole::Core(n) => {
+                        names.insert(n.to_ascii_lowercase());
+                    }
+                    RegisterRole::Argument(n) | RegisterRole::Return(n) => {
+                        names.insert(n.to_ascii_lowercase());
+                    }
+                    RegisterRole::FloatingPoint | RegisterRole::FloatingPointStatus => {}
+                }
+            }
+        }
+        names.into_iter().collect()
+    }
 }
 
 impl Backend for ProbeRsBackend {
@@ -81,14 +142,35 @@ impl Backend for ProbeRsBackend {
         let probes = lister.list_all();
         Ok(probes
             .into_iter()
-            .map(|p| ProbeInfo {
-                id: p
-                    .serial_number
-                    .clone()
-                    .unwrap_or_else(|| p.identifier.clone()),
-                vendor: format!("{:04x}", p.vendor_id),
-                product: p.identifier,
-                serial: p.serial_number,
+            .map(|p| {
+                let mut protocols = Vec::new();
+                let mut speed_khz = None;
+                let mut target_voltage = None;
+                if let Ok(mut probe) = lister.open(&p) {
+                    if probe.select_protocol(WireProtocol::Swd).is_ok() {
+                        protocols.push("swd".into());
+                    }
+                    if probe.select_protocol(WireProtocol::Jtag).is_ok() {
+                        protocols.push("jtag".into());
+                    }
+                    speed_khz = Some(probe.speed_khz());
+                    target_voltage = probe.get_target_voltage().ok().flatten();
+                }
+                ProbeInfo {
+                    id: p
+                        .serial_number
+                        .clone()
+                        .unwrap_or_else(|| p.identifier.clone()),
+                    vendor: format!("{:04x}", p.vendor_id),
+                    product: p.identifier.clone(),
+                    serial: p.serial_number.clone(),
+                    product_id: Some(format!("{:04x}", p.product_id)),
+                    interface: p.interface,
+                    is_hid: p.is_hid_interface,
+                    protocols,
+                    speed_khz,
+                    target_voltage,
+                }
             })
             .collect())
     }
@@ -125,11 +207,14 @@ impl Backend for ProbeRsBackend {
             .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))?;
         let attach =
             |probe: probe_rs::probe::Probe, target: &str, registry: &probe_rs::config::Registry| {
-                probe
-                    .attach_with_registry(target, Permissions::default(), registry)
-                    .map_err(|e| McpError::new(ErrorCode::ConnectFailed, e.to_string()))
+                let attach_result = if opts.under_reset {
+                    probe.attach_under_reset_with_registry(target, Permissions::default(), registry)
+                } else {
+                    probe.attach_with_registry(target, Permissions::default(), registry)
+                };
+                attach_result.map_err(|e| McpError::new(ErrorCode::ConnectFailed, e.to_string()))
             };
-        let session = match (&self.registry, &opts.target) {
+        let mut session = match (&self.registry, &opts.target) {
             (Some(registry), Some(name)) => attach(probe, name, registry)?,
             (Some(registry), None) => attach(probe, "Cortex-M0", registry)?,
             (None, Some(name)) => {
@@ -147,18 +232,72 @@ impl Backend for ProbeRsBackend {
             .first()
             .map(|c| format!("{:?}", c.core_type))
             .unwrap_or_else(|| "unknown".into());
-        let ap_count = session.target().memory_map.len();
+        let core_count = session.target().cores.len();
+        let ap_count = match session.get_arm_interface() {
+            Ok(iface) => iface
+                .access_ports(probe_rs::architecture::arm::dp::DpAddress::Default)
+                .map(|aps| aps.len())
+                .unwrap_or(0),
+            Err(_) => 0,
+        };
+        let cpu_id = match session.core(0) {
+            Ok(mut core) => {
+                let mut v = [0u32];
+                core.read_32(0xE000_ED00, &mut v).ok().map(|_| v[0])
+            }
+            Err(_) => None,
+        };
+        let dp_id = match session.get_arm_interface() {
+            Ok(iface) => iface
+                .read_raw_dp_register(
+                    probe_rs::architecture::arm::dp::DpAddress::Default,
+                    probe_rs::architecture::arm::dp::DpRegisterAddress {
+                        address: 0,
+                        bank: None,
+                    },
+                )
+                .ok(),
+            Err(_) => None,
+        };
+        let memory_regions = session
+            .target()
+            .memory_map
+            .iter()
+            .filter_map(|region| {
+                if let Some(r) = region.as_nvm_region() {
+                    Some(MemoryRegionSummary {
+                        name: r.name.clone().unwrap_or_else(|| "NVM".into()),
+                        kind: "nvm".into(),
+                        start: r.range.start,
+                        end: r.range.end,
+                    })
+                } else {
+                    region.as_ram_region().map(|r| MemoryRegionSummary {
+                        name: r.name.clone().unwrap_or_else(|| "RAM".into()),
+                        kind: "ram".into(),
+                        start: r.range.start,
+                        end: r.range.end,
+                    })
+                }
+            })
+            .collect();
         self.breakpoints.clear();
+        self.watchpoints.clear();
         self.session = Some(session);
         Ok(TargetInfo {
             core_type,
+            core_count,
             ap_count,
+            cpu_id,
+            dp_id,
+            memory_regions,
         })
     }
 
     fn disconnect(&mut self) -> Result<(), McpError> {
         self.session.take();
         self.breakpoints.clear();
+        self.watchpoints.clear();
         Ok(())
     }
 
@@ -289,10 +428,13 @@ impl Backend for ProbeRsBackend {
         Ok(self.breakpoints.clone())
     }
 
-    fn reset(&mut self) -> Result<(), McpError> {
-        self.core()?
-            .reset()
-            .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))
+    fn reset(&mut self, mode: ResetMode) -> Result<(), McpError> {
+        let mut core = self.core()?;
+        let result = match mode {
+            ResetMode::Run => core.reset().map(|_| ()),
+            ResetMode::Halt => core.reset_and_halt(Duration::from_secs(1)).map(|_| ()),
+        };
+        result.map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))
     }
 
     fn read_dap(&mut self, address: u32) -> Result<u32, McpError> {
@@ -362,19 +504,39 @@ impl Backend for ProbeRsBackend {
         Ok(())
     }
 
-    fn erase_flash(&mut self, _address: u64, _size: u64) -> Result<(), McpError> {
+    fn erase_flash(&mut self, address: u64, size: u64) -> Result<(), McpError> {
         let session = self
             .session
             .as_mut()
             .ok_or_else(|| McpError::new(ErrorCode::NotConnected, "no active session"))?;
-        let mut progress = probe_rs::flashing::FlashProgress::new(|_| {});
-        probe_rs::flashing::erase_all(session, &mut progress, false).map_err(|e| {
+        if size == 0 {
+            return Err(McpError::new(
+                ErrorCode::InvalidArgument,
+                "erase size must be greater than zero",
+            ));
+        }
+        let end = address
+            .checked_add(size)
+            .ok_or_else(|| McpError::new(ErrorCode::InvalidArgument, "erase range overflows"))?;
+        let mut progress = FlashProgress::new(|_| {});
+        let covers_all = session
+            .target()
+            .memory_map
+            .iter()
+            .filter_map(MemoryRegion::as_nvm_region)
+            .filter(|r| !r.is_alias)
+            .all(|r| address <= r.range.start && r.range.end <= end);
+        let result = if covers_all {
+            erase_all(session, &mut progress, false)
+        } else {
+            erase(session, &mut progress, address, end, false)
+        };
+        result.map_err(|e| {
             McpError::new(ErrorCode::ProtocolError, format!("flash erase failed: {e}"))
-        })?;
-        Ok(())
+        })
     }
 
-    fn program_flash(&mut self, address: u64, data: &[u8]) -> Result<(), McpError> {
+    fn program_flash(&mut self, address: u64, data: &[u8], verify: bool) -> Result<(), McpError> {
         let session = self
             .session
             .as_mut()
@@ -386,14 +548,156 @@ impl Backend for ProbeRsBackend {
         loader.add_data(address, data).map_err(|e| {
             McpError::new(ErrorCode::ProtocolError, format!("flash data invalid: {e}"))
         })?;
-        loader
-            .commit(session, probe_rs::flashing::DownloadOptions::default())
-            .map_err(|e| {
-                McpError::new(
-                    ErrorCode::ProtocolError,
-                    format!("flash programming failed: {e}"),
-                )
-            })?;
+        let mut options = DownloadOptions::default();
+        options.verify = verify;
+        loader.commit(session, options).map_err(|e| {
+            McpError::new(
+                ErrorCode::ProtocolError,
+                format!("flash programming failed: {e}"),
+            )
+        })?;
         Ok(())
+    }
+
+    fn list_core_registers(&mut self) -> Result<Vec<String>, McpError> {
+        let core = self.core()?;
+        Ok(Self::register_names(&core))
+    }
+
+    fn get_core_status(&mut self) -> Result<CoreStatusInfo, McpError> {
+        let mut core = self.core()?;
+        let status = core
+            .status()
+            .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))?;
+        let (state, halt_reason, pc) = match status {
+            CoreStatus::Running => ("running", None, None),
+            CoreStatus::Halted(reason) => (
+                "halted",
+                Some(format!("{reason:?}")),
+                core.read_core_reg::<u32>(core.program_counter().id())
+                    .ok()
+                    .map(|v| v as u64),
+            ),
+            CoreStatus::LockedUp => ("locked_up", None, None),
+            CoreStatus::Sleeping => ("sleeping", None, None),
+            CoreStatus::Unknown => ("unknown", None, None),
+        };
+        Ok(CoreStatusInfo {
+            state: state.into(),
+            halt_reason,
+            pc,
+        })
+    }
+
+    fn set_watchpoint(&mut self, address: u64, access: WatchAccess) -> Result<(), McpError> {
+        const DEMCR: u64 = 0xE000_EDFC;
+        const TRCENA: u32 = 1 << 24;
+        const DWT_CTRL: u64 = 0xE000_1000;
+        const DWT_COMP_BASE: u64 = 0xE000_1020;
+
+        if let Some(wp) = self.watchpoints.iter_mut().find(|w| w.address == address) {
+            wp.access = access;
+            return Ok(());
+        }
+        let mut core = self.core()?;
+        let mut demcr = [0u32];
+        core.read_32(DEMCR, &mut demcr)
+            .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))?;
+        core.write_32(DEMCR, &[demcr[0] | TRCENA])
+            .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))?;
+        let mut ctrl = [0u32];
+        core.read_32(DWT_CTRL, &mut ctrl)
+            .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))?;
+        let numcomp = ((ctrl[0] >> 28) & 0xF) as usize;
+        if numcomp == 0 {
+            return Err(McpError::new(
+                ErrorCode::UnsupportedFeature,
+                "target has no DWT watchpoint comparators",
+            ));
+        }
+        let slot = (0..numcomp).find(|n| {
+            let function_addr = DWT_COMP_BASE + (*n as u64) * 0x10 + 0x8;
+            let mut v = [0u32];
+            core.read_32(function_addr, &mut v)
+                .map(|_| v[0] & 0xF == 0)
+                .unwrap_or(false)
+        });
+        let n = slot.ok_or_else(|| {
+            McpError::new(
+                ErrorCode::UnsupportedFeature,
+                "no free DWT watchpoint comparator",
+            )
+        })?;
+        let base = DWT_COMP_BASE + n as u64 * 0x10;
+        core.write_32(base, &[address as u32])
+            .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))?;
+        core.write_32(base + 0x4, &[0])
+            .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))?;
+        let function = match access {
+            WatchAccess::Read => 5,
+            WatchAccess::Write => 4,
+            WatchAccess::ReadWrite => 6,
+        };
+        let mut current = [0u32];
+        core.read_32(base + 0x8, &mut current)
+            .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))?;
+        core.write_32(base + 0x8, &[(current[0] & !0xF) | function])
+            .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))?;
+        drop(core);
+        self.watchpoints.push(Watchpoint { address, access });
+        Ok(())
+    }
+
+    fn clear_watchpoints(&mut self) -> Result<(), McpError> {
+        const DWT_CTRL: u64 = 0xE000_1000;
+        const DWT_COMP_BASE: u64 = 0xE000_1020;
+        let mut core = self.core()?;
+        let mut ctrl = [0u32];
+        core.read_32(DWT_CTRL, &mut ctrl)
+            .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))?;
+        let numcomp = ((ctrl[0] >> 28) & 0xF) as usize;
+        for n in 0..numcomp {
+            core.write_32(DWT_COMP_BASE + n as u64 * 0x10 + 0x8, &[0])
+                .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))?;
+        }
+        drop(core);
+        self.watchpoints.clear();
+        Ok(())
+    }
+
+    fn list_watchpoints(&mut self) -> Result<Vec<Watchpoint>, McpError> {
+        self.core()?;
+        Ok(self.watchpoints.clone())
+    }
+
+    fn verify_memory(
+        &mut self,
+        address: u64,
+        width: AccessWidth,
+        data: &[u64],
+    ) -> Result<MemoryVerifyReport, McpError> {
+        let actual = self.read_memory(address, width, data.len() as u32)?;
+        let width_bytes = match width {
+            AccessWidth::U8 => 1u64,
+            AccessWidth::U16 => 2,
+            AccessWidth::U32 => 4,
+            AccessWidth::U64 => 8,
+        };
+        let mismatches: Vec<MemoryMismatch> = data
+            .iter()
+            .enumerate()
+            .zip(actual.iter())
+            .filter(|((_, expected), actual)| expected != actual)
+            .map(|((index, expected), actual)| MemoryMismatch {
+                index,
+                address: address + index as u64 * width_bytes,
+                expected: *expected,
+                actual: *actual,
+            })
+            .collect();
+        Ok(MemoryVerifyReport {
+            verified: mismatches.is_empty(),
+            mismatches,
+        })
     }
 }
