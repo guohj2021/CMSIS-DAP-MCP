@@ -33,7 +33,7 @@ Download the binary for your platform from the GitHub Releases page, then config
 ```toml
 [mcp_servers.cmsis-dap]
 command = "/path/to/cmsis-dap-mcp"
-args = ["--allow-destructive"] # optional
+args = ["--target-yaml", "/path/to/target.yaml", "--allow-destructive"] # optional
 ```
 
 ### npm
