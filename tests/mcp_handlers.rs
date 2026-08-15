@@ -1,8 +1,8 @@
 use cmsis_dap_mcp::backend::mock::MockBackend;
 use cmsis_dap_mcp::backend::{ConnectOptions, Protocol};
 use cmsis_dap_mcp::mcp::{
-    ClearBreakpointsParams, CmsisDapMcp, HaltParams, ListBreakpointsParams, ReadCoreRegisterParams,
-    ReadDapParams, WriteDapParams,
+    ClearBreakpointsParams, CmsisDapMcp, EraseFlashParams, HaltParams, ListBreakpointsParams, ReadCoreRegisterParams,
+    ProgramFlashParams, ReadDapParams, WriteDapParams,
     ReadMemoryParams, ResetParams, ResumeParams, SetBreakpointParams, StepParams,
     WriteCoreRegisterParams, WriteMemoryParams,
 };
@@ -118,4 +118,24 @@ async fn peripheral_read_write_with_mock() {
         field: Some("ODR0".into()),
     })).await;
     assert_eq!(res.structured_content.unwrap()["value"].as_u64(), Some(1));
+}
+#[tokio::test]
+async fn flash_blocked_without_flag() {
+    let mcp = CmsisDapMcp::new(SessionManager::new(Box::new(MockBackend::new())), SecurityPolicy { allow_destructive: false });
+    connect(&mcp);
+    let res = mcp.erase_flash(Parameters(EraseFlashParams { address: 0x0800_0000, size: 0x1000 })).await;
+    let structured = res.structured_content.unwrap_or_default();
+    assert_eq!(structured["code"], "DestructiveDisabled");
+}
+
+#[tokio::test]
+async fn flash_works_with_flag() {
+    let mcp = CmsisDapMcp::new(SessionManager::new(Box::new(MockBackend::new())), SecurityPolicy { allow_destructive: true });
+    connect(&mcp);
+    let res = mcp.program_flash(Parameters(ProgramFlashParams { address: 0x0800_0000, data: vec![0xAA, 0xBB] })).await;
+    assert!(!res.is_error.unwrap_or(true));
+    let res = mcp.read_memory(Parameters(ReadMemoryParams { address: 0x0800_0000, width: "u8".into(), count: 2 })).await;
+    let structured = res.structured_content.unwrap();
+    assert_eq!(structured["values"][0].as_u64(), Some(0xAA));
+    assert_eq!(structured["values"][1].as_u64(), Some(0xBB));
 }

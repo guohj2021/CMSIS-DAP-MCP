@@ -1,11 +1,12 @@
 pub mod tools_core;
 pub mod tools_dap;
+pub mod tools_flash;
 pub mod tools_memory;
 pub mod tools_svd;
 
 use crate::backend::CoreRegister;
 use crate::error::ErrorCode;
-use crate::security::SecurityPolicy;
+use crate::security::{SecurityLevel, SecurityPolicy};
 use crate::session::SessionManager;
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{CallToolResult, ServerCapabilities, ServerInfo};
@@ -17,6 +18,7 @@ pub use tools_core::{
     ResumeParams, SetBreakpointParams, StepParams, WriteCoreRegisterParams,
 };
 pub use tools_dap::{ReadDapParams, WriteDapParams};
+pub use tools_flash::{EraseFlashParams, ProgramFlashParams};
 pub use tools_memory::{ReadMemoryParams, WriteMemoryParams};
 pub use tools_svd::{ListPeripheralsParams, LoadSvdParams, ReadPeripheralParams, WritePeripheralParams};
 
@@ -268,6 +270,28 @@ impl CmsisDapMcp {
                 "address": addr,
                 "written": true,
             })),
+            Err(e) => error_result(e.code, e.message),
+        }
+    }
+
+    #[tool(description = "Erase flash memory on the target. Destructive: requires --allow-destructive. The current backend performs a full-chip erase.", annotations(title = "Erase flash", read_only_hint = false, destructive_hint = true, idempotent_hint = false, open_world_hint = false))]
+    pub async fn erase_flash(&self, Parameters(params): Parameters<EraseFlashParams>) -> CallToolResult {
+        if let Err(e) = self.policy.check(SecurityLevel::Destructive) {
+            return error_result(e.code, e.message);
+        }
+        match self.session.lock().unwrap().backend().erase_flash(params.address, params.size) {
+            Ok(()) => CallToolResult::structured(serde_json::json!({ "erased": true, "address": params.address, "size": params.size })),
+            Err(e) => error_result(e.code, e.message),
+        }
+    }
+
+    #[tool(description = "Program binary data into flash memory. Destructive: requires --allow-destructive. Requires a target with a flash algorithm loaded via connect(target=...).", annotations(title = "Program flash", read_only_hint = false, destructive_hint = true, idempotent_hint = false, open_world_hint = false))]
+    pub async fn program_flash(&self, Parameters(params): Parameters<ProgramFlashParams>) -> CallToolResult {
+        if let Err(e) = self.policy.check(SecurityLevel::Destructive) {
+            return error_result(e.code, e.message);
+        }
+        match self.session.lock().unwrap().backend().program_flash(params.address, &params.data) {
+            Ok(()) => CallToolResult::structured(serde_json::json!({ "programmed": true, "address": params.address, "bytes": params.data.len() })),
             Err(e) => error_result(e.code, e.message),
         }
     }
