@@ -17,7 +17,9 @@ jobs:
           - os: ubuntu-latest
             scope: cmsis-dap-mcp-linux-x64
             artifact: cmsis-dap-mcp
-          - os: macos-13
+          # macos-15-intel is the hosted Intel (x64) macOS runner; using it
+          # guarantees a genuine x86_64 darwin artifact for darwin-x64.
+          - os: macos-15-intel
             scope: cmsis-dap-mcp-darwin-x64
             artifact: cmsis-dap-mcp
     runs-on: ${{ matrix.os }}
