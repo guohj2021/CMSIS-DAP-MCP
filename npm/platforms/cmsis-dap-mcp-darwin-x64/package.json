@@ -1,5 +1,5 @@
 {
-  "name": "cmsis-dap-mcp-darwin-x64",
+  "name": "@guohj2021/cmsis-dap-mcp-darwin-x64",
   "version": "0.1.0",
   "os": ["darwin"],
   "cpu": ["x64"],
