@@ -10,6 +10,7 @@ pub struct ProbeRsBackend {
     session: Option<Session>,
     core_index: usize,
     breakpoints: Vec<u64>,
+    registry: Option<probe_rs::config::Registry>,
 }
 
 impl Default for ProbeRsBackend {
@@ -24,6 +25,16 @@ impl ProbeRsBackend {
             session: None,
             core_index: 0,
             breakpoints: Vec::new(),
+            registry: None,
+        }
+    }
+
+    pub fn with_registry(registry: probe_rs::config::Registry) -> Self {
+        Self {
+            session: None,
+            core_index: 0,
+            breakpoints: Vec::new(),
+            registry: Some(registry),
         }
     }
 
@@ -103,13 +114,23 @@ impl Backend for ProbeRsBackend {
         probe
             .select_protocol(wire_protocol)
             .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))?;
-        let session = match &opts.target {
-            Some(name) => probe
-                .attach(name, Permissions::default())
-                .map_err(|e| McpError::new(ErrorCode::ConnectFailed, e.to_string()))?,
-            None => probe
-                .attach("Cortex-M0", Permissions::default())
-                .map_err(|e| McpError::new(ErrorCode::ConnectFailed, e.to_string()))?,
+        let attach =
+            |probe: probe_rs::probe::Probe, target: &str, registry: &probe_rs::config::Registry| {
+                probe
+                    .attach_with_registry(target, Permissions::default(), registry)
+                    .map_err(|e| McpError::new(ErrorCode::ConnectFailed, e.to_string()))
+            };
+        let session = match (&self.registry, &opts.target) {
+            (Some(registry), Some(name)) => attach(probe, name, registry)?,
+            (Some(registry), None) => attach(probe, "Cortex-M0", registry)?,
+            (None, Some(name)) => {
+                let registry = probe_rs::config::Registry::from_builtin_families();
+                attach(probe, name, &registry)?
+            }
+            (None, None) => {
+                let registry = probe_rs::config::Registry::from_builtin_families();
+                attach(probe, "Cortex-M0", &registry)?
+            }
         };
         let core_type = session
             .target()
