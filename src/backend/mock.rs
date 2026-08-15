@@ -1,4 +1,4 @@
-use crate::backend::{AccessWidth, Backend, ConnectOptions, CoreRegister, ProbeInfo, Protocol, TargetInfo};
+use crate::backend::{AccessWidth, Backend, ConnectOptions, CoreRegister, ProbeInfo, TargetInfo};
 use crate::error::{ErrorCode, McpError};
 use std::collections::HashMap;
 
