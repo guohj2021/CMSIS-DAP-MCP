@@ -6,8 +6,8 @@
   "bin": { "cmsis-dap-mcp": "bin/cmsis-dap-mcp.js" },
   "files": ["bin"],
   "optionalDependencies": {
-    "cmsis-dap-mcp-win32-x64": "0.1.0",
-    "cmsis-dap-mcp-linux-x64": "0.1.0",
-    "cmsis-dap-mcp-darwin-x64": "0.1.0"
+    "@guohj2021/cmsis-dap-mcp-win32-x64": "0.1.0",
+    "@guohj2021/cmsis-dap-mcp-linux-x64": "0.1.0",
+    "@guohj2021/cmsis-dap-mcp-darwin-x64": "0.1.0"
   }
 }
