@@ -16,11 +16,18 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install mdBook
         run: cargo install mdbook --locked
-      - name: Build docs
+      - name: Build English docs
         run: mdbook build docs
+      - name: Build Chinese docs
+        run: mdbook build docs/zh
+      - name: Assemble site (EN at /, ZH at /zh/)
+        run: |
+          mkdir -p public/zh
+          cp -r docs/book/* public/
+          cp -r docs/zh/book/* public/zh/
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: docs/book
+          path: public
   deploy:
     needs: build
     runs-on: ubuntu-latest

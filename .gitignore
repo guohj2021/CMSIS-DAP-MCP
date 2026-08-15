@@ -9,4 +9,5 @@ node_modules/
 .serial_mcp/
 .worktrees/
 docs/book/
+docs/zh/book/
 npm/bin/*.exe
