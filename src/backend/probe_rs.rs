@@ -281,10 +281,25 @@ impl Backend for ProbeRsBackend {
     }
 
     fn erase_flash(&mut self, _address: u64, _size: u64) -> Result<(), McpError> {
-        Err(McpError::new(ErrorCode::UnsupportedFeature, "not implemented yet"))
+        let session = self.session.as_mut().ok_or_else(|| McpError::new(ErrorCode::NotConnected, "no active session"))?;
+        let mut progress = probe_rs::flashing::FlashProgress::new(|_| {});
+        probe_rs::flashing::erase_all(session, &mut progress, false)
+            .map_err(|e| McpError::new(ErrorCode::ProtocolError, format!("flash erase failed: {e}")))?;
+        Ok(())
     }
 
-    fn program_flash(&mut self, _address: u64, _data: &[u8]) -> Result<(), McpError> {
-        Err(McpError::new(ErrorCode::UnsupportedFeature, "not implemented yet"))
+    fn program_flash(&mut self, address: u64, data: &[u8]) -> Result<(), McpError> {
+        let session = self.session.as_mut().ok_or_else(|| McpError::new(ErrorCode::NotConnected, "no active session"))?;
+        let mut loader = probe_rs::flashing::FlashLoader::new(
+            session.target().memory_map.clone(),
+            session.target().source().clone(),
+        );
+        loader
+            .add_data(address, data)
+            .map_err(|e| McpError::new(ErrorCode::ProtocolError, format!("flash data invalid: {e}")))?;
+        loader
+            .commit(session, probe_rs::flashing::DownloadOptions::default())
+            .map_err(|e| McpError::new(ErrorCode::ProtocolError, format!("flash programming failed: {e}")))?;
+        Ok(())
     }
 }

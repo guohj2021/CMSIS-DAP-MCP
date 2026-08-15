@@ -148,17 +148,23 @@ impl Backend for MockBackend {
         if !self.connected { Err(not_connected()) } else { self.dap.insert(address, value); Ok(()) }
     }
 
-    fn erase_flash(&mut self, _address: u64, _size: u64) -> Result<(), McpError> {
+    fn erase_flash(&mut self, address: u64, size: u64) -> Result<(), McpError> {
         if !self.connected {
             return Err(not_connected());
         }
-        Err(McpError::new(ErrorCode::UnsupportedFeature, "flash not implemented in mock backend"))
+        for i in 0..size {
+            self.memory.insert(address + i, 0xFF);
+        }
+        Ok(())
     }
 
-    fn program_flash(&mut self, _address: u64, _data: &[u8]) -> Result<(), McpError> {
+    fn program_flash(&mut self, address: u64, data: &[u8]) -> Result<(), McpError> {
         if !self.connected {
             return Err(not_connected());
         }
-        Err(McpError::new(ErrorCode::UnsupportedFeature, "flash not implemented in mock backend"))
+        for (i, b) in data.iter().enumerate() {
+            self.memory.insert(address + i as u64, *b as u64);
+        }
+        Ok(())
     }
 }
