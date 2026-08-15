@@ -17,7 +17,7 @@ jobs:
           - os: ubuntu-latest
             scope: cmsis-dap-mcp-linux-x64
             artifact: cmsis-dap-mcp
-          - os: macos-latest
+          - os: macos-13
             scope: cmsis-dap-mcp-darwin-x64
             artifact: cmsis-dap-mcp
     runs-on: ${{ matrix.os }}
@@ -93,6 +93,8 @@ jobs:
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+      - name: Copy bilingual README into npm package
+        run: cp README.md npm/README.md
       - name: Set versions from tag
         shell: bash
         run: |

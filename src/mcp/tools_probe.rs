@@ -15,6 +15,8 @@ pub struct ConnectParams {
     pub protocol: Option<String>,
     pub speed_khz: Option<u32>,
     pub target: Option<String>,
+    /// Connect while holding the target reset line (for locked or non-responsive targets).
+    pub under_reset: Option<bool>,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema)]

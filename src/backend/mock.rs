@@ -1,4 +1,8 @@
-use crate::backend::{AccessWidth, Backend, ConnectOptions, CoreRegister, ProbeInfo, TargetInfo};
+use crate::backend::{
+    AccessWidth, Backend, ConnectOptions, CoreRegister, CoreStatusInfo, MemoryMismatch,
+    MemoryRegionSummary, MemoryVerifyReport, ProbeInfo, ResetMode, TargetInfo, WatchAccess,
+    Watchpoint,
+};
 use crate::error::{ErrorCode, McpError};
 use std::collections::HashMap;
 
@@ -9,6 +13,7 @@ pub struct MockBackend {
     connected: bool,
     halted: bool,
     breakpoints: Vec<u64>,
+    watchpoints: Vec<Watchpoint>,
 }
 
 impl Default for MockBackend {
@@ -21,11 +26,19 @@ impl MockBackend {
     pub fn new() -> Self {
         Self {
             memory: HashMap::new(),
-            registers: HashMap::new(),
+            registers: HashMap::from([
+                ("r0".into(), 0u64),
+                ("r1".into(), 1u64),
+                ("pc".into(), 0x0800_0100u64),
+                ("sp".into(), 0x2000_2000u64),
+                ("lr".into(), 0x0800_00FFu64),
+                ("xpsr".into(), 0x0100_0000u64),
+            ]),
             dap: HashMap::new(),
             connected: false,
             halted: false,
             breakpoints: Vec::new(),
+            watchpoints: Vec::new(),
         }
     }
 }
@@ -50,6 +63,12 @@ impl Backend for MockBackend {
             vendor: "mock".into(),
             product: "mock".into(),
             serial: None,
+            product_id: Some("5051".into()),
+            interface: Some(0),
+            is_hid: true,
+            protocols: vec!["swd".into(), "jtag".into()],
+            speed_khz: Some(1000),
+            target_voltage: Some(3.3),
         }])
     }
 
@@ -57,7 +76,24 @@ impl Backend for MockBackend {
         self.connected = true;
         Ok(TargetInfo {
             core_type: "Cortex-M0".into(),
+            core_count: 1,
             ap_count: 1,
+            cpu_id: Some(0x410C_C601),
+            dp_id: Some(0x0BB1_1477),
+            memory_regions: vec![
+                MemoryRegionSummary {
+                    name: "FLASH".into(),
+                    kind: "nvm".into(),
+                    start: 0x0800_0000,
+                    end: 0x0801_0000,
+                },
+                MemoryRegionSummary {
+                    name: "RAM".into(),
+                    kind: "ram".into(),
+                    start: 0x2000_0000,
+                    end: 0x2001_0000,
+                },
+            ],
         })
     }
 
@@ -180,12 +216,12 @@ impl Backend for MockBackend {
         }
     }
 
-    fn reset(&mut self) -> Result<(), McpError> {
+    fn reset(&mut self, mode: ResetMode) -> Result<(), McpError> {
         if !self.connected {
             return Err(not_connected());
         }
         self.breakpoints.clear();
-        self.halted = false;
+        self.halted = mode == ResetMode::Halt;
         Ok(())
     }
 
@@ -210,13 +246,19 @@ impl Backend for MockBackend {
         if !self.connected {
             return Err(not_connected());
         }
+        if size == 0 {
+            return Err(McpError::new(
+                ErrorCode::InvalidArgument,
+                "erase size must be greater than zero",
+            ));
+        }
         for i in 0..size {
             self.memory.insert(address + i, 0xFF);
         }
         Ok(())
     }
 
-    fn program_flash(&mut self, address: u64, data: &[u8]) -> Result<(), McpError> {
+    fn program_flash(&mut self, address: u64, data: &[u8], _verify: bool) -> Result<(), McpError> {
         if !self.connected {
             return Err(not_connected());
         }
@@ -224,5 +266,94 @@ impl Backend for MockBackend {
             self.memory.insert(address + i as u64, *b as u64);
         }
         Ok(())
+    }
+
+    fn list_core_registers(&mut self) -> Result<Vec<String>, McpError> {
+        if !self.connected {
+            return Err(not_connected());
+        }
+        let mut names: Vec<String> = (0..16).map(|i| format!("r{i}")).collect();
+        names.extend([
+            "pc".into(),
+            "sp".into(),
+            "lr".into(),
+            "xpsr".into(),
+            "msp".into(),
+            "psp".into(),
+            "primask".into(),
+        ]);
+        Ok(names)
+    }
+
+    fn get_core_status(&mut self) -> Result<CoreStatusInfo, McpError> {
+        if !self.connected {
+            return Err(not_connected());
+        }
+        Ok(CoreStatusInfo {
+            state: if self.halted {
+                "halted".into()
+            } else {
+                "running".into()
+            },
+            halt_reason: if self.halted {
+                Some("request".into())
+            } else {
+                None
+            },
+            pc: self.registers.get("pc").copied(),
+        })
+    }
+
+    fn set_watchpoint(&mut self, address: u64, access: WatchAccess) -> Result<(), McpError> {
+        if !self.connected {
+            return Err(not_connected());
+        }
+        if !self.watchpoints.iter().any(|w| w.address == address) {
+            self.watchpoints.push(Watchpoint { address, access });
+        }
+        Ok(())
+    }
+
+    fn clear_watchpoints(&mut self) -> Result<(), McpError> {
+        if !self.connected {
+            return Err(not_connected());
+        }
+        self.watchpoints.clear();
+        Ok(())
+    }
+
+    fn list_watchpoints(&mut self) -> Result<Vec<Watchpoint>, McpError> {
+        if !self.connected {
+            return Err(not_connected());
+        }
+        Ok(self.watchpoints.clone())
+    }
+
+    fn verify_memory(
+        &mut self,
+        address: u64,
+        width: AccessWidth,
+        data: &[u64],
+    ) -> Result<MemoryVerifyReport, McpError> {
+        if !self.connected {
+            return Err(not_connected());
+        }
+        let actual = self.read_memory(address, width, data.len() as u32)?;
+        let mismatches: Vec<MemoryMismatch> = data
+            .iter()
+            .enumerate()
+            .zip(actual.iter())
+            .filter(|((_, expected), actual)| expected != actual)
+            .map(|((index, expected), actual)| MemoryMismatch {
+                index,
+                address: address + index as u64 * width_bytes(width),
+                expected: *expected,
+                actual: *actual,
+            })
+            .collect();
+        Ok(MemoryVerifyReport {
+            verified: mismatches.is_empty(),
+            mismatches,
+        })
     }
 }

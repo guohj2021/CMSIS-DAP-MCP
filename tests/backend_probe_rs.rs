@@ -21,6 +21,7 @@ fn hardware_connect_halt_read_resume() {
         protocol: Protocol::Swd,
         speed_khz: Some(100),
         target: None,
+        under_reset: false,
     };
     let info = sm.connect(&opts).expect("connect to first probe");
     assert!(!info.core_type.is_empty());
