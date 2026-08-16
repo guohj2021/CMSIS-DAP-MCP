@@ -405,3 +405,17 @@ fn read_exports_bin_file() {
     assert_eq!(out["bytes"].as_u64(), Some(4));
     assert!(dump.exists());
 }
+
+#[test]
+fn chip_search_finds_builtin_chip() {
+    let out = execute(&["cmsis-dap-cli", "chip", "search", "STM32F103C8"]).unwrap();
+    assert!(out["count"].as_u64().unwrap() > 0);
+    let chips = out["chips"].as_array().unwrap();
+    assert!(chips.iter().any(|c| c["name"] == "STM32F103C8"));
+}
+
+#[test]
+fn chip_list_returns_builtin_chips() {
+    let out = execute(&["cmsis-dap-cli", "chip", "list"]).unwrap();
+    assert!(out["count"].as_u64().unwrap() > 1000);
+}

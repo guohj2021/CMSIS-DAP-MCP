@@ -415,6 +415,10 @@ pub struct ChipArgs {
 pub enum ChipAction {
     /// Generate a probe-rs target YAML from a Keil FLM flash algorithm.
     Generate(ChipGenerateArgs),
+    /// List all known chip variants (built-in plus --target-yaml chips).
+    List,
+    /// Search chip variants by name.
+    Search(ChipSearchArgs),
 }
 
 #[derive(Debug, Args)]
@@ -445,6 +449,12 @@ pub struct ChipGenerateArgs {
     pub output: Option<PathBuf>,
 }
 
+#[derive(Debug, Args)]
+pub struct ChipSearchArgs {
+    /// Keyword matched case-insensitively against chip names.
+    pub keyword: String,
+}
+
 /// Build the probe-rs backend, optionally loading a target YAML registry.
 pub fn make_backend(target_yaml: Option<&std::path::Path>) -> Result<Box<dyn Backend>, McpError> {
     match target_yaml {
@@ -457,12 +467,13 @@ pub fn make_backend(target_yaml: Option<&std::path::Path>) -> Result<Box<dyn Bac
 
 /// Global connection/output options, captured before the subcommand is moved
 /// out of `CliArgs` (avoids borrow-after-partial-move).
-struct Globals {
+pub(crate) struct Globals {
     probe_id: Option<String>,
     protocol: String,
     speed_khz: Option<u32>,
     target: Option<String>,
     under_reset: bool,
+    target_yaml: Option<PathBuf>,
     svd: Option<PathBuf>,
     yes: bool,
     json: bool,
@@ -537,6 +548,7 @@ pub fn run(
         speed_khz: args.speed_khz,
         target: args.target.clone(),
         under_reset: args.under_reset,
+        target_yaml: args.target_yaml.clone(),
         svd: args.svd.clone(),
         yes: args.yes,
         json: args.json,
@@ -689,6 +701,8 @@ pub fn run(
         }
         Command::Chip(a) => match a.action {
             ChipAction::Generate(g) => Ok(Some(actions::chip_generate(&g)?)),
+            ChipAction::List => Ok(Some(actions::chip_list(&globals)?)),
+            ChipAction::Search(s) => Ok(Some(actions::chip_search(&globals, &s)?)),
         },
         Command::Repl => {
             let stdin = std::io::stdin();
