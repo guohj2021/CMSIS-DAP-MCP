@@ -50,3 +50,20 @@
 - 添加服务器后重启客户端。
 - Codex：`codex mcp list` 必须显示服务器已启用；桌面端在新会话启动时加载。
 - 检查客户端配置中的二进制路径是否正确且可执行。
+
+## RTT / Event Recorder
+
+- **`RTT attach failed: control block not found`** —— 固件必须初始化
+  SEGGER RTT（`SEGGER_RTT_Init()`），且主机要在初始化之后、核心进入
+  `main` 运行后再附着（不能在停机时附着）。传入 `--elf`（`_SEGGER_RTT`
+  符号）或 `--address`，并在 `repl` 里 `reset run` 后运行监控，确保核心
+  真正在执行。
+- **`evr` 需要地址** —— 固件必须包含 CMSIS-View Event Recorder 组件
+  （符号 `EventRecorderInfo`）。传入 `--elf` 或 `--address`，并在附着前用
+  `EventRecorderInitialize` 完成初始化。
+- **一次性命令读到的是旧值** —— 每次一次性调用都会新建会话，probe-rs
+  附着时核心处于停机。请在 `repl` 中 `connect` + `reset run`，再执行
+  `watch run` / `rtt monitor` / `evr monitor`。
+- **EVR 秒数看起来不对** —— 秒数由固件 `ts_freq`
+  （`EVENT_TIMESTAMP_FREQ`）换算；请把它设为实际时间戳时钟（例如
+  `SystemCoreClock`）。tick 本身始终单调递增。
