@@ -1,4 +1,5 @@
 pub mod actions;
+pub mod chip;
 pub mod output;
 pub mod repl;
 
@@ -190,6 +191,8 @@ pub enum Command {
     Flash(FlashArgs),
     /// Run a J-Link Commander / OpenOCD style script.
     Script(ScriptArgs),
+    /// Chip definition tooling (generate target YAML from a Keil FLM).
+    Chip(ChipArgs),
     /// Interactive shell (J-Link Commander style commands).
     Repl,
 }
@@ -400,6 +403,46 @@ pub struct ScriptArgs {
     /// Inline script text.
     #[arg(long, conflicts_with = "file")]
     pub text: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct ChipArgs {
+    #[command(subcommand)]
+    pub action: ChipAction,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ChipAction {
+    /// Generate a probe-rs target YAML from a Keil FLM flash algorithm.
+    Generate(ChipGenerateArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct ChipGenerateArgs {
+    /// Keil FLM flash algorithm file (ARM ELF).
+    #[arg(long, value_name = "FILE")]
+    pub flm: PathBuf,
+    /// Flash start address.
+    #[arg(long, value_parser = parse_u64_arg)]
+    pub flash_start: u64,
+    /// Flash size in bytes.
+    #[arg(long, value_parser = parse_u64_arg)]
+    pub flash_size: u64,
+    /// SRAM start address.
+    #[arg(long, value_parser = parse_u64_arg)]
+    pub sram_start: u64,
+    /// SRAM size in bytes.
+    #[arg(long, value_parser = parse_u64_arg)]
+    pub sram_size: u64,
+    /// Chip/variant name used with --target (default: FLM file stem).
+    #[arg(long)]
+    pub name: Option<String>,
+    /// Core type (default: armv6m).
+    #[arg(long, default_value = "armv6m")]
+    pub core: String,
+    /// Output file; use '-' for stdout (default: stdout).
+    #[arg(long, value_name = "FILE")]
+    pub output: Option<PathBuf>,
 }
 
 /// Build the probe-rs backend, optionally loading a target YAML registry.
@@ -638,6 +681,9 @@ pub fn run(
             }
             Ok(Some(json!(report)))
         }
+        Command::Chip(a) => match a.action {
+            ChipAction::Generate(g) => Ok(Some(actions::chip_generate(&g)?)),
+        },
         Command::Repl => {
             let stdin = std::io::stdin();
             let interactive = stdin.is_terminal();
