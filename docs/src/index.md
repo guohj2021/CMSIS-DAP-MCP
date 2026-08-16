@@ -1,8 +1,16 @@
 # CMSIS-DAP MCP
 
-An MCP (Model Context Protocol) server that lets AI assistants operate
-CMSIS-DAP debug probes and access Cortex-M chip resources over **SWD** or
-**JTAG**.
+Two tools for working with CMSIS-DAP debug probes and Cortex-M chips over
+**SWD** or **JTAG**, built on the same engine:
+
+- **cmsis-dap-mcp** — an MCP (Model Context Protocol) server that lets AI
+  assistants operate the probe;
+- **cmsis-dap-cli** — a standalone command-line tool for humans, scripts and
+  automation.
+
+Both enumerate probes, connect over SWD/JTAG, read/write memory and core
+registers, control execution, access named peripherals via SVD files, program
+flash from firmware files, and run J-Link / OpenOCD style debug scripts.
 
 - Generic Cortex-M support: standard cores work without chip-specific
   adaptation.
@@ -14,7 +22,7 @@ CMSIS-DAP debug probes and access Cortex-M chip resources over **SWD** or
   npm.
 - Cross-platform: Windows / Linux / macOS.
 
-This site covers setup, AI client configuration, the full tool reference,
-SWD/JTAG selection, SVD/Flash workflows and security guidance.
+This site covers setup, AI client configuration, the full MCP tool and CLI
+references, SWD/JTAG selection, SVD/Flash workflows and security guidance.
 
 Chinese documentation: <https://guohj2021.github.io/CMSIS-DAP-MCP/zh/>
