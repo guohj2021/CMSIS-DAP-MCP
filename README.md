@@ -194,18 +194,22 @@ run_script { "script": "connect\nhalt\nreg pc\nsavebin C:/dump.bin 0x20000000 0x
 ## CLI
 
 Besides the MCP server, the project ships a standalone `cmsis-dap-cli` that
-shares the same engine:
+shares the same engine. A typical session:
 
 ```bash
-npx -y cmsis-dap-cli list
-npx -y cmsis-dap-cli connect --protocol swd
-npx -y cmsis-dap-cli read --address 0x20000000 --width u32 --count 4
-npx -y cmsis-dap-cli flash program --address 0x08000000 --file fw.hex --verify
-npx -y cmsis-dap-cli repl
+cmsis-dap-cli chip search STM32F030          # find a built-in chip
+cmsis-dap-cli --target STM32F030C8 connect   # connect (or --target-yaml for custom chips)
+cmsis-dap-cli --target STM32F030C8 read --address 0x20000000 --width u32 --count 4
+cmsis-dap-cli --target STM32F030C8 halt
+cmsis-dap-cli --target STM32F030C8 reg get pc
+cmsis-dap-cli --target STM32F030C8 flash program --address 0x08000000 --file fw.hex --verify
+cmsis-dap-cli --target STM32F030C8 repl
 ```
 
-Use `--json` for machine-readable output. Flash erase/program run directly.
-See the [CLI documentation](./docs/src/cli.md) for the full command reference.
+`--json` gives machine-readable output; flash erase/program run directly. The
+npm package (`npx -y cmsis-dap-cli`) ships with each release; for local builds
+use `target/release/cmsis-dap-cli`. See the
+[CLI documentation](./docs/src/cli.md) for the full command reference.
 
 ## Security
 
@@ -414,14 +418,18 @@ run_script { "script": "connect\nhalt\nreg pc\nsavebin C:/dump.bin 0x20000000 0x
 除 MCP 服务器外，项目还提供独立的 `cmsis-dap-cli`，与服务器共用同一套引擎：
 
 ```bash
-npx -y cmsis-dap-cli list
-npx -y cmsis-dap-cli connect --protocol swd
-npx -y cmsis-dap-cli read --address 0x20000000 --width u32 --count 4
-npx -y cmsis-dap-cli flash program --address 0x08000000 --file fw.hex --verify
-npx -y cmsis-dap-cli repl
+cmsis-dap-cli chip search STM32F030          # 查找内置芯片
+cmsis-dap-cli --target STM32F030C8 connect   # 连接（自定义芯片用 --target-yaml）
+cmsis-dap-cli --target STM32F030C8 read --address 0x20000000 --width u32 --count 4
+cmsis-dap-cli --target STM32F030C8 halt
+cmsis-dap-cli --target STM32F030C8 reg get pc
+cmsis-dap-cli --target STM32F030C8 flash program --address 0x08000000 --file fw.hex --verify
+cmsis-dap-cli --target STM32F030C8 repl
 ```
 
-用 `--json` 输出机器可读结果。Flash 擦除/烧录直接执行。完整命令参考见
+`--json` 输出机器可读结果；Flash 擦除/烧录直接执行。npm 包
+（`npx -y cmsis-dap-cli`）随每次发布提供；本地构建用
+`target/release/cmsis-dap-cli`。完整命令参考见
 [命令行工具文档](./docs/zh/src/cli.md)。
 
 ## 安全
