@@ -1,72 +1,203 @@
 # 命令行工具
 
-`cmsis-dap-cli` 是面向人与脚本的独立命令行工具。它与 MCP 服务器共用同一套
-`cmsis-dap-core` 引擎（探针枚举、内存、内核控制、SVD、Flash 与脚本），但直接
-面向终端用户，不经过 MCP。
+## 简介
+
+`cmsis-dap-cli` 是面向人、脚本与自动化的独立命令行工具。它与 MCP 服务器共用
+同一套 `cmsis-dap-core` 引擎（探针枚举、内存、内核控制、SVD、Flash 与脚本），
+但直接面向终端用户，不经过 MCP。
+
+仓库是包含三个 crate 的 Cargo workspace：
+
+- `cmsis-dap-core` —— 共享引擎（后端、会话、SVD、脚本引擎）；
+- `cmsis-dap-mcp` —— MCP 服务器二进制；
+- `cmsis-dap-cli` —— 本 CLI，只依赖 `cmsis-dap-core`。
 
 ## 安装
 
-通过 npm 零安装：
+发布后可用 npm 零安装：
 
 ```bash
 npx -y cmsis-dap-cli --help
 ```
 
-或从 [GitHub Releases](https://github.com/guohj2021/CMSIS-DAP-MCP/releases)
-下载 Windows / Linux / macOS 原生二进制。
+在发布前或离线环境下，从
+[GitHub Releases](https://github.com/guohj2021/CMSIS-DAP-MCP/releases) 下载
+Windows / Linux / macOS 原生二进制，或本地构建：
 
-## 命令一览
+```bash
+cargo build --release --workspace
+./target/release/cmsis-dap-cli --help        # Windows 为 target\release\cmsis-dap-cli.exe
+```
 
-全局参数（子命令之前）：`--probe-id`、`--protocol swd|jtag`、`--speed-khz`、
-`--target`、`--under-reset`、`--target-yaml`、`--svd`、`--json`、
-`--log-level`、`--log-file`。
+想直接敲 `cmsis-dap-cli`，把所在目录加入 `PATH` 即可。
+
+## 快速上手
+
+```bash
+cmsis-dap-cli list                                   # 枚举探针
+cmsis-dap-cli --probe-id 0123456789AB connect        # 连接（自动选择芯片）
+cmsis-dap-cli read --address 0x20000000 --width u32 --count 4
+cmsis-dap-cli halt
+cmsis-dap-cli reg get pc
+cmsis-dap-cli resume
+```
+
+需要目标的命令会自动使用全局连接参数连接，典型的一次性会话：
+
+```text
+$ cmsis-dap-cli --target STM32F030C8 connect
+target: {"ap_count":1,"core_count":1,"core_type":"Armv6m",...,
+         "memory_regions":[FLASH 0x08000000-0x08010000, SRAM 0x20000000-0x20002000]}
+```
+
+## 全局参数
+
+所有参数都是全局的，可以放在子命令前后。
+
+| 参数 | 含义 |
+| --- | --- |
+| `--probe-id ID` | 多探针时按 id/序列号选择 |
+| `--protocol swd\|jtag` | 调试协议（默认 `swd`） |
+| `--speed-khz N` | SWD/JTAG 时钟（kHz） |
+| `--target NAME` | 目标芯片名（内置库或 `--target-yaml` 中的变体） |
+| `--under-reset` | 按住复位连接（锁定/无响应目标） |
+| `--target-yaml FILE` | 加载 target YAML（芯片 + Flash 算法定义） |
+| `--svd FILE` | SVD 文件（`svd` 子命令用） |
+| `--json` | 输出机器可读 JSON 而非人类文本 |
+| `--log-level LEVEL` | 日志过滤级别；日志只写 stderr（默认 `warn`） |
+| `--log-file FILE` | 日志写入文件而非 stderr |
+
+数字（地址、大小、数值）支持十进制与十六进制（`0x...`）。
+
+## 命令参考
+
+### 探针与会话
 
 | 命令 | 用途 |
 | --- | --- |
 | `list` | 枚举已连接探针 |
-| `info` | 查看探针信息 |
-| `connect` / `disconnect` / `target` | 管理会话并查看目标信息 |
-| `read --address A --width W --count N [--output FILE --format bin\|hex]` | 读内存或导出范围到文件 |
+| `info` | 查看探针信息（id、厂商、产品、序列号、能力） |
+| `connect` | 连接目标并显示目标信息 |
+| `disconnect` | 断开会话 |
+| `target` | 显示目标信息（自动连接） |
+
+### 内存
+
+| 命令 | 用途 |
+| --- | --- |
+| `read --address A --width W --count N [--output FILE --format bin\|hex]` | 读内存；带 `--output` 时导出范围到文件（此时 `count` 为字节数） |
 | `write --address A --width W --values V1,V2,...` | 写内存 |
 | `verify --address A --width W --values ...` | 按期望值校验内存 |
-| `regs` / `reg get NAME\|NUM` / `reg set NAME\|NUM VALUE` | 内核寄存器访问 |
-| `status` / `halt` / `resume` / `step` / `reset [--mode run\|halt]` | 执行控制 |
-| `bp set ADDR` / `bp list` / `bp clear` | 硬件断点 |
-| `wp set ADDR --access read\|write\|rw` / `wp list` / `wp clear` | 数据观察点 |
-| `dap read ADDR` / `dap write ADDR VALUE` | 原始 DAP（DP/AP）访问 |
-| `svd list` / `svd read PERIPH.REG[.FIELD]` / `svd write PERIPH.REG[.FIELD] VALUE` | SVD 命名访问（需 `--svd FILE`） |
-| `flash erase --address A --size N` / `flash program --address A --file F [--format elf\|axf\|bin\|hex] [--verify]` | Flash 擦除 / 烧录 |
-| `script --file F` 或 `--text TEXT` | 运行 J-Link / OpenOCD 风格脚本 |
-| `chip generate --flm F --flash-start A --flash-size N --sram-start A --sram-size N [--name NAME] [--output FILE]` | 从 Keil FLM 生成 probe-rs target YAML |
-| `chip list` / `chip search KEYWORD` | 列出或搜索芯片变体（内置库 + `--target-yaml` 自定义芯片） |
-| `repl` | 交互式 shell（J-Link Commander 风格） |
 
-需要目标的命令会自动使用全局连接参数建立连接。数字支持十进制或十六进制
-（`0x...`）。
-
-## 示例
+`width` 为 `u8`、`u16`、`u32` 或 `u64`。
 
 ```bash
-cmsis-dap-cli list
-cmsis-dap-cli connect --protocol swd --speed-khz 1000
 cmsis-dap-cli read --address 0x20000000 --width u32 --count 4
-cmsis-dap-cli write --address 0x20000000 --width u32 --values 0xDEADBEEF,1
-cmsis-dap-cli halt
-cmsis-dap-cli reg get pc
 cmsis-dap-cli read --address 0x08000000 --width u8 --count 0x1000 --output fw.bin --format bin
-cmsis-dap-cli --svd target.svd svd read GPIOA.ODR.ODR0
-cmsis-dap-cli flash program --address 0x08000000 --file fw.hex --verify
-cmsis-dap-cli script --file flash.jlink
-cmsis-dap-cli repl
+cmsis-dap-cli write --address 0x20000000 --width u32 --values 0xDEADBEEF,1,2
 ```
 
-REPL 中输入 `?`/`help` 查看支持的 J-Link / OpenOCD 风格命令，`q`/`exit` 退出。
+### 内核
+
+| 命令 | 用途 |
+| --- | --- |
+| `regs` | 列出内核寄存器名 |
+| `reg get NAME\|NUM` | 读寄存器（名字或编号） |
+| `reg set NAME\|NUM VALUE` | 写寄存器 |
+| `status` | 显示内核状态、停机原因与 PC |
+| `halt` / `resume` / `step` | 暂停 / 恢复 / 单步 |
+| `reset [--mode run\|halt]` | 复位后继续，或复位后暂停 |
+
+核心在运行时读寄存器会失败——先 `halt`（一次性命令每次是新会话，请在
+`script`/`repl` 里 halt 后再读）：
+
+```bash
+cmsis-dap-cli script --text "connect\nhalt\nreg pc\nresume"
+```
+
+### 断点与数据观察点
+
+```text
+bp set ADDR | bp list | bp clear
+wp set ADDR --access read|write|rw | wp list | wp clear
+```
+
+### DAP
+
+```text
+dap read ADDR
+dap write ADDR VALUE
+```
+
+原始 DP/AP 寄存器访问（`ADDR` 的 bit24..31 选择 AP，低位是寄存器）。
+
+### SVD（命名外设访问）
+
+```text
+svd list
+svd read PERIPH.REG[.FIELD]
+svd write PERIPH.REG[.FIELD] VALUE
+```
+
+需要 `--svd FILE`。目标写法：`GPIOA.ODR` 或 `GPIOA.ODR.ODR0`；位域写是
+读-改-写。
+
+```bash
+cmsis-dap-cli --svd target.svd svd list
+cmsis-dap-cli --svd target.svd svd read GPIOA.ODR.ODR0
+cmsis-dap-cli --svd target.svd svd write GPIOA.ODR.ODR0 1
+```
+
+### Flash
+
+```text
+flash erase --address A --size N
+flash program --address A --file FILE [--format elf|axf|bin|hex] [--verify]
+```
+
+擦除/烧录直接执行（无确认）。目标必须定义了 Flash，否则命令明确报错而不是
+静默无效果。`--format` 默认按文件扩展名推断；`--verify` 会读回校验。
+
+```bash
+cmsis-dap-cli flash erase --address 0x08000000 --size 0x1000
+cmsis-dap-cli flash program --address 0x08000000 --file fw.hex --verify
+```
+
+### 脚本
+
+```text
+script --file FILE
+script --text TEXT
+```
+
+执行 J-Link Commander / OpenOCD 风格脚本（见[脚本使用](./scripting.md)）。
+`script` 命令会继承全局连接参数，脚本里的 `connect` 直接使用它们。
+
+### 芯片工具
+
+```text
+chip generate --flm FILE --flash-start A --flash-size N --sram-start A --sram-size N [--name NAME] [--output FILE]
+chip list
+chip search KEYWORD
+```
+
+`chip generate` 从 Keil FLM 生成 probe-rs target YAML（见下文）。`chip list`/
+`chip search` 列出或搜索内置芯片库（也可包含 `--target-yaml` 自定义芯片）；
+结果带 Flash/RAM 范围，一眼能看出能不能烧录。
+
+### 交互式 shell
+
+```text
+repl
+```
+
+启动 J-Link Commander 风格 shell（见[REPL](#repl)）。
 
 ## 从 FLM 生成 target YAML
 
 对于 probe-rs 内置库没有的芯片，烧录需要一份描述芯片并内嵌厂商 Flash 算法
-的 target YAML。不用手写：`chip generate` 读取 Keil FLM 文件（厂商 Flash
-算法），你只需要提供 Flash 与 SRAM 地址范围：
+的 target YAML。不用手写——`chip generate` 读取 Keil FLM，你只需要提供
+Flash 与 SRAM 地址范围：
 
 ```bash
 cmsis-dap-cli chip generate \
@@ -79,45 +210,146 @@ cmsis-dap-cli chip generate \
 其余信息全部从 FLM 自动提取：算法指令、入口偏移（`Init`/`ProgramPage`/
 `EraseSector`/`EraseChip`）、静态数据基址、FlashDevice 描述符（页大小、
 擦除值、扇区大小、超时）与设备名。`--name` 默认取 FLM 文件名；用
-`--output -` 把 YAML 打印到 stdout。随后用同一工具加载：
+`--output -` 把 YAML 打印到 stdout。
+
+然后连接：
 
 ```bash
-cmsis-dap-cli --target-yaml MYCHIP.yaml --target MYCHIP connect
+cmsis-dap-cli --target-yaml MYCHIP.yaml connect
 ```
 
 当 target YAML 只定义一颗芯片变体时，`--target` 可以省略，CLI 会自动选择；
 若定义了多颗，则必须给 `--target NAME`（命令会提示可用的名字）。
 
-生成的 YAML 会把算法放在 `SRAM 起始 + 0x20`；请确保提供的 SRAM 范围能容纳
-算法（放不下时命令会拒绝生成）。
+生成的 YAML 会把算法放在 `SRAM 起始 + 0x20`；请确保 SRAM 范围足够大
+（放不下时命令会拒绝生成）。
 
 ## 查看与搜索芯片
-
-想知道有哪些芯片可用（用于 `--target` 或 REPL 里的 `device`），可以列出或
-搜索 probe-rs 内置芯片库：
 
 ```bash
 cmsis-dap-cli chip list
 cmsis-dap-cli chip search STM32F103
 cmsis-dap-cli chip search stm32f103c8
+cmsis-dap-cli --target-yaml MYCHIP.yaml chip search MYCHIP
 ```
 
-搜索不区分大小写，按芯片名字符串匹配。加 `--target-yaml FILE` 可以把
-`chip generate` 生成的自定义芯片也纳入列表；`--json` 输出完整信息（所属
-系列、内核、Flash 与 RAM 范围），方便脚本处理。
+搜索不区分大小写、按子串匹配。加 `--json` 会输出完整信息（所属系列、内核、
+Flash 与 RAM 范围），方便脚本处理。
+
+## 示例
+
+### 一次完整调试会话
+
+```bash
+cmsis-dap-cli list
+cmsis-dap-cli --probe-id 0123456789AB --target STM32F030C8 connect
+cmsis-dap-cli --target STM32F030C8 read --address 0x20000000 --width u32 --count 4
+cmsis-dap-cli --target STM32F030C8 halt
+cmsis-dap-cli --target STM32F030C8 reg get pc
+cmsis-dap-cli --target STM32F030C8 step
+cmsis-dap-cli --target STM32F030C8 resume
+```
+
+### 烧录固件并校验
+
+```bash
+cmsis-dap-cli --target STM32F030C8 flash erase --address 0x08000000 --size 0x10000
+cmsis-dap-cli --target STM32F030C8 flash program --address 0x08000000 --file fw.hex --verify
+cmsis-dap-cli --target STM32F030C8 read --address 0x08000000 --width u8 --count 0x100 --output dump.bin --format bin
+```
+
+### 脚本文件
+
+`flash.jlink`：
+
+```text
+connect
+halt
+reg pc
+savebin C:/dump.bin 0x20000000 0x100
+resume
+q
+```
+
+```bash
+cmsis-dap-cli --target STM32F030C8 script --file flash.jlink
+```
+
+### 机器可读输出
+
+```bash
+cmsis-dap-cli --json connect
+cmsis-dap-cli --json read --address 0x20000000 --width u32 --count 2
+```
+
+```json
+{"target":{"core_type":"Armv6m","core_count":1,"ap_count":1, ...}}
+{"address":536870912,"width":"u32","values":[64000000,1]}
+```
 
 ## 输出与退出码
 
-- 默认输出人类可读；加 `--json` 输出与 MCP 工具一致的机器可读 JSON。日志
-  始终写 stderr。
-- 退出码：`0` 成功，`1` 运行时错误，`2` 用法错误，`3` 确认被拒或破坏性
-  操作缺少确认。
+- 默认输出人类可读；`--json` 输出与 MCP 工具一致的 structured payload。
+  日志始终写 stderr。
+- 退出码：`0` 成功，`1` 运行时错误（探针/连接/烧录失败），`2` 用法错误
+  （未知参数、非法取值、缺参）。
 
-## Flash 操作
+## REPL
 
-`flash erase` 与 `flash program` 在 CLI 中直接执行（包括在 `script` 与
-`repl` 里），没有确认提示，也没有 `--yes` 参数。但目标必须定义了 Flash：
-用 `--target-yaml`/`--target` 连接（脚本/REPL 里 `device NAME` 后重新
-`connect`），否则操作会明确报错而不是静默无效果。
+`repl` 启动交互式 shell，一个会话保持打开，halt/读/恢复可以跨行执行：
 
-Flash 擦除与烧录可能导致设备永久损坏。执行前请仔细核对地址与文件。
+```text
+$ cmsis-dap-cli --probe-id 0123456789AB --target STM32F030C8 repl
+cmsis-dap-cli> connect
+target: {"ap_count":1,"core_count":1,"core_type":"Armv6m", ...}
+cmsis-dap-cli> halt
+halted: true
+cmsis-dap-cli> reg pc
+pc = 0x800122A
+cmsis-dap-cli> resume
+running: true
+cmsis-dap-cli> q
+```
+
+`?`/`help` 显示支持的命令；`q`/`exit` 退出。REPL 继承全局连接参数，`connect`
+直接使用它们（不用重敲 `--target`）。REPL 里 Flash 擦除/烧录同样直接执行。
+
+## 脚本命令
+
+脚本引擎（`script` 与 REPL 共用）支持：
+
+```text
+connect | disconnect | init        会话管理
+si swd|jtag                        接口
+speed <khz>                        时钟
+device <name>                      目标芯片
+adapter serial <id>                选择探针
+halt | go | step                   执行控制
+reset [run|halt]                   复位
+reg <name> [<value>] | regs        内核寄存器
+mem8/16/32 <addr> [<n>] | mdb/mdh/mdw   读内存
+w8/16/32 <addr> <value> | mwb/mwh/mww   写内存
+savebin <file> <addr> <size>       导出内存到二进制文件
+dump_image <file> <addr> <size>    savebin 别名
+loadbin <file> <addr>              烧录二进制文件
+loadfile <file> [<addr>]           烧录 axf/elf/bin/hex
+flash write_image <file> [<addr>]  loadfile 别名
+flash erase_sector <addr> <size>   擦除一段 Flash
+erase                              全片擦除
+verifybin <file> [<addr>]          用文件校验内存
+verify_image <file> [<addr>]       verifybin 别名
+sleep <ms> | echo <text>           辅助命令
+targets                            显示已连接目标
+? | help | q | exit                帮助与退出
+```
+
+## 常见问题与提示
+
+- **选择芯片**：内置芯片（`chip search NAME`）直接 `--target NAME` 即可；
+  其他芯片先用 `chip generate` 生成一次 target YAML，再用 `--target-yaml`
+  加载（单变体自动选择；多变体需 `--target`）。
+- **Flash 需要芯片定义**：没有定义时擦除/烧录会明确报错，而不是静默无效果。
+- **读寄存器需要先暂停内核**：一次性模式下用 `script`/`repl`，让 `halt` 和
+  `reg` 共享同一会话。
+- **Flash 不能用 `write` 写**：直接写 Flash 地址会被拒绝；用 `flash program`。
+- **数字格式**：十进制或十六进制（`0x...`）均可。
