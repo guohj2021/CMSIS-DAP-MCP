@@ -256,6 +256,26 @@ async fn flash_blocked_without_flag() {
 }
 
 #[tokio::test]
+async fn erase_flash_requires_flash_definition() {
+    let mcp = CmsisDapMcp::new(
+        SessionManager::new(Box::new(MockBackend::without_flash())),
+        SecurityPolicy {
+            allow_destructive: true,
+        },
+    );
+    connect(&mcp);
+    let res = mcp
+        .erase_flash(Parameters(EraseFlashParams {
+            address: 0,
+            size: u64::MAX,
+        }))
+        .await;
+    assert!(res.is_error.unwrap_or(false));
+    let structured = res.structured_content.unwrap();
+    assert_eq!(structured["code"], "UnsupportedFeature");
+}
+
+#[tokio::test]
 async fn flash_works_with_flag() {
     let mcp = CmsisDapMcp::new(
         SessionManager::new(Box::new(MockBackend::new())),

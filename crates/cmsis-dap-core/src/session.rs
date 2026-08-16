@@ -66,4 +66,23 @@ impl SessionManager {
     pub fn target_info(&self) -> Option<&TargetInfo> {
         self.connected.as_ref()
     }
+
+    /// Ensure the connected target exposes at least one NVM (flash) region.
+    ///
+    /// Without a chip definition (target YAML / target name / script `device`)
+    /// the generic fallback target has no flash algorithm, and probe-rs flash
+    /// operations would silently do nothing instead of failing.
+    pub fn require_flash_defined(&self) -> Result<(), McpError> {
+        let info = self
+            .target_info()
+            .ok_or_else(|| McpError::new(ErrorCode::NotConnected, "call connect first"))?;
+        if info.memory_regions.iter().any(|r| r.kind == "nvm") {
+            Ok(())
+        } else {
+            Err(McpError::new(
+                ErrorCode::UnsupportedFeature,
+                "target has no flash memory definition; connect with --target-yaml/--target (or set device in script/REPL) before flash operations",
+            ))
+        }
+    }
 }

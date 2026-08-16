@@ -252,6 +252,28 @@ fn flash_erase_requires_yes() {
 }
 
 #[test]
+fn flash_erase_requires_flash_definition() {
+    let args = CliArgs::try_parse_from(
+        [
+            "cmsis-dap-cli",
+            "--yes",
+            "flash",
+            "erase",
+            "--address",
+            "0",
+            "--size",
+            "0x1000",
+        ]
+        .iter()
+        .map(|s| s.to_string()),
+    )
+    .unwrap();
+    let err = run(args, Box::new(MockBackend::without_flash())).unwrap_err();
+    assert!(matches!(err, CliError::Mcp(_)));
+    assert_eq!(err.exit_code(), 1);
+}
+
+#[test]
 fn flash_erase_runs_with_yes() {
     let out = execute(&[
         "cmsis-dap-cli",
