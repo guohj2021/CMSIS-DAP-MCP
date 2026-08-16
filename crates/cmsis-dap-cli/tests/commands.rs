@@ -366,3 +366,47 @@ fn chip_list_returns_builtin_chips() {
     let out = execute(&["cmsis-dap-cli", "chip", "list"]).unwrap();
     assert!(out["count"].as_u64().unwrap() > 1000);
 }
+
+#[test]
+fn info_returns_probe() {
+    let out = execute(&["cmsis-dap-cli", "info"]).unwrap();
+    assert!(out["probe"]["id"].as_str().is_some());
+}
+
+#[test]
+fn disconnect_returns_ok() {
+    let out = execute(&["cmsis-dap-cli", "disconnect"]).unwrap();
+    assert_eq!(out["disconnected"], serde_json::json!(true));
+}
+
+#[test]
+fn target_auto_connects() {
+    let out = execute(&["cmsis-dap-cli", "target"]).unwrap();
+    assert!(out["target"]["core_type"].as_str().is_some());
+}
+
+#[test]
+fn regs_returns_register_names() {
+    let out = execute(&["cmsis-dap-cli", "regs"]).unwrap();
+    let names = out["registers"].as_array().unwrap();
+    assert!(!names.is_empty());
+    assert!(names.iter().any(|r| r.as_str() == Some("pc")));
+}
+
+#[test]
+fn breakpoint_clear_works() {
+    let out = execute(&["cmsis-dap-cli", "bp", "clear"]).unwrap();
+    assert_eq!(out["cleared"], serde_json::json!(true));
+}
+
+#[test]
+fn watchpoint_clear_works() {
+    let out = execute(&["cmsis-dap-cli", "wp", "clear"]).unwrap();
+    assert_eq!(out["cleared"], serde_json::json!(true));
+}
+
+#[test]
+fn reset_run_mode_works() {
+    let out = execute(&["cmsis-dap-cli", "reset", "--mode", "run"]).unwrap();
+    assert_eq!(out["mode"], serde_json::json!("run"));
+}
