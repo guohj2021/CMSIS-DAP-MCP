@@ -192,9 +192,12 @@ fn print_human(value: &Value) {
         return;
     }
     if value.get("erased").and_then(|v| v.as_bool()) == Some(true) {
-        let address = value["address"].as_u64().unwrap_or(0);
-        let size = value["size"].as_u64().unwrap_or(0);
-        println!("erased 0x{address:X} (size 0x{size:X})");
+        match (value["address"].as_u64(), value["size"].as_u64()) {
+            (Some(address), Some(size)) => {
+                println!("erased 0x{address:X} (size 0x{size:X})");
+            }
+            _ => println!("erased: true"),
+        }
         return;
     }
     if let Some(address) = value.get("breakpoint").and_then(|v| v.as_u64()) {
