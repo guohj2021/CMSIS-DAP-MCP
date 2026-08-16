@@ -167,7 +167,7 @@ standard; pick the one that fits your situation.
 | Remote URL | `url = "https://..."` | Streamable-HTTP MCP servers (not supported by this project yet) |
 
 `npx` fetches the published package on first launch and caches it afterwards.
-To pin a version, use `npx -y cmsis-dap-mcp@0.3.0`. To run the freshly built
+To pin a version, use `npx -y cmsis-dap-mcp@0.4.0`. To run the freshly built
 local binary instead (for example while developing this repository), point
 the client at `target/release/cmsis-dap-mcp` — no npm publish needed.
 
@@ -249,6 +249,16 @@ cmsis-dap-cli --target STM32F030C8 --elf fw.axf rtt monitor --channel 0 --count 
 cmsis-dap-cli --target STM32F030C8 --elf fw.axf evr monitor --ctx 0,2 --count 0
 ```
 
+Example output, verified on a CMSIS-DAP probe with a Cortex-M0+ target running
+SEGGER RTT and the Event Recorder:
+
+```text
+[2026-08-16 19:16:13.302] watch_var = 0x00001007
+[2026-08-16 19:16:13.520] counter = 0x00000001
+[2026-08-16 19:16:14.268] [RTT0 "Terminal"] Live test: RTT up, core 8 MHz
+[2026-08-16 19:16:15.727] evr ticks=31688 t=0.003961s ctx=0x0 comp=0xAB msg=0x02 seq=8 val1=0x00000001 val2=0x00001007 first last
+```
+
 In `repl` use `connect` + `reset run` first (a fresh session attaches with the
 core halted), then `watch run` / `rtt monitor` / `evr monitor`.
 
@@ -280,9 +290,14 @@ cargo fmt --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 cargo build --release --workspace
+scripts/check-no-vendor.ps1   # Windows PowerShell; no vendor-specific terms
 mdbook build docs        # English docs
 mdbook build docs/zh     # Chinese docs
 ```
+
+Releases: pushing a `v*` tag runs the Release workflow, which builds the three
+platform binaries, publishes the npm packages (`cmsis-dap-mcp` / `cmsis-dap-cli`
+and the platform packages) and creates the GitHub Release.
 
 ## License
 
@@ -432,7 +447,7 @@ opencode mcp add cmsis-dap -- npx -y cmsis-dap-mcp
 | 远程 URL | `url = "https://..."` | Streamable-HTTP MCP 服务器（本项目暂不支持） |
 
 `npx` 首次启动时下载已发布包并缓存。要固定版本，用
-`npx -y cmsis-dap-mcp@0.3.0`。要运行刚构建的本地二进制（例如开发本仓库时），
+`npx -y cmsis-dap-mcp@0.4.0`。要运行刚构建的本地二进制（例如开发本仓库时），
 把客户端指向 `target/release/cmsis-dap-mcp` 即可，无需发布 npm。
 
 ## 使用示例
@@ -510,6 +525,16 @@ cmsis-dap-cli --target STM32F030C8 --elf fw.axf rtt monitor --channel 0 --count 
 cmsis-dap-cli --target STM32F030C8 --elf fw.axf evr monitor --ctx 0,2 --count 0
 ```
 
+实测输出示例（CMSIS-DAP 探针 + 运行 SEGGER RTT 与 Event Recorder 的
+Cortex-M0+ 目标）：
+
+```text
+[2026-08-16 19:16:13.302] watch_var = 0x00001007
+[2026-08-16 19:16:13.520] counter = 0x00000001
+[2026-08-16 19:16:14.268] [RTT0 "Terminal"] Live test: RTT up, core 8 MHz
+[2026-08-16 19:16:15.727] evr ticks=31688 t=0.003961s ctx=0x0 comp=0xAB msg=0x02 seq=8 val1=0x00000001 val2=0x00001007 first last
+```
+
 在 `repl` 里先 `connect` + `reset run`（新会话附着时核心处于停机），再执行
 `watch run` / `rtt monitor` / `evr monitor`。
 
@@ -538,9 +563,13 @@ cargo fmt --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 cargo build --release --workspace
+scripts/check-no-vendor.ps1   # Windows PowerShell；不得出现厂商专有词
 mdbook build docs        # 英文文档
 mdbook build docs/zh     # 中文文档
 ```
+
+发布：推送 `v*` tag 会触发 Release 流程，构建三平台二进制、发布 npm 包
+（`cmsis-dap-mcp` / `cmsis-dap-cli` 及平台包）并创建 GitHub Release。
 
 ## 许可证
 
