@@ -53,6 +53,62 @@ pub fn registry_from_yaml(path: &std::path::Path) -> Result<probe_rs::config::Re
     Ok(registry)
 }
 
+/// A concise chip variant summary for CLI listing.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ChipSummary {
+    pub family: String,
+    pub name: String,
+    pub cores: Vec<String>,
+    pub flash: Option<(u64, u64)>,
+    pub ram: Option<(u64, u64)>,
+}
+
+/// Build the registry of chips built into probe-rs.
+pub fn builtin_registry() -> probe_rs::config::Registry {
+    probe_rs::config::Registry::from_builtin_families()
+}
+
+/// Enumerate every chip variant in the registry, sorted by family then name.
+pub fn list_chips(registry: &probe_rs::config::Registry) -> Vec<ChipSummary> {
+    let mut chips = Vec::new();
+    for family in registry.families() {
+        for variant in &family.variants {
+            let cores = variant.cores.iter().map(|c| c.name.clone()).collect();
+            let mut flash = None;
+            let mut ram = None;
+            for region in &variant.memory_map {
+                match region {
+                    MemoryRegion::Nvm(r) if flash.is_none() => {
+                        flash = Some((r.range.start, r.range.end));
+                    }
+                    MemoryRegion::Ram(r) if ram.is_none() => {
+                        ram = Some((r.range.start, r.range.end));
+                    }
+                    _ => {}
+                }
+            }
+            chips.push(ChipSummary {
+                family: family.name.clone(),
+                name: variant.name.clone(),
+                cores,
+                flash,
+                ram,
+            });
+        }
+    }
+    chips.sort_by(|a, b| a.family.cmp(&b.family).then_with(|| a.name.cmp(&b.name)));
+    chips
+}
+
+/// Search chip variants whose name contains `keyword` (case-insensitive).
+pub fn search_chips(registry: &probe_rs::config::Registry, keyword: &str) -> Vec<ChipSummary> {
+    let needle = keyword.to_ascii_lowercase();
+    list_chips(registry)
+        .into_iter()
+        .filter(|c| c.name.to_ascii_lowercase().contains(&needle))
+        .collect()
+}
+
 impl ProbeRsBackend {
     pub fn new() -> Self {
         Self {
