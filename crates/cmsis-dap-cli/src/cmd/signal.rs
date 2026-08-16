@@ -22,12 +22,18 @@ pub fn install() {
 }
 
 #[cfg(unix)]
+extern "C" fn handle_sigint(_sig: libc::c_int) {
+    INTERRUPTED.store(true, Ordering::SeqCst);
+}
+
+#[cfg(unix)]
 pub fn install() {
-    unsafe extern "C" fn handler(_sig: libc::c_int) {
-        INTERRUPTED.store(true, Ordering::SeqCst);
-    }
+    // POSIX `sighandler_t` is the numeric representation of a function
+    // pointer; route through `*const ()` to satisfy
+    // `function-casts-as-integer`.
+    let handler = handle_sigint as *const () as libc::sighandler_t;
     unsafe {
-        libc::signal(libc::SIGINT, handler as libc::sighandler_t);
+        libc::signal(libc::SIGINT, handler);
     }
 }
 
