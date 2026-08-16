@@ -37,6 +37,9 @@ flash from firmware files, and run repeatable debug scripts.
 - J-Link Commander / OpenOCD style debug scripts via `run_script`.
 - Zero runtime dependencies for end users: `npx -y cmsis-dap-mcp` or one
   native binary.
+- Companion CLI for humans and scripts: `cmsis-dap-cli` enumerates probes,
+  reads/writes memory and registers, programs flash, exports memory and runs
+  the same J-Link / OpenOCD style scripts without an AI client.
 - Cross-platform: Windows / Linux / macOS.
 
 ## Features
@@ -61,6 +64,9 @@ abstraction sits between the tool layer and probe-rs (with a mock backend for
 tests), and logs never touch stdout. See the
 [Architecture](https://guohj2021.github.io/CMSIS-DAP-MCP/architecture.html)
 page for module responsibilities and data flow.
+
+The repository is a Cargo workspace: `cmsis-dap-core` (shared engine),
+`cmsis-dap-mcp` (the MCP server binary) and `cmsis-dap-cli` (the CLI binary).
 
 ![CMSIS-DAP MCP architecture](docs/src/images/architecture.png)
 
@@ -185,6 +191,23 @@ Run a J-Link / OpenOCD style script:
 run_script { "script": "connect\nhalt\nreg pc\nsavebin C:/dump.bin 0x20000000 0x100\nresume" }
 ```
 
+## CLI
+
+Besides the MCP server, the project ships a standalone `cmsis-dap-cli` that
+shares the same engine:
+
+```bash
+npx -y cmsis-dap-cli list
+npx -y cmsis-dap-cli connect --protocol swd
+npx -y cmsis-dap-cli read --address 0x20000000 --width u32 --count 4
+npx -y cmsis-dap-cli --yes flash program --address 0x08000000 --file fw.hex --verify
+npx -y cmsis-dap-cli repl
+```
+
+Use `--json` for machine-readable output and `--yes` to skip destructive
+confirmation. See the [CLI documentation](./docs/src/cli.md) for the full
+command reference.
+
 ## Security
 
 - Read-only tools are always available.
@@ -238,6 +261,8 @@ SWD 或 JTAG 连接、读写内存与内核寄存器、控制执行、用 SVD �
 - 支持 `axf`/`elf`/`bin`/`hex` 固件烧录，以及 `bin`/`hex` 内存导出。
 - `run_script` 支持 J-Link Commander / OpenOCD 风格调试脚本。
 - 终端用户零安装：`npx -y cmsis-dap-mcp` 或单个原生二进制。
+- 配套命令行工具 `cmsis-dap-cli`：枚举探针、读写内存与寄存器、烧录 Flash、
+  导出内存并执行同样的 J-Link / OpenOCD 风格脚本，无需 AI 客户端。
 - 跨平台：Windows / Linux / macOS。
 
 ## 功能
@@ -261,6 +286,9 @@ SWD 或 JTAG 连接、读写内存与内核寄存器、控制执行、用 SVD �
 `Backend` 抽象（另有 Mock 后端用于测试），日志不写 stdout。模块职责与数据流
 见[架构说明](https://guohj2021.github.io/CMSIS-DAP-MCP/zh/architecture.html)
 页面。
+
+仓库采用 Cargo workspace：`cmsis-dap-core`（共享引擎）、`cmsis-dap-mcp`
+（MCP 服务器二进制）与 `cmsis-dap-cli`（命令行工具二进制）。
 
 ![CMSIS-DAP MCP 架构图](docs/src/images/architecture.png)
 
@@ -381,6 +409,21 @@ read_memory   { "address": 0x08000000, "width": "u8", "count": 0x1000, "path": "
 ```text
 run_script { "script": "connect\nhalt\nreg pc\nsavebin C:/dump.bin 0x20000000 0x100\nresume" }
 ```
+
+## 命令行工具
+
+除 MCP 服务器外，项目还提供独立的 `cmsis-dap-cli`，与服务器共用同一套引擎：
+
+```bash
+npx -y cmsis-dap-cli list
+npx -y cmsis-dap-cli connect --protocol swd
+npx -y cmsis-dap-cli read --address 0x20000000 --width u32 --count 4
+npx -y cmsis-dap-cli --yes flash program --address 0x08000000 --file fw.hex --verify
+npx -y cmsis-dap-cli repl
+```
+
+用 `--json` 输出机器可读结果，用 `--yes` 跳过破坏性操作确认。完整命令参考见
+[命令行工具文档](./docs/zh/src/cli.md)。
 
 ## 安全
 
