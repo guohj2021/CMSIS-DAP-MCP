@@ -186,3 +186,15 @@ fn script_requires_exactly_one_source() {
     assert!(matches!(err, CliError::InvalidArgument(_)));
     assert_eq!(err.exit_code(), 2);
 }
+
+#[test]
+fn parses_chip_list() {
+    let args = parse(&["cmsis-dap-cli", "chip", "list"]);
+    assert!(matches!(args.command, Command::Chip(_)));
+}
+
+#[test]
+fn chip_search_requires_keyword() {
+    let err = parse_err(&["cmsis-dap-cli", "chip", "search"]);
+    assert_eq!(err.exit_code(), 2);
+}
