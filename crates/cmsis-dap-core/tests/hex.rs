@@ -1,4 +1,4 @@
-use cmsis_dap_mcp::hex::encode_ihex;
+use cmsis_dap_core::hex::encode_ihex;
 
 #[test]
 fn encodes_small_range() {

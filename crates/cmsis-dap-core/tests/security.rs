@@ -1,5 +1,5 @@
-use cmsis_dap_mcp::error::ErrorCode;
-use cmsis_dap_mcp::security::{SecurityLevel, SecurityPolicy};
+use cmsis_dap_core::error::ErrorCode;
+use cmsis_dap_core::security::{SecurityLevel, SecurityPolicy};
 
 #[test]
 fn read_only_always_allowed() {

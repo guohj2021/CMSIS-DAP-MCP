@@ -1,8 +1,8 @@
-use cmsis_dap_mcp::backend::mock::MockBackend;
-use cmsis_dap_mcp::backend::{AccessWidth, ConnectOptions, Protocol};
-use cmsis_dap_mcp::script;
-use cmsis_dap_mcp::security::SecurityPolicy;
-use cmsis_dap_mcp::session::SessionManager;
+use cmsis_dap_core::backend::mock::MockBackend;
+use cmsis_dap_core::backend::{AccessWidth, ConnectOptions, Protocol};
+use cmsis_dap_core::script;
+use cmsis_dap_core::security::SecurityPolicy;
+use cmsis_dap_core::session::SessionManager;
 use std::io::Write;
 
 fn session() -> SessionManager {

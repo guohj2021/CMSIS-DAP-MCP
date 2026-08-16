@@ -48,13 +48,62 @@ impl Default for Context {
     }
 }
 
+/// Reusable per-session script interpreter.
+///
+/// Keeps connection context (protocol, speed, probe, target) and the security
+/// policy across lines, so an interactive REPL can stay connected while the
+/// batch `run` wrapper keeps the historical one-shot semantics.
+pub struct ScriptEngine {
+    ctx: Context,
+    policy: SecurityPolicy,
+}
+
+impl ScriptEngine {
+    pub fn new(policy: SecurityPolicy) -> Self {
+        Self {
+            ctx: Context::default(),
+            policy,
+        }
+    }
+
+    /// Mutable access to the security policy (used by REPLs to enable
+    /// destructive mode interactively).
+    pub fn policy_mut(&mut self) -> &mut SecurityPolicy {
+        &mut self.policy
+    }
+
+    /// Execute one logical line against the session.
+    ///
+    /// Returns `Ok(None)` for blank or comment-only lines, `Ok(Some(value))`
+    /// for executed commands, and `{"stopped": true}` for `q`/`exit`.
+    pub fn execute_line(
+        &mut self,
+        session: &mut SessionManager,
+        line: &str,
+    ) -> Result<Option<serde_json::Value>, McpError> {
+        let Some(tokens) = tokenize(line) else {
+            return Ok(None);
+        };
+        if tokens.is_empty() {
+            return Ok(None);
+        }
+        let name = tokens[0].to_ascii_lowercase();
+        let args = &tokens[1..];
+        if matches!(name.as_str(), "q" | "exit") {
+            return Ok(Some(serde_json::json!({ "stopped": true })));
+        }
+        let output = dispatch(session, &self.policy, &mut self.ctx, &name, args)?;
+        Ok(Some(output))
+    }
+}
+
 /// Execute a script against the given session under the given security policy.
 pub fn run(
     session: &mut SessionManager,
     policy: &SecurityPolicy,
     script: &str,
 ) -> Result<ScriptReport, McpError> {
-    let mut ctx = Context::default();
+    let mut engine = ScriptEngine::new(policy.clone());
     let mut report = ScriptReport {
         ok: true,
         commands: 0,
@@ -69,25 +118,29 @@ pub fn run(
             continue;
         }
         report.commands += 1;
-        let name = tokens[0].to_ascii_lowercase();
-        let args = &tokens[1..];
         let display = tokens.join(" ");
-
-        if matches!(name.as_str(), "q" | "exit") {
-            report.results.push(CommandResult {
-                command: display,
-                status: "ok".into(),
-                output: serde_json::json!({ "stopped": true }),
-            });
-            break;
-        }
-
-        match dispatch(session, policy, &mut ctx, &name, args) {
-            Ok(output) => report.results.push(CommandResult {
-                command: display,
-                status: "ok".into(),
-                output,
-            }),
+        match engine.execute_line(session, &line) {
+            Ok(Some(output)) => {
+                let stopped = output
+                    .get("stopped")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                report.results.push(CommandResult {
+                    command: display,
+                    status: "ok".into(),
+                    output,
+                });
+                if stopped {
+                    break;
+                }
+            }
+            Ok(None) => {
+                report.results.push(CommandResult {
+                    command: display,
+                    status: "ok".into(),
+                    output: serde_json::json!(null),
+                });
+            }
             Err(e) => {
                 report.results.push(CommandResult {
                     command: display,

@@ -1,5 +1,5 @@
-use cmsis_dap_mcp::backend::mock::MockBackend;
-use cmsis_dap_mcp::backend::{AccessWidth, Backend, ConnectOptions, Protocol};
+use cmsis_dap_core::backend::mock::MockBackend;
+use cmsis_dap_core::backend::{AccessWidth, Backend, ConnectOptions, Protocol};
 
 #[test]
 fn mock_lists_one_probe() {

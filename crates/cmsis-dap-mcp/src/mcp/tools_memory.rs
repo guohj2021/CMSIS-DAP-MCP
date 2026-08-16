@@ -1,4 +1,4 @@
-use crate::backend::AccessWidth;
+use cmsis_dap_core::backend::AccessWidth;
 use schemars::JsonSchema;
 use serde::Deserialize;
 
