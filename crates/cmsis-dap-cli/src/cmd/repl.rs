@@ -1,4 +1,4 @@
-use super::{output, CliError};
+use super::{output, parse_protocol, CliError, ReplOptions};
 use cmsis_dap_core::error::ErrorCode;
 use cmsis_dap_core::script::ScriptEngine;
 use cmsis_dap_core::security::SecurityPolicy;
@@ -35,15 +35,21 @@ Destructive commands require --yes at startup, or interactive approval.";
 /// interactive destructive-approval behavior (kept out of stdin plumbing so
 /// tests can drive the REPL with an in-memory reader).
 pub fn run(
-    yes: bool,
-    json: bool,
+    opts: &ReplOptions,
     session: &mut SessionManager,
     reader: &mut dyn BufRead,
     interactive: bool,
 ) -> Result<(), CliError> {
-    let mut engine = ScriptEngine::new(SecurityPolicy {
-        allow_destructive: yes,
-    });
+    let mut engine = ScriptEngine::with_connection(
+        SecurityPolicy {
+            allow_destructive: opts.yes,
+        },
+        opts.probe_id.clone(),
+        parse_protocol(&opts.protocol)?,
+        opts.speed_khz,
+        opts.target.clone(),
+        opts.under_reset,
+    );
     loop {
         if interactive {
             eprint!("cmsis-dap-cli> ");
@@ -78,14 +84,14 @@ pub fn run(
                 {
                     break;
                 }
-                output::print_result(json, &output);
+                output::print_result(opts.json, &output);
             }
             Ok(None) => {}
             Err(e) if e.code == ErrorCode::DestructiveDisabled => {
                 if interactive && prompt_enable_destructive(&mut *reader)? {
                     engine.policy_mut().allow_destructive = true;
                     match engine.execute_line(session, &line) {
-                        Ok(Some(output)) => output::print_result(json, &output),
+                        Ok(Some(output)) => output::print_result(opts.json, &output),
                         Ok(None) => {}
                         Err(e2) => eprintln!("error: {e2}"),
                     }
