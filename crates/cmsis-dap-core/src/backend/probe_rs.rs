@@ -845,16 +845,18 @@ impl Backend for ProbeRsBackend {
                     image_format("elf").ok_or_else(|| file_error("elf format is unavailable"))?;
                 let loader = build_loader(session, path, factory.create_loader(None), None)
                     .map_err(file_error)?;
+                let bytes = loader.data().map(|(_, d)| d.len() as u64).sum::<u64>();
                 loader.commit(session, options).map_err(file_error)?;
-                Ok(0)
+                Ok(bytes)
             }
             ImageFileFormat::Hex => {
                 let factory =
                     image_format("hex").ok_or_else(|| file_error("hex format is unavailable"))?;
                 let loader = build_loader(session, path, factory.create_loader(None), None)
                     .map_err(file_error)?;
+                let bytes = loader.data().map(|(_, d)| d.len() as u64).sum::<u64>();
                 loader.commit(session, options).map_err(file_error)?;
-                Ok(0)
+                Ok(bytes)
             }
         }
     }
