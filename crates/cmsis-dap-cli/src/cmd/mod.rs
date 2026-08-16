@@ -455,6 +455,31 @@ pub struct ChipSearchArgs {
     pub keyword: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct ReplOptions {
+    pub yes: bool,
+    pub json: bool,
+    pub probe_id: Option<String>,
+    pub protocol: String,
+    pub speed_khz: Option<u32>,
+    pub target: Option<String>,
+    pub under_reset: bool,
+}
+
+impl Default for ReplOptions {
+    fn default() -> Self {
+        Self {
+            yes: false,
+            json: false,
+            probe_id: None,
+            protocol: "swd".into(),
+            speed_khz: None,
+            target: None,
+            under_reset: false,
+        }
+    }
+}
+
 /// Build the probe-rs backend, optionally loading a target YAML registry.
 pub fn make_backend(target_yaml: Option<&std::path::Path>) -> Result<Box<dyn Backend>, McpError> {
     match target_yaml {
@@ -708,13 +733,16 @@ pub fn run(
             let stdin = std::io::stdin();
             let interactive = stdin.is_terminal();
             let mut reader = stdin.lock();
-            repl::run(
-                globals.yes,
-                globals.json,
-                &mut session,
-                &mut reader,
-                interactive,
-            )?;
+            let opts = ReplOptions {
+                yes: globals.yes,
+                json: globals.json,
+                probe_id: globals.probe_id.clone(),
+                protocol: globals.protocol.clone(),
+                speed_khz: globals.speed_khz,
+                target: globals.target.clone(),
+                under_reset: globals.under_reset,
+            };
+            repl::run(&opts, &mut session, &mut reader, interactive)?;
             Ok(None)
         }
     }

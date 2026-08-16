@@ -1,6 +1,6 @@
 use clap::Parser;
 use cmsis_dap_cli::cmd::{actions, SvdAction, SvdArgs, SvdReadArgs, SvdWriteArgs};
-use cmsis_dap_cli::cmd::{repl, run, CliArgs, CliError};
+use cmsis_dap_cli::cmd::{repl, run, CliArgs, CliError, ReplOptions};
 use cmsis_dap_core::backend::mock::MockBackend;
 use cmsis_dap_core::backend::{ConnectOptions, Protocol};
 use cmsis_dap_core::session::SessionManager;
@@ -309,7 +309,7 @@ fn script_destructive_commands_require_yes() {
 fn repl_executes_lines_with_persistent_state() {
     let mut session = SessionManager::new(Box::new(MockBackend::new()));
     let mut reader = Cursor::new(b"connect\nreg pc 0x1000\nreg pc\nq\n".to_vec());
-    repl::run(false, false, &mut session, &mut reader, false).unwrap();
+    repl::run(&ReplOptions::default(), &mut session, &mut reader, false).unwrap();
     assert!(session.target_info().is_some());
 }
 
@@ -339,7 +339,7 @@ fn repl_destructive_prompt_reads_from_repl_reader() {
 
     // Approve destructive mode with 'y': the erase must run and clear memory.
     let mut reader = Cursor::new(b"connect\nerase\ny\nq\n".to_vec());
-    repl::run(false, false, &mut session, &mut reader, true).unwrap();
+    repl::run(&ReplOptions::default(), &mut session, &mut reader, true).unwrap();
     assert_eq!(
         session
             .backend()
@@ -372,7 +372,7 @@ fn repl_destructive_prompt_decline_keeps_readonly() {
 
     // Declining with 'n' keeps the session read-only: memory stays intact.
     let mut reader = Cursor::new(b"connect\nerase\nn\nq\n".to_vec());
-    repl::run(false, false, &mut session, &mut reader, true).unwrap();
+    repl::run(&ReplOptions::default(), &mut session, &mut reader, true).unwrap();
     assert_eq!(
         session
             .backend()
@@ -380,6 +380,18 @@ fn repl_destructive_prompt_decline_keeps_readonly() {
             .unwrap()[0],
         0xAA
     );
+}
+
+#[test]
+fn repl_connect_uses_seeded_target() {
+    let mut session = SessionManager::new(Box::new(MockBackend::new()));
+    let opts = ReplOptions {
+        target: Some("STM32F030C8".into()),
+        ..Default::default()
+    };
+    let mut reader = Cursor::new(b"connect\nq\n".to_vec());
+    repl::run(&opts, &mut session, &mut reader, false).unwrap();
+    assert!(session.target_info().is_some());
 }
 
 #[test]

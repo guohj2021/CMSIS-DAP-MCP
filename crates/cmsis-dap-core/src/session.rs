@@ -81,7 +81,7 @@ impl SessionManager {
         } else {
             Err(McpError::new(
                 ErrorCode::UnsupportedFeature,
-                "target has no flash memory definition; connect with --target-yaml/--target (or set device in script/REPL) before flash operations",
+                "target has no flash memory definition; run connect after setting --target/device (e.g. device NAME then connect)",
             ))
         }
     }
