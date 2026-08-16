@@ -195,45 +195,15 @@ pub struct RttRead {
     pub data: Vec<u8>,
 }
 
-/// Event Recorder level (bits 16..17 of the composed event id).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum EvrLevel {
-    Error,
-    Api,
-    Op,
-    Detail,
-}
-
-impl EvrLevel {
-    pub fn from_bits(bits: u8) -> Self {
-        match bits & 0x3 {
-            0 => Self::Error,
-            1 => Self::Api,
-            2 => Self::Op,
-            _ => Self::Detail,
-        }
-    }
-
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Error => "error",
-            Self::Api => "api",
-            Self::Op => "op",
-            Self::Detail => "detail",
-        }
-    }
-}
-
 /// One decoded CMSIS-View Event Recorder event.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct EvrEvent {
     pub timestamp_ticks: u64,
     pub timestamp_secs: f64,
-    pub level: EvrLevel,
+    /// Event context / data length (record `info` bits 16..18).
+    pub context: u8,
     pub component: u16,
     pub message: u16,
-    pub data_length: u8,
     pub irq: bool,
     pub first: bool,
     pub last: bool,

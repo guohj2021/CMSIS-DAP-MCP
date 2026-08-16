@@ -28,7 +28,7 @@ J-Link Commander / OpenOCD style commands:
   watch list | remove <idx|name> | clear | interval <ms>
   watch run [--count N] [--log-dir D | --log-file F]   live variable watch
   rtt [info] [--channel 0,1] [--count N] [--interval-ms N] [--log-dir D | --log-file F]
-  evr [info] [--level error|api|op|detail] [--count N] [--log-dir D | --log-file F]
+  evr [info] [--ctx 0..7] [--count N] [--log-dir D | --log-file F]
   echo <text> | sleep <ms>   misc helpers
   ? | help                   show this help
   q | exit                   quit

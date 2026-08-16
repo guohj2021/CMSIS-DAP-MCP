@@ -53,6 +53,15 @@ fn parse_u32_arg(s: &str) -> Result<u32, String> {
     parse_u64_arg(s).and_then(|v| u32::try_from(v).map_err(|_| format!("number out of range: {s}")))
 }
 
+/// Parse an Event Recorder context filter value (0..7).
+fn parse_evr_ctx(s: &str) -> Result<u32, String> {
+    let value = parse_u32_arg(s)?;
+    if value > 7 {
+        return Err(format!("evr context must be 0..7, got {s}"));
+    }
+    Ok(value)
+}
+
 pub fn parse_width(s: &str) -> Result<AccessWidth, CliError> {
     match s {
         "u8" => Ok(AccessWidth::U8),
@@ -573,9 +582,9 @@ pub struct EvrMonitorArgs {
     /// Number of polls; 0 runs until Ctrl-C.
     #[arg(long, value_parser = parse_u32_arg, default_value_t = 0)]
     pub count: u32,
-    /// Level filter (repeatable or comma list); default: all levels.
-    #[arg(long, value_delimiter = ',', value_parser = ["error", "api", "op", "detail"])]
-    pub level: Vec<String>,
+    /// Event context filter, 0..7 (repeatable or comma list); default: all.
+    #[arg(long, value_delimiter = ',', value_parser = parse_evr_ctx)]
+    pub ctx: Vec<u32>,
     /// EventRecorderInfo address override (default: --elf EventRecorderInfo).
     #[arg(long, value_parser = parse_u64_arg)]
     pub address: Option<u64>,

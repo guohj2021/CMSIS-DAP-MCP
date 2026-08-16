@@ -442,7 +442,6 @@ pub fn evr_monitor(
         "attached Event Recorder (protocol {}, {} records, {} Hz)",
         status.protocol_version, status.record_count, status.ts_freq
     );
-    let levels: Vec<&str> = args.level.iter().map(|s| s.as_str()).collect();
     let opened = LogTarget::from_args(args.log_dir.clone(), args.log_file.clone()).open("evr")?;
     if let Some((_, path)) = &opened {
         eprintln!("logging to {}", path.display());
@@ -459,7 +458,7 @@ pub fn evr_monitor(
         let events = session.backend().read_evr()?;
         let (host_text, host_rfc) = host_now();
         for event in events {
-            if !levels.is_empty() && !levels.contains(&event.level.as_str()) {
+            if !args.ctx.is_empty() && !args.ctx.contains(&(event.context as u32)) {
                 continue;
             }
             monitor.emit(
@@ -478,10 +477,10 @@ pub fn evr_monitor(
 
 fn evr_line(host_text: &str, event: &EvrEvent) -> String {
     let mut line = format!(
-        "[{host_text}] evr ticks={} t={:.6}s level={} comp=0x{:02X} msg=0x{:02X} seq={} val1=0x{:08X} val2=0x{:08X}",
+        "[{host_text}] evr ticks={} t={:.6}s ctx=0x{:X} comp=0x{:02X} msg=0x{:02X} seq={} val1=0x{:08X} val2=0x{:08X}",
         event.timestamp_ticks,
         event.timestamp_secs,
-        event.level.as_str(),
+        event.context,
         event.component,
         event.message,
         event.sequence,
@@ -712,7 +711,7 @@ pub fn parse_evr_repl(tokens: &[&str]) -> Result<EvrMonitorArgs, CliError> {
     let mut args = EvrMonitorArgs {
         interval_ms: 200,
         count: 0,
-        level: Vec::new(),
+        ctx: Vec::new(),
         address: None,
         log_dir: None,
         log_file: None,
@@ -733,19 +732,22 @@ pub fn parse_evr_repl(tokens: &[&str]) -> Result<EvrMonitorArgs, CliError> {
                     .ok_or_else(|| CliError::InvalidArgument("--count needs a value".into()))?;
                 args.count = parse_u32_repl(value)?;
             }
-            "--level" => {
+            "--ctx" => {
                 let value = iter
                     .next()
-                    .ok_or_else(|| CliError::InvalidArgument("--level needs a value".into()))?;
+                    .ok_or_else(|| CliError::InvalidArgument("--ctx needs a value".into()))?;
                 for part in value.split(',') {
                     let part = part.trim();
-                    if !matches!(part, "error" | "api" | "op" | "detail") {
+                    let ctx = part.parse::<u8>().map_err(|_| {
+                        CliError::InvalidArgument(format!("invalid evr context '{part}' (0..7)"))
+                    })?;
+                    if ctx > 7 {
                         return Err(CliError::InvalidArgument(format!(
-                            "invalid evr level '{part}' (error|api|op|detail)"
+                            "evr context must be 0..7, got {part}"
                         )));
                     }
-                    if !args.level.iter().any(|l| l == part) {
-                        args.level.push(part.to_string());
+                    if !args.ctx.contains(&(ctx as u32)) {
+                        args.ctx.push(ctx as u32);
                     }
                 }
             }
