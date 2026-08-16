@@ -113,6 +113,50 @@ fn engine_with_connection_seeds_connect_options() {
 }
 
 #[test]
+fn flash_erase_sector_command_works() {
+    let mut sm = session();
+    connect(&mut sm);
+    let report = script::run(
+        &mut sm,
+        &policy(true),
+        "flash erase_sector 0x08000000 0x400",
+    )
+    .unwrap();
+    assert!(report.ok, "{report:?}");
+    let last = report.results.last().unwrap();
+    assert_eq!(last.output["erased"], serde_json::json!(true));
+    assert_eq!(last.output["address"].as_u64(), Some(0x0800_0000));
+    assert_eq!(last.output["size"].as_u64(), Some(0x400));
+}
+
+#[test]
+fn adapter_serial_command_works() {
+    let mut sm = session();
+    let report = script::run(&mut sm, &policy(true), "adapter serial ABC123").unwrap();
+    assert!(report.ok, "{report:?}");
+    assert_eq!(
+        report.results.last().unwrap().output["serial"],
+        serde_json::json!("ABC123")
+    );
+}
+
+#[test]
+fn flash_write_image_command_works() {
+    let mut sm = session();
+    connect(&mut sm);
+    let dir = tempfile::tempdir().unwrap();
+    let bin = dir.path().join("fw.bin");
+    std::fs::write(&bin, [0x01u8, 0x02, 0x03]).unwrap();
+    let report = script::run(
+        &mut sm,
+        &policy(true),
+        &format!("flash write_image {} 0x08000000", bin.display()),
+    )
+    .unwrap();
+    assert!(report.ok, "{report:?}");
+}
+
+#[test]
 fn savebin_and_loadbin_roundtrip() {
     let mut sm = session();
     connect(&mut sm);
