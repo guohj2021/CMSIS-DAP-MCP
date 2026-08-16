@@ -200,13 +200,12 @@ shares the same engine:
 npx -y cmsis-dap-cli list
 npx -y cmsis-dap-cli connect --protocol swd
 npx -y cmsis-dap-cli read --address 0x20000000 --width u32 --count 4
-npx -y cmsis-dap-cli --yes flash program --address 0x08000000 --file fw.hex --verify
+npx -y cmsis-dap-cli flash program --address 0x08000000 --file fw.hex --verify
 npx -y cmsis-dap-cli repl
 ```
 
-Use `--json` for machine-readable output and `--yes` to skip destructive
-confirmation. See the [CLI documentation](./docs/src/cli.md) for the full
-command reference.
+Use `--json` for machine-readable output. Flash erase/program run directly.
+See the [CLI documentation](./docs/src/cli.md) for the full command reference.
 
 ## Security
 
@@ -418,11 +417,11 @@ run_script { "script": "connect\nhalt\nreg pc\nsavebin C:/dump.bin 0x20000000 0x
 npx -y cmsis-dap-cli list
 npx -y cmsis-dap-cli connect --protocol swd
 npx -y cmsis-dap-cli read --address 0x20000000 --width u32 --count 4
-npx -y cmsis-dap-cli --yes flash program --address 0x08000000 --file fw.hex --verify
+npx -y cmsis-dap-cli flash program --address 0x08000000 --file fw.hex --verify
 npx -y cmsis-dap-cli repl
 ```
 
-用 `--json` 输出机器可读结果，用 `--yes` 跳过破坏性操作确认。完整命令参考见
+用 `--json` 输出机器可读结果。Flash 擦除/烧录直接执行。完整命令参考见
 [命令行工具文档](./docs/zh/src/cli.md)。
 
 ## 安全

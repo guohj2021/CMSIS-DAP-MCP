@@ -1,5 +1,4 @@
 use super::{output, parse_protocol, CliError, ReplOptions};
-use cmsis_dap_core::error::ErrorCode;
 use cmsis_dap_core::script::ScriptEngine;
 use cmsis_dap_core::security::SecurityPolicy;
 use cmsis_dap_core::session::SessionManager;
@@ -27,7 +26,8 @@ J-Link Commander / OpenOCD style commands:
   echo <text> | sleep <ms>   misc helpers
   ? | help                   show this help
   q | exit                   quit
-Destructive commands require --yes at startup, or interactive approval.";
+Flash erase/program run directly; they still require a target that defines
+flash (set device/--target, then connect).";
 
 /// Run the interactive REPL.
 ///
@@ -42,7 +42,7 @@ pub fn run(
 ) -> Result<(), CliError> {
     let mut engine = ScriptEngine::with_connection(
         SecurityPolicy {
-            allow_destructive: opts.yes,
+            allow_destructive: true,
         },
         opts.probe_id.clone(),
         parse_protocol(&opts.protocol)?,
@@ -87,37 +87,8 @@ pub fn run(
                 output::print_result(opts.json, &output);
             }
             Ok(None) => {}
-            Err(e) if e.code == ErrorCode::DestructiveDisabled => {
-                if interactive && prompt_enable_destructive(&mut *reader)? {
-                    engine.policy_mut().allow_destructive = true;
-                    match engine.execute_line(session, &line) {
-                        Ok(Some(output)) => output::print_result(opts.json, &output),
-                        Ok(None) => {}
-                        Err(e2) => eprintln!("error: {e2}"),
-                    }
-                } else {
-                    eprintln!("error: {e}");
-                }
-            }
             Err(e) => eprintln!("error: {e}"),
         }
     }
     Ok(())
-}
-
-/// Ask for interactive approval of destructive mode.
-///
-/// Reads from the same `reader` that drives the REPL. Reading from a fresh
-/// `stdin()` handle here would deadlock, because the REPL already holds the
-/// stdin lock for its own line reads.
-fn prompt_enable_destructive(reader: &mut dyn BufRead) -> Result<bool, CliError> {
-    eprint!("This command is destructive (erase/flash). Enable destructive mode for the session? [y/N] ");
-    std::io::stderr()
-        .flush()
-        .map_err(|e| CliError::Aborted(e.to_string()))?;
-    let mut line = String::new();
-    reader
-        .read_line(&mut line)
-        .map_err(|e| CliError::Aborted(e.to_string()))?;
-    Ok(line.trim().eq_ignore_ascii_case("y"))
 }

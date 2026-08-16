@@ -213,13 +213,12 @@ fn svd_field_write() {
 }
 
 #[test]
-fn flash_program_with_yes_programs_file() {
+fn flash_program_programs_file() {
     let mut f = tempfile::NamedTempFile::new().unwrap();
     f.write_all(&[0x01u8, 0x02, 0x03]).unwrap();
     let file = f.path().to_str().unwrap();
     let out = execute(&[
         "cmsis-dap-cli",
-        "--yes",
         "flash",
         "program",
         "--address",
@@ -236,27 +235,10 @@ fn flash_program_with_yes_programs_file() {
 }
 
 #[test]
-fn flash_erase_requires_yes() {
-    let err = execute(&[
-        "cmsis-dap-cli",
-        "flash",
-        "erase",
-        "--address",
-        "0",
-        "--size",
-        "0x1000",
-    ])
-    .unwrap_err();
-    assert!(matches!(err, CliError::Aborted(_)));
-    assert_eq!(err.exit_code(), 3);
-}
-
-#[test]
 fn flash_erase_requires_flash_definition() {
     let args = CliArgs::try_parse_from(
         [
             "cmsis-dap-cli",
-            "--yes",
             "flash",
             "erase",
             "--address",
@@ -274,10 +256,9 @@ fn flash_erase_requires_flash_definition() {
 }
 
 #[test]
-fn flash_erase_runs_with_yes() {
+fn flash_erase_runs_directly() {
     let out = execute(&[
         "cmsis-dap-cli",
-        "--yes",
         "flash",
         "erase",
         "--address",
@@ -290,18 +271,8 @@ fn flash_erase_runs_with_yes() {
 }
 
 #[test]
-fn script_destructive_commands_require_yes() {
-    let err = execute(&["cmsis-dap-cli", "script", "--text", "connect\nerase"]).unwrap_err();
-    assert_eq!(err.exit_code(), 3);
-
-    let out = execute(&[
-        "cmsis-dap-cli",
-        "--yes",
-        "script",
-        "--text",
-        "connect\nerase",
-    ])
-    .unwrap();
+fn script_runs_destructive_commands_directly() {
+    let out = execute(&["cmsis-dap-cli", "script", "--text", "connect\nerase"]).unwrap();
     assert_eq!(out["ok"], serde_json::json!(true));
 }
 
@@ -314,10 +285,7 @@ fn repl_executes_lines_with_persistent_state() {
 }
 
 #[test]
-fn repl_destructive_prompt_reads_from_repl_reader() {
-    // Regression: the approval prompt must read from the same reader that
-    // drives the REPL; reading from a fresh stdin handle deadlocks because
-    // the REPL already holds the stdin lock.
+fn repl_erase_runs_without_prompt() {
     let mut session = SessionManager::new(Box::new(MockBackend::new()));
     session
         .connect(&ConnectOptions {
@@ -337,8 +305,8 @@ fn repl_destructive_prompt_reads_from_repl_reader() {
         )
         .unwrap();
 
-    // Approve destructive mode with 'y': the erase must run and clear memory.
-    let mut reader = Cursor::new(b"connect\nerase\ny\nq\n".to_vec());
+    // Destructive commands run directly (no approval prompt) and clear memory.
+    let mut reader = Cursor::new(b"connect\nerase\nq\n".to_vec());
     repl::run(&ReplOptions::default(), &mut session, &mut reader, true).unwrap();
     assert_eq!(
         session
@@ -346,39 +314,6 @@ fn repl_destructive_prompt_reads_from_repl_reader() {
             .read_memory(0x2000_0000, cmsis_dap_core::backend::AccessWidth::U32, 1)
             .unwrap()[0],
         0
-    );
-}
-
-#[test]
-fn repl_destructive_prompt_decline_keeps_readonly() {
-    let mut session = SessionManager::new(Box::new(MockBackend::new()));
-    session
-        .connect(&ConnectOptions {
-            probe_id: None,
-            protocol: Protocol::Swd,
-            speed_khz: None,
-            target: None,
-            under_reset: false,
-        })
-        .unwrap();
-    session
-        .backend()
-        .write_memory(
-            0x2000_0000,
-            cmsis_dap_core::backend::AccessWidth::U32,
-            &[0xAA],
-        )
-        .unwrap();
-
-    // Declining with 'n' keeps the session read-only: memory stays intact.
-    let mut reader = Cursor::new(b"connect\nerase\nn\nq\n".to_vec());
-    repl::run(&ReplOptions::default(), &mut session, &mut reader, true).unwrap();
-    assert_eq!(
-        session
-            .backend()
-            .read_memory(0x2000_0000, cmsis_dap_core::backend::AccessWidth::U32, 1)
-            .unwrap()[0],
-        0xAA
     );
 }
 
