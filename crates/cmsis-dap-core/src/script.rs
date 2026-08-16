@@ -35,6 +35,7 @@ struct Context {
     speed_khz: Option<u32>,
     target: Option<String>,
     probe_id: Option<String>,
+    under_reset: bool,
 }
 
 impl Default for Context {
@@ -44,6 +45,7 @@ impl Default for Context {
             speed_khz: None,
             target: None,
             probe_id: None,
+            under_reset: false,
         }
     }
 }
@@ -62,6 +64,28 @@ impl ScriptEngine {
     pub fn new(policy: SecurityPolicy) -> Self {
         Self {
             ctx: Context::default(),
+            policy,
+        }
+    }
+
+    /// Seed the engine with CLI-provided connection options so the `connect`
+    /// command inside scripts/REPL uses them (instead of defaults).
+    pub fn with_connection(
+        policy: SecurityPolicy,
+        probe_id: Option<String>,
+        protocol: Protocol,
+        speed_khz: Option<u32>,
+        target: Option<String>,
+        under_reset: bool,
+    ) -> Self {
+        Self {
+            ctx: Context {
+                protocol,
+                speed_khz,
+                target,
+                probe_id,
+                under_reset,
+            },
             policy,
         }
     }
@@ -286,7 +310,7 @@ fn dispatch(
                 protocol: ctx.protocol,
                 speed_khz: ctx.speed_khz,
                 target: ctx.target.clone(),
-                under_reset: false,
+                under_reset: ctx.under_reset,
             };
             let info = session.connect(&opts)?;
             Ok(serde_json::json!({ "target": info }))

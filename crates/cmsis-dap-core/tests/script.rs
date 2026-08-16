@@ -95,6 +95,24 @@ fn erase_requires_flash_definition() {
 }
 
 #[test]
+fn engine_with_connection_seeds_connect_options() {
+    let mut sm = SessionManager::new(Box::new(MockBackend::new()));
+    let mut engine = cmsis_dap_core::script::ScriptEngine::with_connection(
+        policy(true),
+        Some("probe1".into()),
+        Protocol::Swd,
+        Some(1000),
+        Some("STM32F030C8".into()),
+        false,
+    );
+    engine
+        .execute_line(&mut sm, "connect")
+        .unwrap()
+        .expect("connect output");
+    assert!(sm.target_info().is_some());
+}
+
+#[test]
 fn savebin_and_loadbin_roundtrip() {
     let mut sm = session();
     connect(&mut sm);
