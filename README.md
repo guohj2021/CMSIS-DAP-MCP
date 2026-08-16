@@ -7,7 +7,10 @@
 
 ![License](https://img.shields.io/github/license/guohj2021/CMSIS-DAP-MCP)
 ![CI](https://github.com/guohj2021/CMSIS-DAP-MCP/actions/workflows/ci.yml/badge.svg)
-![Release](https://github.com/guohj2021/CMSIS-DAP-MCP/actions/workflows/release.yml/badge.svg)
+<!-- Keep ?branch= in sync with the latest release tag: the badge defaults to
+     the default branch (main), where the tag-triggered Release workflow never
+     runs, so without it the badge shows a stale/failed state. -->
+![Release](https://github.com/guohj2021/CMSIS-DAP-MCP/actions/workflows/release.yml/badge.svg?branch=v0.4.1)
 ![Pages](https://github.com/guohj2021/CMSIS-DAP-MCP/actions/workflows/pages.yml/badge.svg)
 ![Version](https://img.shields.io/github/v/tag/guohj2021/CMSIS-DAP-MCP)
 ![Rust](https://img.shields.io/badge/rust-1.97.1-orange)
