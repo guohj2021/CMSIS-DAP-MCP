@@ -204,9 +204,9 @@ SUBSYSTEM=="usb", ATTRS{idVendor}=="xxxx", ATTRS{idProduct}=="yyyy", MODE="0666"
 
 ```bash
 cargo fmt --check
-cargo clippy --all-targets -- -D warnings
-cargo test
-cargo build --release
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+cargo build --release --workspace
 mdbook build docs        # English docs
 mdbook build docs/zh     # Chinese docs
 ```
@@ -409,9 +409,9 @@ SUBSYSTEM=="usb", ATTRS{idVendor}=="xxxx", ATTRS{idProduct}=="yyyy", MODE="0666"
 
 ```bash
 cargo fmt --check
-cargo clippy --all-targets -- -D warnings
-cargo test
-cargo build --release
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+cargo build --release --workspace
 mdbook build docs        # 英文文档
 mdbook build docs/zh     # 中文文档
 ```
