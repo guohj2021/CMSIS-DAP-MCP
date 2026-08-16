@@ -282,20 +282,13 @@ fn rtt_rejects_missing_channel() {
     assert!(err.to_string().contains("channel 5"));
 }
 
-fn evr_record(
-    ts: u32,
-    val1: u32,
-    val2: u32,
-    level_bits: u8,
-    component: u8,
-    message: u8,
-) -> [u8; 16] {
+fn evr_record(ts: u32, val1: u32, val2: u32, context: u8, component: u8, message: u8) -> [u8; 16] {
     let mut r = [0u8; 16];
     r[0..4].copy_from_slice(&ts.to_le_bytes());
     r[4..8].copy_from_slice(&val1.to_le_bytes());
     r[8..12].copy_from_slice(&val2.to_le_bytes());
     let info =
-        (message as u32) | ((component as u32) << 8) | ((level_bits as u32) << 16) | 0x0800_0000; // VALID
+        (message as u32) | ((component as u32) << 8) | ((context as u32) << 16) | 0x0800_0000; // VALID
     r[12..16].copy_from_slice(&info.to_le_bytes());
     r
 }
@@ -304,8 +297,8 @@ fn evr_record(
 fn evr_info_and_monitor_decode_events() {
     let dir = tempfile::tempdir().unwrap();
     let records = vec![
-        evr_record(0x1000, 1, 2, 0, 0xFE, 0x01), // error
-        evr_record(0x2000, 3, 4, 2, 0x03, 0x02), // op
+        evr_record(0x1000, 1, 2, 0, 0xFE, 0x01),
+        evr_record(0x2000, 3, 4, 2, 0x03, 0x02),
     ];
     let mut session = connect(MockBackend::with_evr(8, 1_000_000, records));
     let info = live::evr_info(&mut session, None, Some(0x2000_0200)).unwrap();
@@ -316,7 +309,7 @@ fn evr_info_and_monitor_decode_events() {
     let args = cmsis_dap_cli::cmd::EvrMonitorArgs {
         interval_ms: 1,
         count: 1,
-        level: vec![],
+        ctx: vec![],
         address: Some(0x2000_0200),
         log_dir: Some(log_dir.clone()),
         log_file: None,
@@ -324,9 +317,9 @@ fn evr_info_and_monitor_decode_events() {
     let mut stdout = Vec::new();
     live::evr_monitor(&mut session, &args, None, false, &mut stdout).unwrap();
     let text = String::from_utf8_lossy(&stdout);
-    assert!(text.contains("level=error comp=0xFE msg=0x01"));
+    assert!(text.contains("ctx=0x0 comp=0xFE msg=0x01"));
     assert!(text.contains("val1=0x00000001"));
-    assert!(text.contains("level=op comp=0x03 msg=0x02"));
+    assert!(text.contains("ctx=0x2 comp=0x03 msg=0x02"));
     assert!(text.contains("val1=0x00000003"));
     assert!(text.contains("t=0.004096s"));
     assert!(text.lines().all(|l| l.starts_with('[')));
@@ -340,12 +333,12 @@ fn evr_info_and_monitor_decode_events() {
         String::from_utf8_lossy(&stdout)
     );
 
-    // JSON mode with a level filter.
+    // JSON mode with a context filter.
     let json_log_dir = dir.path().join("evr-json");
     let args = cmsis_dap_cli::cmd::EvrMonitorArgs {
         interval_ms: 1,
         count: 1,
-        level: vec!["op".into()],
+        ctx: vec![2],
         address: Some(0x2000_0200),
         log_dir: Some(json_log_dir),
         log_file: None,
@@ -354,7 +347,7 @@ fn evr_info_and_monitor_decode_events() {
     live::evr_monitor(&mut session, &args, None, true, &mut json_out).unwrap();
     let rows = parse_json_lines(&json_out);
     assert!(!rows.is_empty());
-    assert!(rows.iter().all(|r| r["level"] == "op"));
+    assert!(rows.iter().all(|r| r["context"] == 2));
     assert!(rows.iter().all(|r| r["host_ts"].is_string()));
 }
 
@@ -395,9 +388,9 @@ fn watch_args_validation() {
         "log-dir/log-file conflict"
     );
     assert_eq!(
-        parse_err(&["cmsis-dap-cli", "evr", "monitor", "--level", "bogus"]).exit_code(),
+        parse_err(&["cmsis-dap-cli", "evr", "monitor", "--ctx", "9"]).exit_code(),
         2,
-        "invalid evr level"
+        "invalid evr context"
     );
 }
 

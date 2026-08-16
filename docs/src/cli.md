@@ -258,7 +258,7 @@ cmsis-dap-cli --target STM32F030C8 --elf firmware.axf \
 ```text
 evr info
 evr monitor [--interval-ms N] [--count N]
-            [--level error|api|op|detail] [--address A]
+            [--ctx 0..7] [--address A]
             [--log-dir DIR | --log-file FILE]
 ```
 
@@ -266,9 +266,12 @@ evr monitor [--interval-ms N] [--count N]
 version, record count, timestamp frequency and counters. `evr monitor` polls
 the circular buffer over plain SWD/JTAG memory reads (no trace hardware, no
 UART) and prints every new event, decoded from the official 16-byte record
-layout: host timestamp, target tick count and seconds (via `ts_freq`), level
-(`error`/`api`/`op`/`detail`), component and message numbers, sequence and the
-two 32-bit values. `--level` filters (repeatable or comma list).
+layout: host timestamp, target tick count and seconds (via `ts_freq`), event
+context (record `info` bits 16..18, 0..7), component and message numbers,
+sequence and the two 32-bit values. `--ctx` filters by context (repeatable or
+comma list). Note that the on-chip record stores a 16-bit event id
+(component + message); the API level is used for filtering inside the target
+and is not part of the stored record.
 
 The firmware must include the CMSIS-View Event Recorder component (symbol
 `EventRecorderInfo`) and initialize it before the host attaches. The info
@@ -277,7 +280,7 @@ address comes from the `EventRecorderInfo` symbol of `--elf` or from
 
 ```bash
 cmsis-dap-cli --target STM32F030C8 --elf firmware.axf \
-  evr monitor --level error,op --count 0 --log-dir logs
+  evr monitor --ctx 0,2 --count 0 --log-dir logs
 ```
 
 ### Monitor output, timestamps and log export
@@ -440,7 +443,7 @@ watch list | watch remove <idx|name> | watch clear
 watch interval <ms>
 watch run [--count N] [--log-dir DIR | --log-file FILE]
 rtt [info] [--channel 0,1] [--count N] [--interval-ms N] [--log-dir DIR | --log-file FILE]
-evr [info] [--level error|api|op|detail] [--count N] [--log-dir DIR | --log-file FILE]
+evr [info] [--ctx 0..7] [--count N] [--log-dir DIR | --log-file FILE]
 ```
 
 Monitors run until Ctrl-C (or `--count N`) and return to the prompt.
