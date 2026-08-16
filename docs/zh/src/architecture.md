@@ -51,7 +51,8 @@ CMSIS-DAP 探针 ---- SWD / JTAG ----> Cortex-M 目标
 | `hex` | 内存导出用的 Intel HEX 编码器 |
 | `security` | 三级策略；破坏性工具需要 `--allow-destructive` |
 | `session` | 单个活动会话；持有探针/会话与 SVD 状态 |
-| `backend` | `Backend` trait 及 `ProbeRsBackend`、`MockBackend` 实现 |
+| `backend` | `Backend` trait 及 `ProbeRsBackend`、`MockBackend` 实现，含 RTT 附着/读取与 Event Recorder 附着/轮询 |
+| `evr` | CMSIS-View Event Recorder 解码（官方 16 字节记录布局），供 CLI 的 `evr` 命令使用 |
 | `svd` | SVD 解析与外设/寄存器/位域命名解析 |
 | `error` | 错误码与结构化 `McpError` |
 

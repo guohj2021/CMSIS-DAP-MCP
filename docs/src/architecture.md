@@ -52,7 +52,8 @@ CMSIS-DAP probe ---- SWD / JTAG ----> Cortex-M target
 | `hex` | Intel HEX encoder used for memory export |
 | `security` | Three-tier policy; destructive tools require `--allow-destructive` |
 | `session` | Single active session; owns probe/session and SVD state |
-| `backend` | `Backend` trait with `ProbeRsBackend` and `MockBackend` implementations |
+| `backend` | `Backend` trait with `ProbeRsBackend` and `MockBackend` implementations, including RTT attach/read and Event Recorder attach/poll |
+| `evr` | CMSIS-View Event Recorder decoding (official 16-byte record layout), used by the CLI's `evr` command |
 | `svd` | SVD parsing and named peripheral/register/field resolution |
 | `error` | Error codes and structured `McpError` |
 
