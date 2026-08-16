@@ -1,7 +1,7 @@
 use super::{
-    parse_register, parse_svd_target, parse_width, BpAction, BpArgs, ChipGenerateArgs, CliError,
-    DapAction, DapArgs, FlashAction, FlashArgs, ReadArgs, RegAction, RegArgs, ResetArgs, SvdAction,
-    SvdArgs, VerifyArgs, WpAction, WpArgs, WriteArgs,
+    parse_register, parse_svd_target, parse_width, BpAction, BpArgs, ChipGenerateArgs,
+    ChipSearchArgs, CliError, DapAction, DapArgs, FlashAction, FlashArgs, Globals, ReadArgs,
+    RegAction, RegArgs, ResetArgs, SvdAction, SvdArgs, VerifyArgs, WpAction, WpArgs, WriteArgs,
 };
 use cmsis_dap_core::backend::{AccessWidth, ExportFormat, ImageFileFormat, ResetMode, WatchAccess};
 use cmsis_dap_core::error::{ErrorCode, McpError};
@@ -348,4 +348,26 @@ pub fn chip_generate(a: &ChipGenerateArgs) -> Result<Value, CliError> {
             Ok(base)
         }
     }
+}
+
+pub(crate) fn chip_list(globals: &Globals) -> Result<Value, CliError> {
+    let registry = match &globals.target_yaml {
+        Some(path) => cmsis_dap_core::backend::probe_rs::registry_from_yaml(path)?,
+        None => cmsis_dap_core::backend::probe_rs::builtin_registry(),
+    };
+    let chips = cmsis_dap_core::backend::probe_rs::list_chips(&registry);
+    Ok(json!({ "chips": chips, "count": chips.len() }))
+}
+
+pub(crate) fn chip_search(globals: &Globals, a: &ChipSearchArgs) -> Result<Value, CliError> {
+    let registry = match &globals.target_yaml {
+        Some(path) => cmsis_dap_core::backend::probe_rs::registry_from_yaml(path)?,
+        None => cmsis_dap_core::backend::probe_rs::builtin_registry(),
+    };
+    let chips = cmsis_dap_core::backend::probe_rs::search_chips(&registry, &a.keyword);
+    Ok(json!({
+        "query": a.keyword,
+        "chips": chips,
+        "count": chips.len(),
+    }))
 }
