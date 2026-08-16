@@ -65,6 +65,7 @@ All options are global and can appear before or after the subcommand.
 | `--under-reset` | connect while holding reset (locked / unresponsive targets) |
 | `--target-yaml FILE` | load a target YAML (chip + flash algorithm definitions) |
 | `--svd FILE` | SVD file for named peripheral access (`svd` subcommands) |
+| `--elf FILE` | firmware ELF for symbol resolution (`symbols`, `watch`, `rtt`, `evr`) |
 | `--json` | machine-readable JSON output instead of human text |
 | `--log-level LEVEL` | tracing filter; logs always go to stderr (default `warn`) |
 | `--log-file FILE` | write logs to a file instead of stderr |
@@ -192,6 +193,107 @@ chip search KEYWORD
 `--target-yaml` custom chips); results include flash/RAM ranges so you can tell
 at a glance whether a chip can be programmed.
 
+### Symbols
+
+```text
+symbols list [PATTERN]
+symbols resolve NAME
+```
+
+Inspect the symbol table of a firmware ELF passed with `--elf`. `list` prints
+every symbol (optionally filtered by a case-insensitive substring) with its
+virtual address; `resolve` looks up one name. These are the same symbols used
+by `watch`, `rtt` and `evr` to find variables and control blocks.
+
+```bash
+cmsis-dap-cli --elf firmware.axf symbols resolve counter
+cmsis-dap-cli --elf firmware.axf symbols list counter
+```
+
+### Live watch
+
+```text
+watch [--interval-ms N] [--count N] [--width u8|u16|u32|u64]
+      [--log-dir DIR | --log-file FILE] TARGET...
+```
+
+Polls one or more variables and prints a timestamped sample line on every
+interval. `TARGET` is a symbol name (resolved via `--elf`) or a `0xADDR`
+address. Defaults: `--interval-ms 500`, `--count 1` (one sample), `--width
+u32`. `--count 0` runs until Ctrl-C; after a clean Ctrl-C stop the command
+exits 0 with `stopped (Ctrl-C)` on stderr.
+
+```bash
+cmsis-dap-cli --target STM32F030C8 --elf firmware.axf \
+  watch counter 0x20000004 --interval-ms 200 --count 0
+```
+
+### RTT (J-Link RTT logs)
+
+```text
+rtt info
+rtt monitor --channel 0,1 [--interval-ms N] [--count N]
+            [--address A] [--log-dir DIR | --log-file FILE]
+```
+
+`rtt info` attaches to the target RTT control block and lists the up channels.
+`rtt monitor` polls the selected up channels (comma list, default `0`) and
+prints every received chunk with a host timestamp and channel prefix
+(`[RTT0 "Channel 0"] ...`). The control block address is taken from the
+`_SEGGER_RTT` symbol of `--elf`, from `--address`, or found by scanning the
+target RAM — scanning needs a chip target that defines RAM (built-in chip or
+`--target-yaml`). Defaults: `--interval-ms 200`, `--count 0` (until Ctrl-C),
+`--max-bytes 1024` per channel per poll.
+
+The firmware must run SEGGER RTT (for example `rtt_target` or the SEGGER RTT
+implementation) and initialize the control block before the host attaches.
+
+```bash
+cmsis-dap-cli --target STM32F030C8 --elf firmware.axf \
+  rtt monitor --channel 0 --count 0 --log-dir logs
+```
+
+### Event Recorder (CMSIS-View)
+
+```text
+evr info
+evr monitor [--interval-ms N] [--count N]
+            [--level error|api|op|detail] [--address A]
+            [--log-dir DIR | --log-file FILE]
+```
+
+`evr info` attaches to the on-chip Event Recorder and reports its protocol
+version, record count, timestamp frequency and counters. `evr monitor` polls
+the circular buffer over plain SWD/JTAG memory reads (no trace hardware, no
+UART) and prints every new event, decoded from the official 16-byte record
+layout: host timestamp, target tick count and seconds (via `ts_freq`), level
+(`error`/`api`/`op`/`detail`), component and message numbers, sequence and the
+two 32-bit values. `--level` filters (repeatable or comma list).
+
+The firmware must include the CMSIS-View Event Recorder component (symbol
+`EventRecorderInfo`) and initialize it before the host attaches. The info
+address comes from the `EventRecorderInfo` symbol of `--elf` or from
+`--address`.
+
+```bash
+cmsis-dap-cli --target STM32F030C8 --elf firmware.axf \
+  evr monitor --level error,op --count 0 --log-dir logs
+```
+
+### Monitor output, timestamps and log export
+
+Every `watch`, `rtt monitor` and `evr monitor` line carries a host capture
+timestamp `[YYYY-MM-DD HH:MM:SS.mmm]`. With `--json` each sample/event is one
+NDJSON object on stdout with a `host_ts` field (RFC 3339 with milliseconds and
+time zone); EVR events keep their target `timestamp_ticks` / `timestamp_secs`.
+
+Monitor output is also written to a log file by default. The location is the
+current directory with an auto-generated name (`watch-<unix>.log`,
+`rtt-<unix>.log`, `evr-<unix>.log`); `--log-dir DIR` selects another directory
+(created if missing) and `--log-file FILE` appends to an exact file instead.
+The file contains exactly what stdout prints, one line per sample/event,
+flushed immediately. Monitor start prints `logging to <path>` on stderr.
+
 ### Interactive shell
 
 ```text
@@ -304,6 +406,9 @@ cmsis-dap-cli --json read --address 0x20000000 --width u32 --count 2
   payloads the MCP tools return. Logs always go to stderr.
 - Exit codes: `0` success, `1` runtime error (probe/connect/flash failures),
   `2` usage error (unknown option, invalid value, missing argument).
+- Monitor commands (`watch`, `rtt monitor`, `evr monitor`) print one line per
+  sample/event (NDJSON in `--json` mode) and exit `0` after a clean Ctrl-C
+  stop; `--count N` bounds the run for scripts and CI.
 
 ## REPL
 
@@ -326,6 +431,19 @@ cmsis-dap-cli> q
 `?`/`help` shows the supported commands; `q`/`exit` quits. The REPL inherits
 the global connection options, so `connect` uses them (no need to retype
 `--target`). Flash erase/program run directly in the REPL too.
+
+The REPL also exposes the live debugging commands with persistent watch state:
+
+```text
+watch add <name|0xADDR> [--width u8|u16|u32|u64] [--label TEXT]
+watch list | watch remove <idx|name> | watch clear
+watch interval <ms>
+watch run [--count N] [--log-dir DIR | --log-file FILE]
+rtt [info] [--channel 0,1] [--count N] [--interval-ms N] [--log-dir DIR | --log-file FILE]
+evr [info] [--level error|api|op|detail] [--count N] [--log-dir DIR | --log-file FILE]
+```
+
+Monitors run until Ctrl-C (or `--count N`) and return to the prompt.
 
 ## Script commands
 

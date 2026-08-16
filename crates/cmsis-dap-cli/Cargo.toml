@@ -7,12 +7,19 @@ license.workspace = true
 [dependencies]
 cmsis-dap-core = { path = "../cmsis-dap-core" }
 base64 = "0.22"
+chrono = "0.4"
 clap.workspace = true
 object = { version = "0.39", default-features = false, features = ["read", "std"] }
 serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_System_Console", "Win32_Foundation"] }
 
 [dev-dependencies]
 object = { version = "0.39", default-features = false, features = ["read", "write", "std"] }
