@@ -228,6 +228,14 @@ cmsis-dap-cli --target STM32F030C8 --elf firmware.axf \
   watch counter 0x20000004 --interval-ms 200 --count 0
 ```
 
+Example output (verified on a Cortex-M0+ target with a CMSIS-DAP probe):
+
+```text
+[2026-08-16 19:16:13.302] watch_var = 0x00001007
+[2026-08-16 19:16:13.520] watch_var = 0x0000100E
+[2026-08-16 19:16:13.736] watch_var = 0x00001015
+```
+
 ### RTT (J-Link RTT logs)
 
 ```text
