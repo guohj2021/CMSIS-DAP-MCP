@@ -1,9 +1,10 @@
 use super::{
-    parse_register, parse_svd_target, parse_width, BpAction, BpArgs, CliError, DapAction, DapArgs,
-    FlashAction, FlashArgs, ReadArgs, RegAction, RegArgs, ResetArgs, SvdAction, SvdArgs,
-    VerifyArgs, WpAction, WpArgs, WriteArgs,
+    parse_register, parse_svd_target, parse_width, BpAction, BpArgs, ChipGenerateArgs, CliError,
+    DapAction, DapArgs, FlashAction, FlashArgs, ReadArgs, RegAction, RegArgs, ResetArgs, SvdAction,
+    SvdArgs, VerifyArgs, WpAction, WpArgs, WriteArgs,
 };
 use cmsis_dap_core::backend::{AccessWidth, ExportFormat, ImageFileFormat, ResetMode, WatchAccess};
+use cmsis_dap_core::error::{ErrorCode, McpError};
 use cmsis_dap_core::session::SessionManager;
 use serde_json::{json, Value};
 
@@ -263,6 +264,86 @@ pub fn flash(session: &mut SessionManager, a: &FlashArgs, yes: bool) -> Result<V
                 "bytes": bytes,
                 "verify": p.verify,
             }))
+        }
+    }
+}
+
+pub fn chip_generate(a: &ChipGenerateArgs) -> Result<Value, CliError> {
+    let bytes = std::fs::read(&a.flm).map_err(|e| {
+        CliError::Mcp(McpError::new(
+            ErrorCode::FileError,
+            format!("failed to read {}: {e}", a.flm.display()),
+        ))
+    })?;
+    let parsed = super::chip::parse_flm(&bytes)?;
+    let name = a.name.clone().unwrap_or_else(|| {
+        a.flm
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_else(|| "chip".to_string())
+    });
+    let flash_end = a
+        .flash_start
+        .checked_add(a.flash_size)
+        .ok_or_else(|| CliError::InvalidArgument("flash range overflow".into()))?;
+    let sram_end = a
+        .sram_start
+        .checked_add(a.sram_size)
+        .ok_or_else(|| CliError::InvalidArgument("sram range overflow".into()))?;
+    let yaml = super::chip::generate_yaml(
+        &parsed,
+        &name,
+        a.flash_start,
+        flash_end,
+        a.sram_start,
+        sram_end,
+        &a.core,
+    )?;
+    let load_address = a
+        .sram_start
+        .checked_add(0x20)
+        .ok_or_else(|| CliError::InvalidArgument("sram range overflow".into()))?;
+    let mut base = json!({
+        "name": name,
+        "flash": { "start": a.flash_start, "end": flash_end },
+        "sram": { "start": a.sram_start, "end": sram_end },
+        "load_address": load_address,
+        "instructions_bytes": parsed.instructions.len(),
+        "pc_init": parsed.pc_init,
+        "pc_uninit": parsed.pc_uninit,
+        "pc_program_page": parsed.pc_program_page,
+        "pc_erase_sector": parsed.pc_erase_sector,
+        "pc_erase_all": parsed.pc_erase_all,
+        "data_section_offset": parsed.data_section_offset,
+        "flash_device": {
+            "name": parsed.device.name,
+            "dev_addr": parsed.device.dev_addr,
+            "flash_size": parsed.device.flash_size,
+            "page_size": parsed.device.page_size,
+            "erased_value": parsed.device.erased_value,
+            "program_poll_time": parsed.device.program_poll_time,
+            "erase_sector_timeout": parsed.device.erase_sector_timeout,
+            "sectors": parsed.device.sectors,
+        },
+        "symbols": parsed.symbols,
+        "segments": parsed.segments,
+    });
+    match &a.output {
+        Some(path) if path.as_os_str() != "-" => {
+            std::fs::write(path, &yaml).map_err(|e| {
+                CliError::Mcp(McpError::new(
+                    ErrorCode::FileError,
+                    format!("failed to write {}: {e}", path.display()),
+                ))
+            })?;
+            base["generated"] = json!(true);
+            base["path"] = json!(path.display().to_string());
+            Ok(base)
+        }
+        _ => {
+            base["generated"] = json!(true);
+            base["yaml"] = json!(yaml);
+            Ok(base)
         }
     }
 }
