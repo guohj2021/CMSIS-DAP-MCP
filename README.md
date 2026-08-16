@@ -225,6 +225,33 @@ same log to the current directory by default (`--log-dir` / `--log-file` to
 choose the location). See the
 [CLI documentation](./docs/src/cli.md) for the full command reference.
 
+## Live debugging (watch / RTT / Event Recorder)
+
+Three CLI-only features read live data from the target over SWD/JTAG — no
+UART and no trace hardware needed:
+
+| Command | What it does |
+| --- | --- |
+| `watch TARGET...` | poll variables by address or ELF symbol with a configurable refresh interval (`--interval-ms`, `--width`) |
+| `rtt monitor --channel 0,1` | read SEGGER RTT up-channel logs (firmware must call `SEGGER_RTT_Init`) |
+| `evr monitor` | decode CMSIS-View Event Recorder events (firmware must include the Event Recorder component) |
+
+Symbols come from the firmware ELF (`--elf`); the RTT control block and
+`EventRecorderInfo` are located automatically from it. Every monitor line
+carries a host timestamp `[YYYY-MM-DD HH:MM:SS.mmm]` and is exported to a log
+file in the current directory by default (`--log-dir` / `--log-file` to
+choose; `--json` emits NDJSON with a `host_ts` field). `--count N` bounds the
+run for scripts and CI; `--count 0` runs until Ctrl-C.
+
+```bash
+cmsis-dap-cli --target STM32F030C8 --elf fw.axf watch counter --interval-ms 200 --count 0
+cmsis-dap-cli --target STM32F030C8 --elf fw.axf rtt monitor --channel 0 --count 0 --log-dir logs
+cmsis-dap-cli --target STM32F030C8 --elf fw.axf evr monitor --ctx 0,2 --count 0
+```
+
+In `repl` use `connect` + `reset run` first (a fresh session attaches with the
+core halted), then `watch run` / `rtt monitor` / `evr monitor`.
+
 ## Security
 
 - Read-only tools are always available.
@@ -459,6 +486,32 @@ cmsis-dap-cli --target STM32F030C8 repl
 符号名；监控命令打印带时间戳的行，并默认把同样内容导出到当前目录的日志
 （`--log-dir`/`--log-file` 指定位置）。完整命令参考见
 [命令行工具文档](./docs/zh/src/cli.md)。
+
+## 实时调试（watch / RTT / Event Recorder）
+
+以下三项 CLI 独有能力全部走 SWD/JTAG 实时读取目标数据——无需串口、无需
+trace 硬件：
+
+| 命令 | 功能 |
+| --- | --- |
+| `watch TARGET...` | 按地址或 ELF 符号轮询变量，可配置刷新间隔（`--interval-ms`、`--width`） |
+| `rtt monitor --channel 0,1` | 读取 SEGGER RTT 上行通道日志（固件需调用 `SEGGER_RTT_Init`） |
+| `evr monitor` | 解码 CMSIS-View Event Recorder 事件（固件需包含 Event Recorder 组件） |
+
+符号来自固件 ELF（`--elf`），RTT 控制块与 `EventRecorderInfo` 会自动从其中
+定位。每条监控输出都带主机时间戳 `[YYYY-MM-DD HH:MM:SS.mmm]`，并默认导出到
+当前目录的日志文件（`--log-dir`/`--log-file` 指定位置；`--json` 输出带
+`host_ts` 字段的 NDJSON）。`--count N` 限定轮数便于脚本与 CI；`--count 0`
+一直运行到 Ctrl-C。
+
+```bash
+cmsis-dap-cli --target STM32F030C8 --elf fw.axf watch counter --interval-ms 200 --count 0
+cmsis-dap-cli --target STM32F030C8 --elf fw.axf rtt monitor --channel 0 --count 0 --log-dir logs
+cmsis-dap-cli --target STM32F030C8 --elf fw.axf evr monitor --ctx 0,2 --count 0
+```
+
+在 `repl` 里先 `connect` + `reset run`（新会话附着时核心处于停机），再执行
+`watch run` / `rtt monitor` / `evr monitor`。
 
 ## 安全
 
