@@ -19,8 +19,8 @@ Or download a native binary for Windows / Linux / macOS from
 ## Command overview
 
 Global options (before the subcommand): `--probe-id`, `--protocol swd|jtag`,
-`--speed-khz`, `--target`, `--under-reset`, `--target-yaml`, `--svd`, `--yes`,
-`--json`, `--log-level`, `--log-file`.
+`--speed-khz`, `--target`, `--under-reset`, `--target-yaml`, `--svd`, `--json`,
+`--log-level`, `--log-file`.
 
 | Command | Purpose |
 | --- | --- |
@@ -56,7 +56,7 @@ cmsis-dap-cli halt
 cmsis-dap-cli reg get pc
 cmsis-dap-cli read --address 0x08000000 --width u8 --count 0x1000 --output fw.bin --format bin
 cmsis-dap-cli --svd target.svd svd read GPIOA.ODR.ODR0
-cmsis-dap-cli --yes flash program --address 0x08000000 --file fw.hex --verify
+cmsis-dap-cli flash program --address 0x08000000 --file fw.hex --verify
 cmsis-dap-cli script --file flash.jlink
 cmsis-dap-cli repl
 ```
@@ -114,19 +114,15 @@ ranges) for scripting.
 
 - Default output is human-readable. Add `--json` for machine-readable JSON that
   mirrors the MCP tool payloads. Logs always go to stderr.
-- Exit codes: `0` success, `1` runtime error, `2` usage error, `3` aborted or
-  destructive operation missing confirmation.
+- Exit codes: `0` success, `1` runtime error, `2` usage error.
 
-## Destructive operations
+## Flash operations
 
-`flash erase`, `flash program` and destructive script commands (`erase`,
-`loadbin`, `loadfile`, `flash write_image`, `flash erase_sector`) are gated:
-
-- With a terminal, you are asked to confirm unless `--yes` is given.
-- Without a terminal, `--yes` is required; otherwise the command is refused
-  with exit code 3.
-- In the `repl`, destructive mode is off by default; enable it interactively
-  when prompted or start the REPL with `--yes`.
+`flash erase` and `flash program` run directly in the CLI (including from
+`script` and the `repl`); there is no approval prompt or `--yes` flag. They
+still require a target that defines flash: connect with `--target-yaml`/
+`--target` (or `device NAME` + `connect` in a script/REPL), otherwise the
+operation fails with a clear error instead of silently doing nothing.
 
 Flash erasing and programming can permanently damage a device. Double-check
-the address and file before confirming.
+the address and file before running them.

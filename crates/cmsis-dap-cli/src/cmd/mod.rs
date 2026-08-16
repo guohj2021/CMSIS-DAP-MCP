@@ -10,7 +10,7 @@ use cmsis_dap_core::error::{ErrorCode, McpError};
 use cmsis_dap_core::security::SecurityPolicy;
 use cmsis_dap_core::session::SessionManager;
 use serde_json::json;
-use std::io::{IsTerminal, Write};
+use std::io::IsTerminal;
 use std::path::PathBuf;
 use thiserror::Error;
 
@@ -131,9 +131,6 @@ pub struct CliArgs {
     /// SVD file for named peripheral access (svd subcommands).
     #[arg(long, global = true, value_name = "FILE")]
     pub svd: Option<PathBuf>,
-    /// Skip interactive confirmation for destructive operations.
-    #[arg(long, global = true)]
-    pub yes: bool,
     /// Print machine-readable JSON instead of human text.
     #[arg(long, global = true)]
     pub json: bool,
@@ -457,7 +454,6 @@ pub struct ChipSearchArgs {
 
 #[derive(Debug, Clone)]
 pub struct ReplOptions {
-    pub yes: bool,
     pub json: bool,
     pub probe_id: Option<String>,
     pub protocol: String,
@@ -469,7 +465,6 @@ pub struct ReplOptions {
 impl Default for ReplOptions {
     fn default() -> Self {
         Self {
-            yes: false,
             json: false,
             probe_id: None,
             protocol: "swd".into(),
@@ -500,7 +495,6 @@ pub(crate) struct Globals {
     under_reset: bool,
     target_yaml: Option<PathBuf>,
     svd: Option<PathBuf>,
-    yes: bool,
     json: bool,
 }
 
@@ -531,34 +525,6 @@ fn load_svd(globals: &Globals, session: &mut SessionManager) -> Result<(), CliEr
     }
 }
 
-/// Ask for interactive confirmation of a destructive operation.
-///
-/// `--yes` skips the prompt. Without a terminal and without `--yes` the
-/// operation is refused (exit code 3).
-pub fn confirm_destructive(yes: bool, action: &str) -> Result<(), CliError> {
-    if yes {
-        return Ok(());
-    }
-    if !std::io::stdin().is_terminal() {
-        return Err(CliError::Aborted(format!(
-            "{action} is destructive; rerun with --yes to confirm"
-        )));
-    }
-    eprint!("{action} will modify the target. Continue? [y/N] ");
-    std::io::stderr()
-        .flush()
-        .map_err(|e| CliError::Aborted(e.to_string()))?;
-    let mut line = String::new();
-    std::io::stdin()
-        .read_line(&mut line)
-        .map_err(|e| CliError::Aborted(e.to_string()))?;
-    if line.trim().eq_ignore_ascii_case("y") {
-        Ok(())
-    } else {
-        Err(CliError::Aborted(format!("{action} cancelled")))
-    }
-}
-
 /// Execute a parsed CLI invocation against the given backend and return the
 /// structured result (mirroring MCP tool payloads). `Ok(None)` means the
 /// command produced no top-level output (interactive REPL).
@@ -575,7 +541,6 @@ pub fn run(
         under_reset: args.under_reset,
         target_yaml: args.target_yaml.clone(),
         svd: args.svd.clone(),
-        yes: args.yes,
         json: args.json,
     };
     match args.command {
@@ -678,7 +643,7 @@ pub fn run(
         }
         Command::Flash(a) => {
             connect(&globals, &mut session)?;
-            Ok(Some(actions::flash(&mut session, &a, globals.yes)?))
+            Ok(Some(actions::flash(&mut session, &a)?))
         }
         Command::Script(a) => {
             let text = match (&a.file, &a.text) {
@@ -696,7 +661,7 @@ pub fn run(
                 }
             };
             let policy = SecurityPolicy {
-                allow_destructive: globals.yes,
+                allow_destructive: true,
             };
             let mut engine = cmsis_dap_core::script::ScriptEngine::with_connection(
                 policy,
@@ -708,27 +673,16 @@ pub fn run(
             );
             let report = engine.run_script(&mut session, &text)?;
             if !report.ok {
-                let destructive = report.results.iter().any(|r| {
-                    r.status == "error"
-                        && r.output.get("code").and_then(|c| c.as_str())
-                            == Some("DestructiveDisabled")
-                });
-                return Err(if destructive {
-                    CliError::Aborted(
-                        "script contains destructive commands; run with --yes to allow them".into(),
-                    )
-                } else {
-                    let detail = report
-                        .results
-                        .iter()
-                        .find(|r| r.status == "error")
-                        .and_then(|r| r.output.get("message").and_then(|m| m.as_str()))
-                        .unwrap_or("script failed");
-                    CliError::Mcp(McpError::new(
-                        ErrorCode::InternalError,
-                        format!("script failed: {detail}"),
-                    ))
-                });
+                let detail = report
+                    .results
+                    .iter()
+                    .find(|r| r.status == "error")
+                    .and_then(|r| r.output.get("message").and_then(|m| m.as_str()))
+                    .unwrap_or("script failed");
+                return Err(CliError::Mcp(McpError::new(
+                    ErrorCode::InternalError,
+                    format!("script failed: {detail}"),
+                )));
             }
             Ok(Some(json!(report)))
         }
@@ -742,7 +696,6 @@ pub fn run(
             let interactive = stdin.is_terminal();
             let mut reader = stdin.lock();
             let opts = ReplOptions {
-                yes: globals.yes,
                 json: globals.json,
                 probe_id: globals.probe_id.clone(),
                 protocol: globals.protocol.clone(),
