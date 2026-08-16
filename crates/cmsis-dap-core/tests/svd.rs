@@ -1,4 +1,4 @@
-use cmsis_dap_mcp::svd::SvdDatabase;
+use cmsis_dap_core::svd::SvdDatabase;
 use std::io::Write;
 
 const MINI_SVD: &str = r#"<?xml version="1.0"?>

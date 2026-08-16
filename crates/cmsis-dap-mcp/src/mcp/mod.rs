@@ -6,12 +6,12 @@ pub mod tools_probe;
 pub mod tools_script;
 pub mod tools_svd;
 
-use crate::backend::{
+use cmsis_dap_core::backend::{
     CoreRegister, ExportFormat, ImageFileFormat, Protocol, ResetMode, WatchAccess,
 };
-use crate::error::ErrorCode;
-use crate::security::{SecurityLevel, SecurityPolicy};
-use crate::session::SessionManager;
+use cmsis_dap_core::error::ErrorCode;
+use cmsis_dap_core::security::{SecurityLevel, SecurityPolicy};
+use cmsis_dap_core::session::SessionManager;
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{CallToolResult, ServerCapabilities, ServerInfo};
 use rmcp::{tool, tool_router, ServerHandler};
@@ -541,7 +541,7 @@ impl CmsisDapMcp {
         };
         match session
             .backend()
-            .read_memory(addr, crate::backend::AccessWidth::U32, 1)
+            .read_memory(addr, cmsis_dap_core::backend::AccessWidth::U32, 1)
         {
             Ok(values) => {
                 let raw = values[0];
@@ -589,23 +589,25 @@ impl CmsisDapMcp {
         };
         let result = match field {
             Some((mask, shift)) => {
-                let current =
-                    match session
-                        .backend()
-                        .read_memory(addr, crate::backend::AccessWidth::U32, 1)
-                    {
-                        Ok(values) => values[0],
-                        Err(e) => return error_result(e.code, e.message),
-                    };
+                let current = match session.backend().read_memory(
+                    addr,
+                    cmsis_dap_core::backend::AccessWidth::U32,
+                    1,
+                ) {
+                    Ok(values) => values[0],
+                    Err(e) => return error_result(e.code, e.message),
+                };
                 let updated =
                     (current & !((mask as u64) << shift)) | ((params.value & mask as u64) << shift);
-                session
-                    .backend()
-                    .write_memory(addr, crate::backend::AccessWidth::U32, &[updated])
+                session.backend().write_memory(
+                    addr,
+                    cmsis_dap_core::backend::AccessWidth::U32,
+                    &[updated],
+                )
             }
             None => session.backend().write_memory(
                 addr,
-                crate::backend::AccessWidth::U32,
+                cmsis_dap_core::backend::AccessWidth::U32,
                 &[params.value],
             ),
         };
@@ -763,7 +765,7 @@ impl CmsisDapMcp {
             (None, Some(script)) => script.clone(),
         };
         let mut session = self.session.lock().unwrap();
-        match crate::script::run(&mut session, &self.policy, &text) {
+        match cmsis_dap_core::script::run(&mut session, &self.policy, &text) {
             Ok(report) => {
                 CallToolResult::structured(serde_json::to_value(&report).unwrap_or_default())
             }
@@ -1007,7 +1009,7 @@ impl CmsisDapMcp {
                 )
             }
         };
-        let opts = crate::backend::ConnectOptions {
+        let opts = cmsis_dap_core::backend::ConnectOptions {
             probe_id: params.probe_id,
             protocol,
             speed_khz: params.speed_khz,

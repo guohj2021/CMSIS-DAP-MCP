@@ -1,7 +1,7 @@
-use cmsis_dap_mcp::backend::mock::MockBackend;
-use cmsis_dap_mcp::backend::{AccessWidth, ConnectOptions, Protocol};
-use cmsis_dap_mcp::error::ErrorCode;
-use cmsis_dap_mcp::session::SessionManager;
+use cmsis_dap_core::backend::mock::MockBackend;
+use cmsis_dap_core::backend::{AccessWidth, ConnectOptions, Protocol};
+use cmsis_dap_core::error::ErrorCode;
+use cmsis_dap_core::session::SessionManager;
 
 #[test]
 fn connect_sets_state_and_auto_disconnects() {

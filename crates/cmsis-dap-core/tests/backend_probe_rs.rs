@@ -1,6 +1,6 @@
-use cmsis_dap_mcp::backend::probe_rs::ProbeRsBackend;
-use cmsis_dap_mcp::backend::{AccessWidth, Backend};
-use cmsis_dap_mcp::error::ErrorCode;
+use cmsis_dap_core::backend::probe_rs::ProbeRsBackend;
+use cmsis_dap_core::backend::{AccessWidth, Backend};
+use cmsis_dap_core::error::ErrorCode;
 
 #[test]
 fn memory_read_without_connect_fails() {
@@ -9,14 +9,14 @@ fn memory_read_without_connect_fails() {
     assert_eq!(err.code, ErrorCode::NotConnected);
 }
 
-use cmsis_dap_mcp::backend::Protocol;
-use cmsis_dap_mcp::session::SessionManager;
+use cmsis_dap_core::backend::Protocol;
+use cmsis_dap_core::session::SessionManager;
 
 #[test]
 #[ignore = "requires a physical CMSIS-DAP probe and Cortex-M target"]
 fn hardware_connect_halt_read_resume() {
     let mut sm = SessionManager::new(Box::new(ProbeRsBackend::new()));
-    let opts = cmsis_dap_mcp::backend::ConnectOptions {
+    let opts = cmsis_dap_core::backend::ConnectOptions {
         probe_id: None,
         protocol: Protocol::Swd,
         speed_khz: Some(100),

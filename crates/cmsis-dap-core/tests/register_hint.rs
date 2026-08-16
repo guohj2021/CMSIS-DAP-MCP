@@ -1,4 +1,4 @@
-use cmsis_dap_mcp::backend::{register_hint, RegisterHint};
+use cmsis_dap_core::backend::{register_hint, RegisterHint};
 
 #[test]
 fn classifies_special_registers() {

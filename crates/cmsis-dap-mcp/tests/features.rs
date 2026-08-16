@@ -1,13 +1,13 @@
-use cmsis_dap_mcp::backend::mock::MockBackend;
-use cmsis_dap_mcp::backend::{ConnectOptions, Protocol};
+use cmsis_dap_core::backend::mock::MockBackend;
+use cmsis_dap_core::backend::{ConnectOptions, Protocol};
+use cmsis_dap_core::security::SecurityPolicy;
+use cmsis_dap_core::session::SessionManager;
 use cmsis_dap_mcp::mcp::{
     ClearWatchpointsParams, CmsisDapMcp, ConnectParams, DisconnectParams, EraseFlashParams,
     GetCoreStatusParams, HaltParams, ListCoreRegistersParams, ListWatchpointsParams,
     ProgramFlashParams, ReadMemoryParams, ResetParams, ResumeParams, RunScriptParams,
     SetWatchpointParams, VerifyMemoryParams, WriteMemoryParams,
 };
-use cmsis_dap_mcp::security::SecurityPolicy;
-use cmsis_dap_mcp::session::SessionManager;
 use rmcp::handler::server::wrapper::Parameters;
 
 fn mcp(allow_destructive: bool) -> CmsisDapMcp {

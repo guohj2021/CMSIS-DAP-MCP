@@ -1,8 +1,6 @@
 pub mod backend;
-pub mod cli;
 pub mod error;
 pub mod hex;
-pub mod mcp;
 pub mod script;
 pub mod security;
 pub mod session;

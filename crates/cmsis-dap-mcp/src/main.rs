@@ -1,8 +1,8 @@
-use cmsis_dap_mcp::backend::probe_rs::ProbeRsBackend;
+use cmsis_dap_core::backend::probe_rs::{registry_from_yaml, ProbeRsBackend};
+use cmsis_dap_core::security::SecurityPolicy;
+use cmsis_dap_core::session::SessionManager;
 use cmsis_dap_mcp::cli::AppConfig;
 use cmsis_dap_mcp::mcp::CmsisDapMcp;
-use cmsis_dap_mcp::security::SecurityPolicy;
-use cmsis_dap_mcp::session::SessionManager;
 use rmcp::ServiceExt;
 use tracing_subscriber::EnvFilter;
 
@@ -26,15 +26,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     let backend = match &cfg.target_yaml {
-        Some(path) => {
-            let yaml = std::fs::read_to_string(path)?;
-            let mut registry = probe_rs::config::Registry::from_builtin_families();
-            let name = registry
-                .add_target_family_from_yaml(&yaml)
-                .map_err(|e| format!("failed to parse target yaml {}: {e}", path.display()))?;
-            tracing::info!("loaded target family {name} from {}", path.display());
-            ProbeRsBackend::with_registry(registry)
-        }
+        Some(path) => ProbeRsBackend::with_registry(registry_from_yaml(path)?),
         None => ProbeRsBackend::new(),
     };
     tracing::info!(

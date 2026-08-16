@@ -31,6 +31,28 @@ impl Default for ProbeRsBackend {
     }
 }
 
+/// Build a target registry from a user-provided target YAML file.
+///
+/// Shared by the MCP server and the CLI so both tools accept the same
+/// `--target-yaml` input for Flash algorithms and chip descriptions.
+pub fn registry_from_yaml(path: &std::path::Path) -> Result<probe_rs::config::Registry, McpError> {
+    let yaml = std::fs::read_to_string(path).map_err(|e| {
+        file_error(format!(
+            "failed to read target yaml {}: {e}",
+            path.display()
+        ))
+    })?;
+    let mut registry = probe_rs::config::Registry::from_builtin_families();
+    let name = registry.add_target_family_from_yaml(&yaml).map_err(|e| {
+        file_error(format!(
+            "failed to parse target yaml {}: {e}",
+            path.display()
+        ))
+    })?;
+    tracing::info!("loaded target family {name} from {}", path.display());
+    Ok(registry)
+}
+
 impl ProbeRsBackend {
     pub fn new() -> Self {
         Self {
