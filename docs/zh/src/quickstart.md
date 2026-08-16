@@ -1,17 +1,45 @@
 # 快速开始
 
-## 原生二进制
+## npm（推荐）
 
-从 GitHub Releases 下载对应平台的二进制，然后配置到你的 MCP 客户端
-（见 [AI 客户端配置](./ai-clients.md)）。
-
-## npm
+无需安装：让 MCP 客户端用 `npx` 启动服务器即可：
 
 ```bash
 codex mcp add cmsis-dap -- npx -y cmsis-dap-mcp
 ```
 
-npm 包会自动下载对应平台的二进制。
+`cmsis-dap-mcp` npm 包会在首次启动时自动下载对应平台的二进制并缓存。
+
+固定版本：
+
+```bash
+codex mcp add cmsis-dap -- npx -y cmsis-dap-mcp@0.3.0
+```
+
+## 原生二进制
+
+从 GitHub Releases 下载对应平台二进制，然后让客户端指向它：
+
+```bash
+codex mcp add cmsis-dap -- /path/to/cmsis-dap-mcp --log-level warn
+```
+
+这是运行未发布或本地构建服务器的标准方式，也适合需要离线、精确固定版本的
+场景。
+
+## 配置方式
+
+MCP 客户端有三种等价的 stdio 配置写法。`npx` 是已发布包的标准写法；本地
+二进制写法与之等价，用于本地构建。
+
+| 方式 | 示例 | 适用场景 |
+| --- | --- | --- |
+| `npx` 包 | `command = "npx", args = ["-y", "cmsis-dap-mcp"]` | 已发布版本；随 npm 更新 |
+| 本地二进制 | `command = "/path/to/cmsis-dap-mcp"` | 本地构建、离线、精确版本 |
+| 远程 URL | `url = "https://..."` | Streamable-HTTP 服务器（本项目暂不支持） |
+
+[AI 客户端配置](./ai-clients.md) 页中三个客户端都同时接受 `npx` 与本地二进制
+路径两种写法，服务器行为完全一致。
 
 ## 第一次会话
 
