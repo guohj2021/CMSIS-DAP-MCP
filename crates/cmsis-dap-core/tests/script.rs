@@ -157,6 +157,55 @@ fn flash_write_image_command_works() {
 }
 
 #[test]
+fn all_script_commands_dispatch() {
+    let mut sm = session();
+    connect(&mut sm);
+    let dir = tempfile::tempdir().unwrap();
+    let bin = dir.path().join("fw.bin");
+    let dump = dir.path().join("dump.bin");
+    std::fs::write(&bin, [0x01u8, 0x02, 0x03]).unwrap();
+    let script = format!(
+        "connect\n\
+         targets\n\
+         halt\ngo\nstep\nreset\nreset halt\n\
+         regs\nreg pc\nreg r0 0x55\n\
+         mem8 0x20000000 2\nmem16 0x20000000 2\nmem32 0x20000000 2\n\
+         mdb 0x20000000 1\nmdh 0x20000000 1\nmdw 0x20000000 1\n\
+         w8 0x20000000 0x11\nw16 0x20000000 0x1122\nw32 0x20000000 0x11223344\n\
+         mwb 0x20000000 0x12\nmwh 0x20000000 0x1234\nmww 0x20000000 0x12345678\n\
+         savebin {} 0x20000000 4\n\
+         dump_image {} 0x20000000 4\n\
+         loadbin {} 0x08000000\n\
+         loadfile {} 0x08000000\n\
+         flash write_image {} 0x08000000\n\
+         verifybin {} 0x08000000\n\
+         verify_image {} 0x08000000\n\
+         flash erase_sector 0x08000000 0x400\n\
+         sleep 0\necho hello\n\
+         disconnect\n\
+         si jtag\nsi swd\nspeed 1000\ndevice TestChip\nadapter serial ABC\n\
+         cmsis-dap vid_pid 1234:5678\n\
+         init\nerase",
+        bin.display(),
+        dump.display(),
+        bin.display(),
+        bin.display(),
+        bin.display(),
+        bin.display(),
+        bin.display()
+    );
+    let report = script::run(&mut sm, &policy(true), &script).unwrap();
+    assert!(report.ok, "{report:?}");
+    assert!(
+        !report
+            .results
+            .iter()
+            .any(|r| r.status == "error" && r.output["message"].as_str().is_some()),
+        "{report:?}"
+    );
+}
+
+#[test]
 fn savebin_and_loadbin_roundtrip() {
     let mut sm = session();
     connect(&mut sm);

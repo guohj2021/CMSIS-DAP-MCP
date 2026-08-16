@@ -573,6 +573,7 @@ pub fn run(
             Ok(Some(json!({ "disconnected": true })))
         }
         Command::Target => {
+            connect(&globals, &mut session)?;
             session.ensure_connected()?;
             let info = session
                 .target_info()
