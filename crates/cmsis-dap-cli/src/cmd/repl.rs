@@ -82,7 +82,7 @@ pub fn run(
             }
             Ok(None) => {}
             Err(e) if e.code == ErrorCode::DestructiveDisabled => {
-                if interactive && prompt_enable_destructive()? {
+                if interactive && prompt_enable_destructive(&mut *reader)? {
                     engine.policy_mut().allow_destructive = true;
                     match engine.execute_line(session, &line) {
                         Ok(Some(output)) => output::print_result(json, &output),
@@ -99,13 +99,18 @@ pub fn run(
     Ok(())
 }
 
-fn prompt_enable_destructive() -> Result<bool, CliError> {
+/// Ask for interactive approval of destructive mode.
+///
+/// Reads from the same `reader` that drives the REPL. Reading from a fresh
+/// `stdin()` handle here would deadlock, because the REPL already holds the
+/// stdin lock for its own line reads.
+fn prompt_enable_destructive(reader: &mut dyn BufRead) -> Result<bool, CliError> {
     eprint!("This command is destructive (erase/flash). Enable destructive mode for the session? [y/N] ");
     std::io::stderr()
         .flush()
         .map_err(|e| CliError::Aborted(e.to_string()))?;
     let mut line = String::new();
-    std::io::stdin()
+    reader
         .read_line(&mut line)
         .map_err(|e| CliError::Aborted(e.to_string()))?;
     Ok(line.trim().eq_ignore_ascii_case("y"))
