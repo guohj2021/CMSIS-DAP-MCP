@@ -180,6 +180,33 @@ fn print_human(value: &Value) {
         }
         return;
     }
+    if let (Some(address), Some(val)) = (
+        value.get("address").and_then(|v| v.as_u64()),
+        value.get("value").and_then(|v| v.as_u64()),
+    ) {
+        let mut line = format!("address: 0x{address:X}, value: 0x{val:X}");
+        if value.get("written").and_then(|v| v.as_bool()) == Some(true) {
+            line.push_str(", written: true");
+        }
+        println!("{line}");
+        return;
+    }
+    if value.get("erased").and_then(|v| v.as_bool()) == Some(true) {
+        let address = value["address"].as_u64().unwrap_or(0);
+        let size = value["size"].as_u64().unwrap_or(0);
+        println!("erased 0x{address:X} (size 0x{size:X})");
+        return;
+    }
+    if let Some(address) = value.get("breakpoint").and_then(|v| v.as_u64()) {
+        println!("breakpoint 0x{address:X} (set)");
+        return;
+    }
+    if let Some(wp) = value.get("watchpoint").and_then(|v| v.as_object()) {
+        let address = wp["address"].as_u64().unwrap_or(0);
+        let access = wp["access"].as_str().unwrap_or("");
+        println!("watchpoint 0x{address:X} ({access}, set)");
+        return;
+    }
     if let Some(obj) = value.as_object() {
         for (k, v) in obj {
             println!("{k}: {}", scalar_or_json(v));
