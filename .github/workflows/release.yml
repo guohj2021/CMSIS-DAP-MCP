@@ -113,10 +113,6 @@ jobs:
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-      - name: Copy bilingual README into npm packages
-        run: |
-          cp README.md npm/README.md
-          cp README.md npm-cli/README.md
       - name: Set versions from tag (cmsis-dap-mcp)
         shell: bash
         run: |
