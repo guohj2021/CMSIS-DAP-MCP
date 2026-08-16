@@ -1,14 +1,17 @@
 use crate::backend::{
-    register_hint, AccessWidth, Backend, ConnectOptions, CoreRegister, CoreStatusInfo,
+    register_hint, AccessWidth, Backend, ConnectOptions, CoreRegister, CoreStatusInfo, EvrStatus,
     ExportFormat, ImageFileFormat, MemoryMismatch, MemoryRegionSummary, MemoryVerifyReport,
-    ProbeInfo, Protocol, RegisterHint, ResetMode, TargetInfo, WatchAccess, Watchpoint,
+    ProbeInfo, Protocol, RegisterHint, ResetMode, RttChannelInfo, RttRead, TargetInfo, WatchAccess,
+    Watchpoint,
 };
 use crate::error::{ErrorCode, McpError};
+use crate::evr;
 use probe_rs::config::MemoryRegion;
 use probe_rs::flashing::{
     build_loader, erase, erase_all, image_format, DownloadOptions, FlashProgress,
 };
 use probe_rs::probe::{list::Lister, WireProtocol};
+use probe_rs::rtt::Rtt;
 use probe_rs::{CoreStatus, MemoryInterface, Permissions, RegisterRole, Session};
 use std::collections::BTreeSet;
 use std::time::Duration;
@@ -23,6 +26,8 @@ pub struct ProbeRsBackend {
     breakpoints: Vec<u64>,
     watchpoints: Vec<Watchpoint>,
     registry: Option<probe_rs::config::Registry>,
+    rtt: Option<Rtt>,
+    evr: Option<evr::EvrReader>,
 }
 
 impl Default for ProbeRsBackend {
@@ -140,6 +145,8 @@ impl ProbeRsBackend {
             breakpoints: Vec::new(),
             watchpoints: Vec::new(),
             registry: None,
+            rtt: None,
+            evr: None,
         }
     }
 
@@ -150,6 +157,8 @@ impl ProbeRsBackend {
             breakpoints: Vec::new(),
             watchpoints: Vec::new(),
             registry: Some(registry),
+            rtt: None,
+            evr: None,
         }
     }
 
@@ -405,6 +414,8 @@ impl Backend for ProbeRsBackend {
         self.session.take();
         self.breakpoints.clear();
         self.watchpoints.clear();
+        self.rtt = None;
+        self.evr = None;
         Ok(())
     }
 
@@ -928,5 +939,173 @@ impl Backend for ProbeRsBackend {
                 .map_err(file_error)?,
         }
         Ok(size)
+    }
+
+    fn attach_rtt(&mut self, address: Option<u64>) -> Result<Vec<RttChannelInfo>, McpError> {
+        let mut core = self.core()?;
+        let mut rtt = match address {
+            Some(addr) => Rtt::attach_at(&mut core, addr),
+            None => Rtt::attach(&mut core),
+        }
+        .map_err(|e| {
+            McpError::new(
+                ErrorCode::ProtocolError,
+                format!("RTT attach failed: {e} (connect with a chip target that defines RAM, or pass --elf/--address with the RTT control block)"),
+            )
+        })?;
+        let channels = rtt
+            .up_channels()
+            .iter()
+            .map(|c| RttChannelInfo {
+                number: c.number(),
+                name: c.name().map(|s| s.to_string()),
+                buffer_size: c.buffer_size(),
+            })
+            .collect();
+        drop(core);
+        self.rtt = Some(rtt);
+        Ok(channels)
+    }
+
+    fn read_rtt(&mut self, channels: &[usize], max_bytes: usize) -> Result<Vec<RttRead>, McpError> {
+        let rtt = self.rtt.as_mut().ok_or_else(|| {
+            McpError::new(
+                ErrorCode::NotConnected,
+                "RTT is not attached; run 'rtt info' or 'rtt monitor' first",
+            )
+        })?;
+        let mut core = self
+            .session
+            .as_mut()
+            .ok_or_else(|| McpError::new(ErrorCode::NotConnected, "no active session"))?
+            .core(self.core_index)
+            .map_err(|e| McpError::new(ErrorCode::ConnectFailed, e.to_string()))?;
+        let mut out = Vec::new();
+        for &channel in channels {
+            let Some(up) = rtt.up_channel(channel) else {
+                continue;
+            };
+            let mut buf = vec![0u8; max_bytes.max(1)];
+            let n = up.read(&mut core, &mut buf).map_err(|e| {
+                McpError::new(
+                    ErrorCode::ProtocolError,
+                    format!("RTT channel {channel} read failed: {e}"),
+                )
+            })?;
+            if n > 0 {
+                buf.truncate(n);
+                out.push(RttRead {
+                    channel,
+                    name: up.name().map(|s| s.to_string()),
+                    data: buf,
+                });
+            }
+        }
+        Ok(out)
+    }
+
+    fn detach_rtt(&mut self) -> Result<(), McpError> {
+        self.rtt = None;
+        Ok(())
+    }
+
+    fn attach_evr(&mut self, info_address: u64) -> Result<EvrStatus, McpError> {
+        let mut core = self.core()?;
+        let mut info_bytes = [0u8; evr::INFO_SIZE];
+        core.read_8(info_address, &mut info_bytes).map_err(|e| {
+            McpError::new(
+                ErrorCode::MemoryFault,
+                format!("failed to read EventRecorderInfo at 0x{info_address:x}: {e}"),
+            )
+        })?;
+        let header = evr::parse_header(&info_bytes)?;
+        let mut status_bytes = [0u8; evr::STATUS_SIZE];
+        core.read_8(header.event_status, &mut status_bytes)
+            .map_err(|e| {
+                McpError::new(
+                    ErrorCode::MemoryFault,
+                    format!(
+                        "failed to read EventStatus at 0x{:x}: {e}",
+                        header.event_status
+                    ),
+                )
+            })?;
+        let status = evr::parse_status(&status_bytes)?;
+        let mut reader = evr::EvrReader::new(&header);
+        reader.ts_overflow = status.ts_overflow;
+        reader.ts_freq = status.ts_freq;
+        let summary = EvrStatus {
+            state: status.state,
+            protocol_version: header.protocol_version.clone(),
+            record_count: header.record_count,
+            records_written: status.records_written as u64,
+            records_dumped: status.records_dumped as u64,
+            ts_freq: status.ts_freq,
+            ts_source: header.ts_source,
+            init_count: status.init_count,
+            signature: status.signature,
+            event_buffer: header.event_buffer,
+            event_status: header.event_status,
+        };
+        drop(core);
+        self.evr = Some(reader);
+        Ok(summary)
+    }
+
+    fn read_evr(&mut self) -> Result<Vec<crate::backend::EvrEvent>, McpError> {
+        let mut core = self
+            .session
+            .as_mut()
+            .ok_or_else(|| McpError::new(ErrorCode::NotConnected, "no active session"))?
+            .core(self.core_index)
+            .map_err(|e| McpError::new(ErrorCode::ConnectFailed, e.to_string()))?;
+        let reader = self.evr.as_mut().ok_or_else(|| {
+            McpError::new(
+                ErrorCode::NotConnected,
+                "Event Recorder is not attached; run 'evr info' or 'evr monitor' first",
+            )
+        })?;
+        let mut status_bytes = [0u8; evr::STATUS_SIZE];
+        core.read_8(reader.event_status, &mut status_bytes)
+            .map_err(|e| {
+                McpError::new(
+                    ErrorCode::MemoryFault,
+                    format!("failed to read EventStatus: {e}"),
+                )
+            })?;
+        let status = evr::parse_status(&status_bytes)?;
+        reader.ts_overflow = status.ts_overflow;
+        reader.ts_freq = status.ts_freq;
+        let indices = reader.plan(&status);
+        let mut events = Vec::new();
+        for index in indices {
+            let slot = (index as u64) % (reader.record_count as u64);
+            let record_address = reader.event_buffer + slot * evr::RECORD_SIZE as u64;
+            let mut record = [0u8; evr::RECORD_SIZE];
+            core.read_8(record_address, &mut record).map_err(|e| {
+                McpError::new(
+                    ErrorCode::MemoryFault,
+                    format!("failed to read event record at 0x{record_address:x}: {e}"),
+                )
+            })?;
+            match evr::decode_record(&record, reader.ts_overflow, reader.ts_freq) {
+                Some(event) => {
+                    reader.advance(index);
+                    events.push(event);
+                }
+                None => {
+                    // Record is being written or not yet committed: wait for
+                    // it and retry on the next poll.
+                    reader.last_index = index;
+                    break;
+                }
+            }
+        }
+        Ok(events)
+    }
+
+    fn detach_evr(&mut self) -> Result<(), McpError> {
+        self.evr = None;
+        Ok(())
     }
 }
