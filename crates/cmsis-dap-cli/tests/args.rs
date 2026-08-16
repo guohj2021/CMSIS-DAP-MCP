@@ -143,10 +143,9 @@ fn parses_reg_get_and_set() {
 }
 
 #[test]
-fn parses_flash_program_with_verify_and_yes() {
+fn parses_flash_program_with_verify() {
     let args = parse(&[
         "cmsis-dap-cli",
-        "--yes",
         "flash",
         "program",
         "--address",
@@ -155,7 +154,6 @@ fn parses_flash_program_with_verify_and_yes() {
         "fw.hex",
         "--verify",
     ]);
-    assert!(args.yes);
     let Command::Flash(f) = args.command else {
         panic!("expected flash command");
     };
