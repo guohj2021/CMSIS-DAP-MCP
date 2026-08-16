@@ -639,6 +639,9 @@ impl CmsisDapMcp {
         if let Err(e) = self.policy.check(SecurityLevel::Destructive) {
             return error_result(e.code, e.message);
         }
+        if let Err(e) = self.session.lock().unwrap().require_flash_defined() {
+            return error_result(e.code, e.message);
+        }
         match self
             .session
             .lock()
@@ -668,6 +671,9 @@ impl CmsisDapMcp {
         Parameters(params): Parameters<ProgramFlashParams>,
     ) -> CallToolResult {
         if let Err(e) = self.policy.check(SecurityLevel::Destructive) {
+            return error_result(e.code, e.message);
+        }
+        if let Err(e) = self.session.lock().unwrap().require_flash_defined() {
             return error_result(e.code, e.message);
         }
         match (&params.data, &params.path) {

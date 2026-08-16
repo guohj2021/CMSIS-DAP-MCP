@@ -10,6 +10,7 @@ pub struct MockBackend {
     memory: HashMap<u64, u64>,
     registers: HashMap<String, u64>,
     dap: HashMap<u32, u32>,
+    with_flash: bool,
     connected: bool,
     halted: bool,
     breakpoints: Vec<u64>,
@@ -35,10 +36,20 @@ impl MockBackend {
                 ("xpsr".into(), 0x0100_0000u64),
             ]),
             dap: HashMap::new(),
+            with_flash: true,
             connected: false,
             halted: false,
             breakpoints: Vec::new(),
             watchpoints: Vec::new(),
+        }
+    }
+
+    /// A mock backend whose target has no flash memory region (used to verify
+    /// that flash operations fail loudly instead of silently doing nothing).
+    pub fn without_flash() -> Self {
+        Self {
+            with_flash: false,
+            ..Self::new()
         }
     }
 }
@@ -80,20 +91,24 @@ impl Backend for MockBackend {
             ap_count: 1,
             cpu_id: Some(0x410C_C601),
             dp_id: Some(0x0BB1_1477),
-            memory_regions: vec![
-                MemoryRegionSummary {
-                    name: "FLASH".into(),
-                    kind: "nvm".into(),
-                    start: 0x0800_0000,
-                    end: 0x0801_0000,
-                },
-                MemoryRegionSummary {
+            memory_regions: {
+                let mut regions = Vec::new();
+                if self.with_flash {
+                    regions.push(MemoryRegionSummary {
+                        name: "FLASH".into(),
+                        kind: "nvm".into(),
+                        start: 0x0800_0000,
+                        end: 0x0801_0000,
+                    });
+                }
+                regions.push(MemoryRegionSummary {
                     name: "RAM".into(),
                     kind: "ram".into(),
                     start: 0x2000_0000,
                     end: 0x2001_0000,
-                },
-            ],
+                });
+                regions
+            },
         })
     }
 
