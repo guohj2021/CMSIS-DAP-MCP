@@ -152,6 +152,10 @@ fn print_human(value: &Value) {
         }
         return;
     }
+    if let Some(yaml) = value.get("yaml").and_then(|v| v.as_str()) {
+        println!("{yaml}");
+        return;
+    }
     if let Some(obj) = value.as_object() {
         for (k, v) in obj {
             println!("{k}: {}", scalar_or_json(v));
