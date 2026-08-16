@@ -11,6 +11,10 @@ Two tools for working with CMSIS-DAP debug probes and Cortex-M chips over
 Both enumerate probes, connect over SWD/JTAG, read/write memory and core
 registers, control execution, access named peripherals via SVD files, program
 flash from firmware files, and run J-Link / OpenOCD style debug scripts.
+The CLI additionally ships live debugging: `watch` (poll variables with a
+configurable refresh interval), `rtt monitor` (SEGGER RTT logs) and
+`evr monitor` (CMSIS-View Event Recorder) all run over SWD/JTAG — no UART —
+with timestamped log export.
 
 - Generic Cortex-M support: standard cores work without chip-specific
   adaptation.

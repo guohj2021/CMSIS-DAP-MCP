@@ -59,3 +59,22 @@ Start the server with `--allow-destructive`.
   app loads it when a new session starts.
 - Verify the binary path in the client configuration is correct and
   executable.
+
+## RTT / Event Recorder
+
+- **`RTT attach failed: control block not found`** — the target firmware must
+  initialize SEGGER RTT (`SEGGER_RTT_Init()`) and the host must attach after
+  that, not while the core is halted before `main`. Pass `--elf` (the
+  `_SEGGER_RTT` symbol) or `--address`, and run the monitor from `repl` after
+  `reset run` so the core is actually executing.
+- **`evr` requires an address** — the firmware must include the CMSIS-View
+  Event Recorder component (symbol `EventRecorderInfo`). Pass `--elf` or
+  `--address`, and initialize the recorder with `EventRecorderInitialize`
+  before attaching.
+- **One-shot commands read stale values** — every one-shot invocation opens a
+  new session and probe-rs attaches with the core halted. Use `repl` with
+  `connect` + `reset run`, then `watch run` / `rtt monitor` / `evr monitor`.
+- **EVR timestamps look scaled** — seconds are derived from the firmware's
+  `ts_freq` (`EVENT_TIMESTAMP_FREQ`); set it to the actual timestamp clock
+  (e.g. `SystemCoreClock`) for accurate wall time. Ticks themselves are always
+  monotonic.
