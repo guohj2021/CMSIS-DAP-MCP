@@ -302,6 +302,66 @@ fn require_destructive(policy: &SecurityPolicy) -> Result<(), McpError> {
     policy.check(SecurityLevel::Destructive)
 }
 
+fn do_loadfile(
+    session: &mut SessionManager,
+    policy: &SecurityPolicy,
+    args: &[String],
+) -> Result<serde_json::Value, McpError> {
+    require_destructive(policy)?;
+    session.require_flash_defined()?;
+    let path = args
+        .first()
+        .ok_or_else(|| McpError::new(ErrorCode::InvalidArgument, "loadfile requires a path"))?;
+    let path_str = unquote(path);
+    let format = ImageFileFormat::from_extension(Path::new(&path_str)).ok_or_else(|| {
+        McpError::new(
+            ErrorCode::InvalidArgument,
+            "cannot infer file format from extension",
+        )
+    })?;
+    let address = args.get(1).map(|a| parse_u64(a)).transpose()?.unwrap_or(0);
+    let bytes = session
+        .backend()
+        .program_file(Path::new(&path_str), format, address, false)?;
+    Ok(serde_json::json!({
+        "programmed": true,
+        "path": path_str,
+        "format": format.as_str(),
+        "bytes": bytes,
+    }))
+}
+
+fn do_erase_sector(
+    session: &mut SessionManager,
+    policy: &SecurityPolicy,
+    args: &[String],
+) -> Result<serde_json::Value, McpError> {
+    require_destructive(policy)?;
+    session.require_flash_defined()?;
+    let address = args
+        .first()
+        .map(|a| parse_u64(a))
+        .transpose()?
+        .ok_or_else(|| {
+            McpError::new(
+                ErrorCode::InvalidArgument,
+                "flash erase_sector requires an address",
+            )
+        })?;
+    let size = args
+        .get(1)
+        .map(|s| parse_u64(s))
+        .transpose()?
+        .ok_or_else(|| {
+            McpError::new(
+                ErrorCode::InvalidArgument,
+                "flash erase_sector requires a size",
+            )
+        })?;
+    session.backend().erase_flash(address, size)?;
+    Ok(serde_json::json!({ "erased": true, "address": address, "size": size }))
+}
+
 fn dispatch(
     session: &mut SessionManager,
     policy: &SecurityPolicy,
@@ -362,9 +422,15 @@ fn dispatch(
             ctx.target = Some(value.clone());
             Ok(serde_json::json!({ "target": value }))
         }
-        "adapter serial" => {
+        "adapter" => {
+            let Some(serial) = args.first() else {
+                return Err(invalid("adapter serial requires a value"));
+            };
+            if !serial.eq_ignore_ascii_case("serial") {
+                return Err(invalid("unknown adapter command"));
+            }
             let value = args
-                .first()
+                .get(1)
                 .ok_or_else(|| invalid("adapter serial requires a value"))?;
             ctx.probe_id = Some(unquote(value));
             Ok(serde_json::json!({ "serial": ctx.probe_id }))
@@ -483,48 +549,22 @@ fn dispatch(
                 "bytes": bytes,
             }))
         }
-        "loadfile" | "flash write_image" => {
-            require_destructive(policy)?;
-            session.require_flash_defined()?;
-            let path = args
-                .first()
-                .ok_or_else(|| invalid("loadfile requires a path"))?;
-            let path_str = unquote(path);
-            let format = ImageFileFormat::from_extension(Path::new(&path_str))
-                .ok_or_else(|| invalid("cannot infer file format from extension"))?;
-            let address = args.get(1).map(|a| parse_u64(a)).transpose()?.unwrap_or(0);
-            let bytes =
-                session
-                    .backend()
-                    .program_file(Path::new(&path_str), format, address, false)?;
-            Ok(serde_json::json!({
-                "programmed": true,
-                "path": path_str,
-                "format": format.as_str(),
-                "bytes": bytes,
-            }))
+        "loadfile" => do_loadfile(session, policy, args),
+        "flash" => {
+            let Some(sub) = args.first() else {
+                return Err(invalid("flash requires erase_sector or write_image"));
+            };
+            match sub.to_ascii_lowercase().as_str() {
+                "erase_sector" => do_erase_sector(session, policy, &args[1..]),
+                "write_image" => do_loadfile(session, policy, &args[1..]),
+                _ => Err(invalid("flash command must be erase_sector or write_image")),
+            }
         }
         "erase" => {
             require_destructive(policy)?;
             session.require_flash_defined()?;
             session.backend().erase_flash(0, u64::MAX)?;
             Ok(serde_json::json!({ "erased": true }))
-        }
-        "flash erase_sector" => {
-            require_destructive(policy)?;
-            session.require_flash_defined()?;
-            let address = args
-                .first()
-                .map(|a| parse_u64(a))
-                .transpose()?
-                .ok_or_else(|| invalid("flash erase_sector requires an address"))?;
-            let size = args
-                .get(1)
-                .map(|s| parse_u64(s))
-                .transpose()?
-                .ok_or_else(|| invalid("flash erase_sector requires a size"))?;
-            session.backend().erase_flash(address, size)?;
-            Ok(serde_json::json!({ "erased": true, "address": address, "size": size }))
         }
         "verifybin" | "verify_image" => {
             let path = args
