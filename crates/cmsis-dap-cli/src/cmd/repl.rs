@@ -18,10 +18,10 @@ J-Link Commander / OpenOCD style commands:
   mem8/16/32 <addr> [<n>]    read memory
   w8/16/32 <addr> <value>    write memory
   savebin <file> <addr> <size>   export memory to a binary file
-  loadbin <file> <addr>      program a binary file (destructive)
-  loadfile <file> [<addr>]   program axf/elf/bin/hex (destructive)
-  erase                      erase all flash (destructive)
-  flash erase_sector <addr> <size>  erase a flash range (destructive)
+  loadbin <file> <addr>      program a binary file (erases/writes flash)
+  loadfile <file> [<addr>]   program axf/elf/bin/hex (erases/writes flash)
+  erase                      erase all flash
+  flash erase_sector <addr> <size>  erase a flash range
   verifybin <file> [<addr>]  verify a binary file against memory
   echo <text> | sleep <ms>   misc helpers
   ? | help                   show this help
@@ -31,9 +31,8 @@ flash (set device/--target, then connect).";
 
 /// Run the interactive REPL.
 ///
-/// `reader` is the command source and `interactive` toggles the prompt and
-/// interactive destructive-approval behavior (kept out of stdin plumbing so
-/// tests can drive the REPL with an in-memory reader).
+/// `reader` is the command source and `interactive` toggles the prompt (kept
+/// out of stdin plumbing so tests can drive the REPL with an in-memory reader).
 pub fn run(
     opts: &ReplOptions,
     session: &mut SessionManager,
