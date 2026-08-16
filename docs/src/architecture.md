@@ -4,6 +4,11 @@
 pure server: an MCP client (Codex, Claude Code, opencode, or any MCP-compatible
 host) drives it, and it never renders its own UI.
 
+The repository is a Cargo workspace with three crates: `cmsis-dap-core` (the
+MCP-independent engine shared by both tools), `cmsis-dap-mcp` (this server)
+and `cmsis-dap-cli` (a standalone CLI over the same engine). The diagram below
+shows the server side of that workspace.
+
 ## System overview
 
 ![Architecture overview](images/architecture.png)

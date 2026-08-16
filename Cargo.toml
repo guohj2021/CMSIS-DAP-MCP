@@ -1,10 +1,13 @@
-[package]
-name = "cmsis-dap-mcp"
-version = "0.3.0"
+[workspace]
+resolver = "2"
+members = ["crates/cmsis-dap-core", "crates/cmsis-dap-mcp", "crates/cmsis-dap-cli"]
+
+[workspace.package]
+version = "0.4.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 
-[dependencies]
+[workspace.dependencies]
 clap = { version = "4.6.6", features = ["derive"] }
 probe-rs = "0.32.0"
 rmcp = { version = "3.1.2", features = ["schemars", "transport-io"] }
@@ -12,10 +15,8 @@ schemars = "1.2.2"
 serde = "1.0.229"
 serde_json = "1.0.151"
 svd-parser = "0.14.10"
+tempfile = "3.27.0"
 thiserror = "2.0.20"
 tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
-
-[dev-dependencies]
-tempfile = "3.27.0"

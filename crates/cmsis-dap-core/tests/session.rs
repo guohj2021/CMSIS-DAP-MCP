@@ -1,0 +1,29 @@
+use cmsis_dap_core::backend::mock::MockBackend;
+use cmsis_dap_core::backend::{AccessWidth, ConnectOptions, Protocol};
+use cmsis_dap_core::error::ErrorCode;
+use cmsis_dap_core::session::SessionManager;
+
+#[test]
+fn connect_sets_state_and_auto_disconnects() {
+    let mut sm = SessionManager::new(Box::new(MockBackend::new()));
+    let opts = ConnectOptions {
+        probe_id: None,
+        protocol: Protocol::Swd,
+        speed_khz: None,
+        target: None,
+        under_reset: false,
+    };
+    sm.connect(&opts).unwrap();
+    sm.connect(&opts).unwrap();
+    sm.ensure_connected().unwrap();
+}
+
+#[test]
+fn memory_before_connect_fails() {
+    let mut sm = SessionManager::new(Box::new(MockBackend::new()));
+    let err = sm
+        .backend()
+        .read_memory(0, AccessWidth::U32, 1)
+        .unwrap_err();
+    assert_eq!(err.code, ErrorCode::NotConnected);
+}
