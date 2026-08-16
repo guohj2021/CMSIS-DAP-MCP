@@ -698,7 +698,15 @@ pub fn run(
             let policy = SecurityPolicy {
                 allow_destructive: globals.yes,
             };
-            let report = cmsis_dap_core::script::run(&mut session, &policy, &text)?;
+            let mut engine = cmsis_dap_core::script::ScriptEngine::with_connection(
+                policy,
+                globals.probe_id.clone(),
+                parse_protocol(&globals.protocol)?,
+                globals.speed_khz,
+                globals.target.clone(),
+                globals.under_reset,
+            );
+            let report = engine.run_script(&mut session, &text)?;
             if !report.ok {
                 let destructive = report.results.iter().any(|r| {
                     r.status == "error"
