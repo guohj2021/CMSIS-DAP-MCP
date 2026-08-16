@@ -152,7 +152,6 @@ pub fn decode_record(bytes: &[u8], ts_overflow: u32, ts_freq: u32) -> Option<Evr
     if info & INFO_LOCKED != 0 || info & INFO_VALID == 0 {
         return None;
     }
-    let level_bits = ((info >> 16) & 0x3) as u8;
     let ts = (u32_le(bytes, RECORD_TS) & 0x7FFF_FFFF)
         | if info & INFO_MSB_TS != 0 {
             0x8000_0000
@@ -180,10 +179,9 @@ pub fn decode_record(bytes: &[u8], ts_overflow: u32, ts_freq: u32) -> Option<Evr
     Some(EvrEvent {
         timestamp_ticks,
         timestamp_secs,
-        level: crate::backend::EvrLevel::from_bits(level_bits),
+        context: ((info >> 16) & 0x7) as u8,
         component: ((info >> 8) & 0xFF) as u16,
         message: (info & 0xFF) as u16,
-        data_length: ((info >> 16) & 0x7) as u8,
         irq: (info >> 19) & 1 == 1,
         first: info & INFO_FIRST != 0,
         last: info & INFO_LAST != 0,
