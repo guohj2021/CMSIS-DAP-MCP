@@ -156,6 +156,30 @@ fn print_human(value: &Value) {
         println!("{yaml}");
         return;
     }
+    if let Some(chips) = value.get("chips").and_then(|v| v.as_array()) {
+        let search = value.get("query").is_some();
+        let mut current_family: Option<String> = None;
+        for c in chips {
+            let family = c["family"].as_str().unwrap_or("");
+            if !search && current_family.as_deref() != Some(family) {
+                println!("{family}");
+                current_family = Some(family.to_string());
+            }
+            let mut line = c["name"].as_str().unwrap_or("").to_string();
+            if search {
+                if let Some((start, end)) = range_of(&c["flash"]) {
+                    line.push_str(&format!("  flash 0x{start:x}-0x{end:x}"));
+                }
+                if let Some((start, end)) = range_of(&c["ram"]) {
+                    line.push_str(&format!("  ram 0x{start:x}-0x{end:x}"));
+                }
+            } else {
+                line.insert_str(0, "    ");
+            }
+            println!("{line}");
+        }
+        return;
+    }
     if let Some(obj) = value.as_object() {
         for (k, v) in obj {
             println!("{k}: {}", scalar_or_json(v));
@@ -166,6 +190,12 @@ fn print_human(value: &Value) {
         "{}",
         serde_json::to_string_pretty(value).unwrap_or_default()
     );
+}
+
+fn range_of(v: &Value) -> Option<(u64, u64)> {
+    let start = v.get(0)?.as_u64()?;
+    let end = v.get(1)?.as_u64()?;
+    Some((start, end))
 }
 
 fn scalar_or_json(v: &Value) -> String {

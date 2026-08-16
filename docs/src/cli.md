@@ -39,6 +39,7 @@ Global options (before the subcommand): `--probe-id`, `--protocol swd|jtag`,
 | `flash erase --address A --size N` / `flash program --address A --file F [--format elf\|axf\|bin\|hex] [--verify]` | flash erase / program |
 | `script --file F` or `--text TEXT` | run a J-Link / OpenOCD style script |
 | `chip generate --flm F --flash-start A --flash-size N --sram-start A --sram-size N [--name NAME] [--output FILE]` | generate a probe-rs target YAML from a Keil FLM |
+| `chip list` / `chip search KEYWORD` | list or search chip variants (built-in plus `--target-yaml` chips) |
 | `repl` | interactive shell (J-Link Commander style) |
 
 Commands that need a target auto-connect using the global connection options.
@@ -92,6 +93,22 @@ cmsis-dap-cli --target-yaml MYCHIP.yaml --target MYCHIP connect
 The generated YAML places the algorithm at `SRAM start + 0x20`; make sure the
 SRAM range you provide is large enough for the algorithm (the command refuses
 to emit a YAML whose algorithm does not fit).
+
+## Listing and searching chips
+
+To see which chips are known (and thus usable with `--target` or the REPL
+`device` command), list or search the probe-rs built-in database:
+
+```bash
+cmsis-dap-cli chip list
+cmsis-dap-cli chip search STM32F103
+cmsis-dap-cli chip search stm32f103c8
+```
+
+The search is case-insensitive and matches substrings of chip names. Pass
+`--target-yaml FILE` to include custom chips generated with `chip generate` in
+the listing; `--json` returns the full details (family, cores, flash and RAM
+ranges) for scripting.
 
 ## Output and exit codes
 

@@ -38,6 +38,7 @@ npx -y cmsis-dap-cli --help
 | `flash erase --address A --size N` / `flash program --address A --file F [--format elf\|axf\|bin\|hex] [--verify]` | Flash 擦除 / 烧录 |
 | `script --file F` 或 `--text TEXT` | 运行 J-Link / OpenOCD 风格脚本 |
 | `chip generate --flm F --flash-start A --flash-size N --sram-start A --sram-size N [--name NAME] [--output FILE]` | 从 Keil FLM 生成 probe-rs target YAML |
+| `chip list` / `chip search KEYWORD` | 列出或搜索芯片变体（内置库 + `--target-yaml` 自定义芯片） |
 | `repl` | 交互式 shell（J-Link Commander 风格） |
 
 需要目标的命令会自动使用全局连接参数建立连接。数字支持十进制或十六进制
@@ -86,6 +87,21 @@ cmsis-dap-cli --target-yaml MYCHIP.yaml --target MYCHIP connect
 
 生成的 YAML 会把算法放在 `SRAM 起始 + 0x20`；请确保提供的 SRAM 范围能容纳
 算法（放不下时命令会拒绝生成）。
+
+## 查看与搜索芯片
+
+想知道有哪些芯片可用（用于 `--target` 或 REPL 里的 `device`），可以列出或
+搜索 probe-rs 内置芯片库：
+
+```bash
+cmsis-dap-cli chip list
+cmsis-dap-cli chip search STM32F103
+cmsis-dap-cli chip search stm32f103c8
+```
+
+搜索不区分大小写，按芯片名字符串匹配。加 `--target-yaml FILE` 可以把
+`chip generate` 生成的自定义芯片也纳入列表；`--json` 输出完整信息（所属
+系列、内核、Flash 与 RAM 范围），方便脚本处理。
 
 ## 输出与退出码
 
