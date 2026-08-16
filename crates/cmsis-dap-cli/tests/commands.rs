@@ -410,3 +410,79 @@ fn reset_run_mode_works() {
     let out = execute(&["cmsis-dap-cli", "reset", "--mode", "run"]).unwrap();
     assert_eq!(out["mode"], serde_json::json!("run"));
 }
+
+#[test]
+fn connect_auto_selects_single_variant_from_target_yaml() {
+    let yaml = r#"name: TestFamily
+variants:
+- name: TestChip
+  cores:
+  - name: main
+    type: armv6m
+    core_access_options: !Arm
+      ap: !v1 0
+  memory_map:
+  - !Ram
+    name: SRAM
+    range:
+      start: 0x20000000
+      end: 0x20002000
+    cores:
+    - main
+"#;
+    let mut f = tempfile::NamedTempFile::new().unwrap();
+    f.write_all(yaml.as_bytes()).unwrap();
+    let out = execute(&[
+        "cmsis-dap-cli",
+        "--target-yaml",
+        f.path().to_str().unwrap(),
+        "connect",
+    ])
+    .unwrap();
+    assert!(out["target"]["core_type"].as_str().is_some());
+}
+
+#[test]
+fn connect_requires_target_for_multi_variant_yaml() {
+    let yaml = r#"name: TestFamily
+variants:
+- name: ChipA
+  cores:
+  - name: main
+    type: armv6m
+    core_access_options: !Arm
+      ap: !v1 0
+  memory_map:
+  - !Ram
+    name: SRAM
+    range:
+      start: 0x20000000
+      end: 0x20002000
+    cores:
+    - main
+- name: ChipB
+  cores:
+  - name: main
+    type: armv6m
+    core_access_options: !Arm
+      ap: !v1 0
+  memory_map:
+  - !Ram
+    name: SRAM
+    range:
+      start: 0x20000000
+      end: 0x20002000
+    cores:
+    - main
+"#;
+    let mut f = tempfile::NamedTempFile::new().unwrap();
+    f.write_all(yaml.as_bytes()).unwrap();
+    let err = execute(&[
+        "cmsis-dap-cli",
+        "--target-yaml",
+        f.path().to_str().unwrap(),
+        "connect",
+    ])
+    .unwrap_err();
+    assert!(matches!(err, CliError::InvalidArgument(_)));
+}
