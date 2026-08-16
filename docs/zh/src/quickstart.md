@@ -65,3 +65,19 @@ resume -> {"running": true}
 ```
 
 日志只写入 stderr；MCP 协议运行在 stdout 上。
+
+## CLI 快速上手
+
+独立命令行工具 `cmsis-dap-cli` 与服务器共用同一引擎，会自动使用全局连接
+参数（`--probe-id`、`--target`、`--target-yaml` 等）：
+
+```bash
+cmsis-dap-cli --probe-id 0123456789AB --target STM32F030C8 connect
+cmsis-dap-cli --probe-id 0123456789AB --target STM32F030C8 read --address 0x20000000 --width u32 --count 4
+cmsis-dap-cli --probe-id 0123456789AB --target STM32F030C8 --elf fw.axf watch counter --interval-ms 200 --count 0
+cmsis-dap-cli --probe-id 0123456789AB --target STM32F030C8 --elf fw.axf rtt monitor --count 0
+cmsis-dap-cli --probe-id 0123456789AB --target STM32F030C8 --elf fw.axf evr monitor --count 0
+```
+
+用 `repl` 保持单一会话（halt/读/恢复跨行执行，或在 `reset run` 后运行
+watch/RTT/Event Recorder 监控）。完整命令参考见[命令行工具](./cli.md)。
