@@ -840,21 +840,36 @@ impl Backend for ProbeRsBackend {
                 loader.commit(session, options).map_err(file_error)?;
                 Ok(data.len() as u64)
             }
-            ImageFileFormat::Elf | ImageFileFormat::Axf => {
-                let factory =
-                    image_format("elf").ok_or_else(|| file_error("elf format is unavailable"))?;
+            ImageFileFormat::Elf | ImageFileFormat::Axf | ImageFileFormat::Hex => {
+                let format_name = if matches!(format, ImageFileFormat::Hex) {
+                    "hex"
+                } else {
+                    "elf"
+                };
+                let factory = image_format(format_name)
+                    .ok_or_else(|| file_error(format!("{format_name} format is unavailable")))?;
                 let loader = build_loader(session, path, factory.create_loader(None), None)
                     .map_err(file_error)?;
-                let bytes = loader.data().map(|(_, d)| d.len() as u64).sum::<u64>();
-                loader.commit(session, options).map_err(file_error)?;
-                Ok(bytes)
-            }
-            ImageFileFormat::Hex => {
-                let factory =
-                    image_format("hex").ok_or_else(|| file_error("hex format is unavailable"))?;
-                let loader = build_loader(session, path, factory.create_loader(None), None)
-                    .map_err(file_error)?;
-                let bytes = loader.data().map(|(_, d)| d.len() as u64).sum::<u64>();
+                // Report only the bytes that actually land in flash (NVM);
+                // images may also carry RAM initialization data.
+                let nvm_ranges: Vec<(u64, u64)> = session
+                    .target()
+                    .memory_map
+                    .iter()
+                    .filter_map(MemoryRegion::as_nvm_region)
+                    .filter(|r| !r.is_alias)
+                    .map(|r| (r.range.start, r.range.end))
+                    .collect();
+                let bytes = loader
+                    .data()
+                    .filter(|(addr, d)| {
+                        let end = addr.saturating_add(d.len() as u64);
+                        nvm_ranges
+                            .iter()
+                            .any(|(start, end_nvm)| *addr < *end_nvm && end > *start)
+                    })
+                    .map(|(_, d)| d.len() as u64)
+                    .sum::<u64>();
                 loader.commit(session, options).map_err(file_error)?;
                 Ok(bytes)
             }
