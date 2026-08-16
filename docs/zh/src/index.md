@@ -9,6 +9,9 @@
 两者都可以枚举探针、通过 SWD/JTAG 连接、读写内存与内核寄存器、控制执行、
 用 SVD 访问命名外设、从固件文件烧录 Flash，并运行 J-Link / OpenOCD 风格
 调试脚本。
+CLI 还额外提供实时调试能力：`watch`（按可配置刷新间隔轮询变量）、`rtt
+monitor`（SEGGER RTT 日志）与 `evr monitor`（CMSIS-View Event Recorder）都
+走 SWD/JTAG——无需串口——并支持带时间戳的日志导出。
 
 - 通用 Cortex-M 支持：标准内核无需芯片适配即可调试。
 - 命名外设访问：运行时加载任意 CMSIS-SVD 文件；仓库不捆绑任何芯片文件。

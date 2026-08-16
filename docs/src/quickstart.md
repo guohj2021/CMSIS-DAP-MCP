@@ -68,4 +68,21 @@ read_core_register {name: pc} -> {"value": 134228884}
 resume -> {"running": true}
 ```
 
+## CLI quick start
+
+The standalone `cmsis-dap-cli` shares the same engine and auto-connects with
+the global options (`--probe-id`, `--target`, `--target-yaml`, ...):
+
+```bash
+cmsis-dap-cli --probe-id 0123456789AB --target STM32F030C8 connect
+cmsis-dap-cli --probe-id 0123456789AB --target STM32F030C8 read --address 0x20000000 --width u32 --count 4
+cmsis-dap-cli --probe-id 0123456789AB --target STM32F030C8 --elf fw.axf watch counter --interval-ms 200 --count 0
+cmsis-dap-cli --probe-id 0123456789AB --target STM32F030C8 --elf fw.axf rtt monitor --count 0
+cmsis-dap-cli --probe-id 0123456789AB --target STM32F030C8 --elf fw.axf evr monitor --count 0
+```
+
+Use `repl` to keep one session open (halt/read/resume across lines, or run the
+watch/RTT/Event Recorder monitors after `reset run`). See the
+[CLI reference](./cli.md) for the full command set.
+
 Logs go to stderr only; the MCP protocol runs over stdout.
