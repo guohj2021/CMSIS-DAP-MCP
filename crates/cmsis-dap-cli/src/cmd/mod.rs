@@ -673,9 +673,15 @@ pub fn run(
                         "script contains destructive commands; run with --yes to allow them".into(),
                     )
                 } else {
+                    let detail = report
+                        .results
+                        .iter()
+                        .find(|r| r.status == "error")
+                        .and_then(|r| r.output.get("message").and_then(|m| m.as_str()))
+                        .unwrap_or("script failed");
                     CliError::Mcp(McpError::new(
                         ErrorCode::InternalError,
-                        "script failed; inspect the script report for details",
+                        format!("script failed: {detail}"),
                     ))
                 });
             }

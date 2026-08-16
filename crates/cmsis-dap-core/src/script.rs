@@ -429,6 +429,7 @@ fn dispatch(
         }
         "loadbin" => {
             require_destructive(policy)?;
+            session.require_flash_defined()?;
             let path = args
                 .first()
                 .ok_or_else(|| invalid("loadbin requires a path"))?;
@@ -452,6 +453,7 @@ fn dispatch(
         }
         "loadfile" | "flash write_image" => {
             require_destructive(policy)?;
+            session.require_flash_defined()?;
             let path = args
                 .first()
                 .ok_or_else(|| invalid("loadfile requires a path"))?;
@@ -472,11 +474,13 @@ fn dispatch(
         }
         "erase" => {
             require_destructive(policy)?;
+            session.require_flash_defined()?;
             session.backend().erase_flash(0, u64::MAX)?;
             Ok(serde_json::json!({ "erased": true }))
         }
         "flash erase_sector" => {
             require_destructive(policy)?;
+            session.require_flash_defined()?;
             let address = args
                 .first()
                 .map(|a| parse_u64(a))
