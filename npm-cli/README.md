@@ -12,7 +12,9 @@ Cortex-M chips over **SWD** or **JTAG**. It shares the same engine as the
 `cmsis-dap-mcp` server, so you can do everything from a terminal or a script
 without an AI client: enumerate probes, read/write memory and core registers,
 control execution, use named peripherals via SVD files, program flash, run
-J-Link / OpenOCD style scripts, and enter an interactive shell.
+J-Link / OpenOCD style scripts, enter an interactive shell, and read live
+variables and firmware logs (`watch`, `rtt monitor`, `evr monitor`) over
+SWD/JTAG — no UART needed — with timestamped log export.
 
 ## Install
 
@@ -34,12 +36,16 @@ cmsis-dap-cli --target STM32F030C8 read --address 0x20000000 --width u32 --count
 cmsis-dap-cli --target STM32F030C8 halt
 cmsis-dap-cli --target STM32F030C8 reg get pc
 cmsis-dap-cli --target STM32F030C8 flash program --address 0x08000000 --file fw.hex --verify
+cmsis-dap-cli --target STM32F030C8 --elf fw.axf watch counter --interval-ms 200 --count 0
+cmsis-dap-cli --target STM32F030C8 --elf fw.axf rtt monitor --channel 0 --count 0
+cmsis-dap-cli --target STM32F030C8 --elf fw.axf evr monitor --level error,op --count 0
 cmsis-dap-cli --target STM32F030C8 repl
 ```
 
 Commands that need a target auto-connect using the global connection options
 (`--probe-id`, `--protocol`, `--speed-khz`, `--target`, `--under-reset`,
-`--target-yaml`).
+`--target-yaml`). `--elf FILE` provides symbol names for `watch` / `rtt` /
+`evr`.
 
 ## Command overview
 
@@ -56,10 +62,17 @@ Commands that need a target auto-connect using the global connection options
 | `flash erase/program` | flash erase and programming |
 | `script --file/--text` | J-Link / OpenOCD style scripts |
 | `chip generate/list/search` | generate target YAML from an FLM, list/search chips |
+| `symbols list/resolve` | inspect firmware ELF symbols (needs `--elf FILE`) |
+| `watch` | poll variables live with a refresh interval (needs a session) |
+| `rtt info/monitor` | SEGGER RTT up-channel logging (needs `--elf` or RAM scan) |
+| `evr info/monitor` | CMSIS-View Event Recorder decoding (needs `--elf`) |
 | `repl` | interactive shell |
 
 Use `--json` for machine-readable output. Flash erase/program run directly;
-they require a target that defines flash.
+they require a target that defines flash. Monitor commands
+(`watch`/`rtt monitor`/`evr monitor`) print timestamped lines and export the
+same log to the current directory by default (`--log-dir` / `--log-file` to
+choose the location); `--count 0` runs until Ctrl-C.
 
 ## Examples
 
@@ -71,6 +84,9 @@ cmsis-dap-cli --target STM32F030C8 flash erase --address 0x08000000 --size 0x100
 cmsis-dap-cli --target STM32F030C8 flash program --address 0x08000000 --file fw.hex --verify
 cmsis-dap-cli --svd target.svd svd read GPIOA.ODR.ODR0
 cmsis-dap-cli --target STM32F030C8 script --file flash.jlink
+cmsis-dap-cli --target STM32F030C8 --elf fw.axf watch counter --count 0 --log-dir logs
+cmsis-dap-cli --target STM32F030C8 --elf fw.axf rtt monitor --channel 0,1 --count 0
+cmsis-dap-cli --target STM32F030C8 --elf fw.axf evr monitor --count 0
 cmsis-dap-cli --target STM32F030C8 repl
 ```
 
@@ -105,7 +121,8 @@ MIT OR Apache-2.0
 **JTAG** 工作。它与 `cmsis-dap-mcp` 服务器共用同一套引擎，在终端或脚本里
 无需 AI 客户端即可完成：枚举探针、读写内存与内核寄存器、控制执行、用 SVD
 访问命名外设、烧录 Flash、运行 J-Link / OpenOCD 风格脚本，以及进入交互式
-shell。
+shell。还支持实时变量观察与固件日志读取（`watch`、`rtt monitor`、`evr
+monitor`），全部走 SWD/JTAG——无需串口——并支持带时间戳的日志导出。
 
 ## 安装
 
@@ -126,11 +143,15 @@ cmsis-dap-cli --target STM32F030C8 read --address 0x20000000 --width u32 --count
 cmsis-dap-cli --target STM32F030C8 halt
 cmsis-dap-cli --target STM32F030C8 reg get pc
 cmsis-dap-cli --target STM32F030C8 flash program --address 0x08000000 --file fw.hex --verify
+cmsis-dap-cli --target STM32F030C8 --elf fw.axf watch counter --interval-ms 200 --count 0
+cmsis-dap-cli --target STM32F030C8 --elf fw.axf rtt monitor --channel 0 --count 0
+cmsis-dap-cli --target STM32F030C8 --elf fw.axf evr monitor --level error,op --count 0
 cmsis-dap-cli --target STM32F030C8 repl
 ```
 
 需要目标的命令会自动使用全局连接参数（`--probe-id`、`--protocol`、
-`--speed-khz`、`--target`、`--under-reset`、`--target-yaml`）。
+`--speed-khz`、`--target`、`--under-reset`、`--target-yaml`）。`--elf FILE`
+为 `watch`/`rtt`/`evr` 提供符号名。
 
 ## 命令一览
 
@@ -147,9 +168,16 @@ cmsis-dap-cli --target STM32F030C8 repl
 | `flash erase/program` | Flash 擦除与烧录 |
 | `script --file/--text` | J-Link / OpenOCD 风格脚本 |
 | `chip generate/list/search` | 从 FLM 生成 target YAML、列出/搜索芯片 |
+| `symbols list/resolve` | 查看固件 ELF 符号（需 `--elf FILE`） |
+| `watch` | 按刷新间隔实时轮询变量（需会话） |
+| `rtt info/monitor` | SEGGER RTT 上行通道日志（需 `--elf` 或 RAM 扫描） |
+| `evr info/monitor` | CMSIS-View Event Recorder 解码（需 `--elf`） |
 | `repl` | 交互式 shell |
 
 `--json` 输出机器可读结果。Flash 擦除/烧录直接执行；目标必须定义了 Flash。
+监控命令（`watch`/`rtt monitor`/`evr monitor`）打印带时间戳的行，并默认把
+同样内容导出到当前目录的日志（`--log-dir`/`--log-file` 指定位置）；
+`--count 0` 一直运行到 Ctrl-C。
 
 ## 示例
 
@@ -161,6 +189,9 @@ cmsis-dap-cli --target STM32F030C8 flash erase --address 0x08000000 --size 0x100
 cmsis-dap-cli --target STM32F030C8 flash program --address 0x08000000 --file fw.hex --verify
 cmsis-dap-cli --svd target.svd svd read GPIOA.ODR.ODR0
 cmsis-dap-cli --target STM32F030C8 script --file flash.jlink
+cmsis-dap-cli --target STM32F030C8 --elf fw.axf watch counter --count 0 --log-dir logs
+cmsis-dap-cli --target STM32F030C8 --elf fw.axf rtt monitor --channel 0,1 --count 0
+cmsis-dap-cli --target STM32F030C8 --elf fw.axf evr monitor --count 0
 cmsis-dap-cli --target STM32F030C8 repl
 ```
 

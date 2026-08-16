@@ -244,8 +244,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1aa79e62e7697b8e29b513a68abacf485adcd1fe8284a4316c5ae868e6633327"
 dependencies = [
  "iana-time-zone",
+ "js-sys",
  "num-traits",
  "serde",
+ "wasm-bindgen",
  "windows-link",
 ]
 
@@ -294,14 +296,17 @@ name = "cmsis-dap-cli"
 version = "0.4.0"
 dependencies = [
  "base64 0.22.1",
+ "chrono",
  "clap",
  "cmsis-dap-core",
+ "libc",
  "object",
  "serde_json",
  "tempfile",
  "thiserror 2.0.20",
  "tracing",
  "tracing-subscriber",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
