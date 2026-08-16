@@ -96,6 +96,67 @@ impl ScriptEngine {
         &mut self.policy
     }
 
+    /// Execute a full script and produce the same report shape as `run`.
+    pub fn run_script(
+        &mut self,
+        session: &mut SessionManager,
+        script: &str,
+    ) -> Result<ScriptReport, McpError> {
+        let mut report = ScriptReport {
+            ok: true,
+            commands: 0,
+            results: Vec::new(),
+        };
+
+        for line in logical_lines(script) {
+            let Some(tokens) = tokenize(&line) else {
+                continue;
+            };
+            if tokens.is_empty() {
+                continue;
+            }
+            report.commands += 1;
+            let display = tokens.join(" ");
+            match self.execute_line(session, &line) {
+                Ok(Some(output)) => {
+                    let stopped = output
+                        .get("stopped")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+                    report.results.push(CommandResult {
+                        command: display,
+                        status: "ok".into(),
+                        output,
+                    });
+                    if stopped {
+                        break;
+                    }
+                }
+                Ok(None) => {
+                    report.results.push(CommandResult {
+                        command: display,
+                        status: "ok".into(),
+                        output: serde_json::json!(null),
+                    });
+                }
+                Err(e) => {
+                    report.results.push(CommandResult {
+                        command: display,
+                        status: "error".into(),
+                        output: serde_json::json!({
+                            "code": format!("{:?}", e.code),
+                            "message": e.message,
+                        }),
+                    });
+                    report.ok = false;
+                    break;
+                }
+            }
+        }
+
+        Ok(report)
+    }
+
     /// Execute one logical line against the session.
     ///
     /// Returns `Ok(None)` for blank or comment-only lines, `Ok(Some(value))`
@@ -127,60 +188,7 @@ pub fn run(
     policy: &SecurityPolicy,
     script: &str,
 ) -> Result<ScriptReport, McpError> {
-    let mut engine = ScriptEngine::new(policy.clone());
-    let mut report = ScriptReport {
-        ok: true,
-        commands: 0,
-        results: Vec::new(),
-    };
-
-    for line in logical_lines(script) {
-        let Some(tokens) = tokenize(&line) else {
-            continue;
-        };
-        if tokens.is_empty() {
-            continue;
-        }
-        report.commands += 1;
-        let display = tokens.join(" ");
-        match engine.execute_line(session, &line) {
-            Ok(Some(output)) => {
-                let stopped = output
-                    .get("stopped")
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(false);
-                report.results.push(CommandResult {
-                    command: display,
-                    status: "ok".into(),
-                    output,
-                });
-                if stopped {
-                    break;
-                }
-            }
-            Ok(None) => {
-                report.results.push(CommandResult {
-                    command: display,
-                    status: "ok".into(),
-                    output: serde_json::json!(null),
-                });
-            }
-            Err(e) => {
-                report.results.push(CommandResult {
-                    command: display,
-                    status: "error".into(),
-                    output: serde_json::json!({
-                        "code": format!("{:?}", e.code),
-                        "message": e.message,
-                    }),
-                });
-                report.ok = false;
-                break;
-            }
-        }
-    }
-
-    Ok(report)
+    ScriptEngine::new(policy.clone()).run_script(session, script)
 }
 
 fn logical_lines(script: &str) -> Vec<String> {
