@@ -441,7 +441,15 @@ fn dispatch(
                 "targets": info.map(|t| serde_json::json!({ "core_type": t.core_type })).into_iter().collect::<Vec<_>>()
             }))
         }
-        "cmsis-dap vid_pid" => Ok(serde_json::json!({ "accepted": true, "note": "ignored" })),
+        "cmsis-dap" => {
+            let Some(sub) = args.first() else {
+                return Err(invalid("cmsis-dap requires vid_pid"));
+            };
+            if !sub.eq_ignore_ascii_case("vid_pid") {
+                return Err(invalid("unknown cmsis-dap command"));
+            }
+            Ok(serde_json::json!({ "accepted": true, "note": "ignored" }))
+        }
 
         // ---- core ----
         "halt" => {
