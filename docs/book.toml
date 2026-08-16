@@ -2,3 +2,6 @@
 title = "CMSIS-DAP MCP"
 authors = ["guohj2021"]
 language = "en"
+
+[output.html]
+site-url = "/CMSIS-DAP-MCP/"
