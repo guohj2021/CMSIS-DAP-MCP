@@ -54,6 +54,28 @@ flash from firmware files, and run repeatable debug scripts.
 | Scripts | `run_script` (J-Link / OpenOCD style) |
 | Flash | `erase_flash`, `program_flash` |
 
+## Architecture
+
+```mermaid
+flowchart LR
+  Client["MCP client<br/>Codex / Claude Code / opencode"] -->|MCP stdio JSON-RPC| Server
+  subgraph Server["cmsis-dap-mcp (single Rust process)"]
+    Tools["Tool layer<br/>probe · memory · core · dap · svd · flash · file · script"]
+    Security["Security policy<br/>read-only / write / destructive"]
+    Session["SessionManager"]
+    Script["Script engine<br/>J-Link / OpenOCD style"]
+    Tools --> Security --> Session --> Script
+  end
+  Server --> Probe["CMSIS-DAP probe"]
+  Probe -->|SWD / JTAG| Target["Cortex-M target"]
+```
+
+The server is a pure MCP stdio process: an AI client drives it, a `Backend`
+abstraction sits between the tool layer and probe-rs (with a mock backend for
+tests), and logs never touch stdout. See the
+[Architecture](https://guohj2021.github.io/CMSIS-DAP-MCP/architecture.html)
+page for module responsibilities and data flow.
+
 ## Quickstart (npm, recommended)
 
 Install nothing. Configure your MCP client to launch the server with `npx`:
@@ -244,6 +266,27 @@ SWD 或 JTAG 连接、读写内存与内核寄存器、控制执行、用 SVD �
 | 文件 | `program_flash`（`axf`/`elf`/`bin`/`hex`）、`read_memory` 导出 |
 | 脚本 | `run_script`（J-Link / OpenOCD 风格） |
 | Flash | `erase_flash`、`program_flash` |
+
+## 架构
+
+```mermaid
+flowchart LR
+  Client["MCP 客户端<br/>Codex / Claude Code / opencode"] -->|MCP stdio JSON-RPC| Server
+  subgraph Server["cmsis-dap-mcp（单个 Rust 进程）"]
+    Tools["工具层<br/>probe · memory · core · dap · svd · flash · file · script"]
+    Security["安全策略<br/>只读 / 写 / 破坏性"]
+    Session["会话管理 SessionManager"]
+    Script["脚本引擎<br/>J-Link / OpenOCD 风格"]
+    Tools --> Security --> Session --> Script
+  end
+  Server --> Probe["CMSIS-DAP 探针"]
+  Probe -->|SWD / JTAG| Target["Cortex-M 目标"]
+```
+
+服务器是纯 MCP stdio 进程：由 AI 客户端驱动，工具层与 probe-rs 之间隔着一层
+`Backend` 抽象（另有 Mock 后端用于测试），日志不写 stdout。模块职责与数据流
+见[架构说明](https://guohj2021.github.io/CMSIS-DAP-MCP/zh/architecture.html)
+页面。
 
 ## 快速开始（npm，推荐）
 
