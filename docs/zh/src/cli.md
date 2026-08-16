@@ -85,6 +85,9 @@ cmsis-dap-cli chip generate \
 cmsis-dap-cli --target-yaml MYCHIP.yaml --target MYCHIP connect
 ```
 
+当 target YAML 只定义一颗芯片变体时，`--target` 可以省略，CLI 会自动选择；
+若定义了多颗，则必须给 `--target NAME`（命令会提示可用的名字）。
+
 生成的 YAML 会把算法放在 `SRAM 起始 + 0x20`；请确保提供的 SRAM 范围能容纳
 算法（放不下时命令会拒绝生成）。
 
