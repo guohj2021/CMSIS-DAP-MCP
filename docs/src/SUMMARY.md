@@ -3,6 +3,7 @@
 - [Introduction](./index.md)
 - [Quickstart](./quickstart.md)
 - [AI client configuration](./ai-clients.md)
+- [Architecture](./architecture.md)
 - [Tools](./tools.md)
 - [Scripting](./scripting.md)
 - [SWD and JTAG](./swd-jtag.md)

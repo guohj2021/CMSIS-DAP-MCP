@@ -3,6 +3,7 @@
 - [简介](./index.md)
 - [快速开始](./quickstart.md)
 - [AI 客户端配置](./ai-clients.md)
+- [架构说明](./architecture.md)
 - [工具参考](./tools.md)
 - [脚本使用](./scripting.md)
 - [SWD 与 JTAG](./swd-jtag.md)
