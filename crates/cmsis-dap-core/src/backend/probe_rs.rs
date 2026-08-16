@@ -53,6 +53,29 @@ pub fn registry_from_yaml(path: &std::path::Path) -> Result<probe_rs::config::Re
     Ok(registry)
 }
 
+/// List the chip variants defined by a target YAML file.
+pub fn target_yaml_variants(path: &std::path::Path) -> Result<Vec<String>, McpError> {
+    let yaml = std::fs::read_to_string(path).map_err(|e| {
+        file_error(format!(
+            "failed to read target yaml {}: {e}",
+            path.display()
+        ))
+    })?;
+    let mut registry = probe_rs::config::Registry::from_builtin_families();
+    let family = registry.add_target_family_from_yaml(&yaml).map_err(|e| {
+        file_error(format!(
+            "failed to parse target yaml {}: {e}",
+            path.display()
+        ))
+    })?;
+    Ok(registry
+        .families()
+        .iter()
+        .find(|f| f.name == family)
+        .map(|f| f.variants.iter().map(|v| v.name.clone()).collect())
+        .unwrap_or_default())
+}
+
 /// A concise chip variant summary for CLI listing.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ChipSummary {

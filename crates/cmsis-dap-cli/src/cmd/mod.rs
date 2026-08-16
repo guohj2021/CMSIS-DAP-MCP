@@ -501,14 +501,39 @@ fn connect(
     globals: &Globals,
     session: &mut SessionManager,
 ) -> Result<cmsis_dap_core::backend::TargetInfo, CliError> {
+    let target = resolve_target(globals)?;
     let opts = ConnectOptions {
         probe_id: globals.probe_id.clone(),
         protocol: parse_protocol(&globals.protocol)?,
         speed_khz: globals.speed_khz,
-        target: globals.target.clone(),
+        target,
         under_reset: globals.under_reset,
     };
     Ok(session.connect(&opts)?)
+}
+
+/// Resolve the target chip name: use `--target` when given, otherwise
+/// auto-select the single variant from `--target-yaml` (or fail with a clear
+/// error when the file defines several).
+fn resolve_target(globals: &Globals) -> Result<Option<String>, CliError> {
+    if let Some(target) = &globals.target {
+        return Ok(Some(target.clone()));
+    }
+    let Some(path) = &globals.target_yaml else {
+        return Ok(None);
+    };
+    let variants = cmsis_dap_core::backend::probe_rs::target_yaml_variants(path)?;
+    match variants.as_slice() {
+        [single] => Ok(Some(single.clone())),
+        [] => Err(CliError::InvalidArgument(format!(
+            "no chip variants found in {}",
+            path.display()
+        ))),
+        many => Err(CliError::InvalidArgument(format!(
+            "--target is required; target yaml defines multiple variants: {}",
+            many.join(", ")
+        ))),
+    }
 }
 
 fn load_svd(globals: &Globals, session: &mut SessionManager) -> Result<(), CliError> {
