@@ -228,10 +228,9 @@ pub fn svd(session: &mut SessionManager, a: &SvdArgs) -> Result<Value, CliError>
     }
 }
 
-pub fn flash(session: &mut SessionManager, a: &FlashArgs, yes: bool) -> Result<Value, CliError> {
+pub fn flash(session: &mut SessionManager, a: &FlashArgs) -> Result<Value, CliError> {
     match &a.action {
         FlashAction::Erase(e) => {
-            super::confirm_destructive(yes, "flash erase")?;
             session.require_flash_defined()?;
             session.backend().erase_flash(e.address, e.size)?;
             Ok(json!({
@@ -241,7 +240,6 @@ pub fn flash(session: &mut SessionManager, a: &FlashArgs, yes: bool) -> Result<V
             }))
         }
         FlashAction::Program(p) => {
-            super::confirm_destructive(yes, "flash program")?;
             session.require_flash_defined()?;
             let format = match &p.format {
                 Some(f) => ImageFileFormat::parse(f).ok_or_else(|| {
