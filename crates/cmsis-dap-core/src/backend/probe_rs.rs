@@ -546,14 +546,21 @@ impl Backend for ProbeRsBackend {
         let end = address
             .checked_add(size)
             .ok_or_else(|| McpError::new(ErrorCode::InvalidArgument, "erase range overflows"))?;
-        let mut progress = FlashProgress::new(|_| {});
-        let covers_all = session
+        let mut nvm_regions = session
             .target()
             .memory_map
             .iter()
             .filter_map(MemoryRegion::as_nvm_region)
-            .filter(|r| !r.is_alias)
-            .all(|r| address <= r.range.start && r.range.end <= end);
+            .filter(|r| !r.is_alias);
+        let nvm_count = nvm_regions.clone().count();
+        if nvm_count == 0 {
+            return Err(McpError::new(
+                ErrorCode::UnsupportedFeature,
+                "target has no flash memory definition; connect with a chip target that defines flash",
+            ));
+        }
+        let mut progress = FlashProgress::new(|_| {});
+        let covers_all = nvm_regions.all(|r| address <= r.range.start && r.range.end <= end);
         let result = if covers_all {
             erase_all(session, &mut progress, false)
         } else {
