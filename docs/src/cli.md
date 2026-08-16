@@ -90,6 +90,10 @@ with the same tool:
 cmsis-dap-cli --target-yaml MYCHIP.yaml --target MYCHIP connect
 ```
 
+When the target YAML defines exactly one chip variant, `--target` can be
+omitted — the CLI auto-selects it. If it defines several variants, `--target
+NAME` is required (the command lists the available names).
+
 The generated YAML places the algorithm at `SRAM start + 0x20`; make sure the
 SRAM range you provide is large enough for the algorithm (the command refuses
 to emit a YAML whose algorithm does not fit).
