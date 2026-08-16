@@ -1,7 +1,10 @@
 pub mod actions;
 pub mod chip;
+pub mod live;
 pub mod output;
 pub mod repl;
+pub mod signal;
+pub mod symbols;
 
 use clap::{Args, Parser, Subcommand};
 use cmsis_dap_core::backend::probe_rs::ProbeRsBackend;
@@ -50,7 +53,7 @@ fn parse_u32_arg(s: &str) -> Result<u32, String> {
     parse_u64_arg(s).and_then(|v| u32::try_from(v).map_err(|_| format!("number out of range: {s}")))
 }
 
-fn parse_width(s: &str) -> Result<AccessWidth, CliError> {
+pub fn parse_width(s: &str) -> Result<AccessWidth, CliError> {
     match s {
         "u8" => Ok(AccessWidth::U8),
         "u16" => Ok(AccessWidth::U16),
@@ -130,6 +133,9 @@ pub struct CliArgs {
     /// SVD file for named peripheral access (svd subcommands).
     #[arg(long, global = true, value_name = "FILE")]
     pub svd: Option<PathBuf>,
+    /// Firmware ELF for symbol resolution (symbols/watch/rtt/evr).
+    #[arg(long, global = true, value_name = "FILE")]
+    pub elf: Option<PathBuf>,
     /// Print machine-readable JSON instead of human text.
     #[arg(long, global = true)]
     pub json: bool,
@@ -189,6 +195,14 @@ pub enum Command {
     Script(ScriptArgs),
     /// Chip definition tooling (generate target YAML from a Keil FLM).
     Chip(ChipArgs),
+    /// Inspect symbols from a firmware ELF (--elf).
+    Symbols(SymbolsArgs),
+    /// Poll variables at an address or ELF symbol (live watch).
+    Watch(WatchArgs),
+    /// J-Link RTT up-channel logging.
+    Rtt(RttArgs),
+    /// CMSIS-View Event Recorder decoding.
+    Evr(EvrArgs),
     /// Interactive shell (J-Link Commander style commands).
     Repl,
 }
@@ -451,6 +465,128 @@ pub struct ChipSearchArgs {
     pub keyword: String,
 }
 
+#[derive(Debug, Args)]
+pub struct SymbolsArgs {
+    #[command(subcommand)]
+    pub action: SymbolsAction,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum SymbolsAction {
+    /// List symbols, optionally filtered by a case-insensitive substring.
+    List(SymbolsListArgs),
+    /// Resolve one symbol name to its address.
+    Resolve(SymbolsResolveArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct SymbolsListArgs {
+    /// Optional case-insensitive substring filter.
+    pub pattern: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct SymbolsResolveArgs {
+    pub name: String,
+}
+
+#[derive(Debug, Args)]
+pub struct WatchArgs {
+    /// Poll interval in milliseconds.
+    #[arg(long, value_parser = parse_u32_arg, default_value_t = 500)]
+    pub interval_ms: u32,
+    /// Number of samples; 0 runs until Ctrl-C.
+    #[arg(long, value_parser = parse_u32_arg, default_value_t = 1)]
+    pub count: u32,
+    /// Access width applied to every target.
+    #[arg(long, value_parser = ["u8", "u16", "u32", "u64"], default_value = "u32")]
+    pub width: String,
+    /// Targets: symbol names (resolved via --elf) or 0xADDR addresses.
+    #[arg(required = true)]
+    pub targets: Vec<String>,
+    /// Write a timestamped log into this directory (default: current dir).
+    #[arg(long, value_name = "DIR", conflicts_with = "log_file")]
+    pub log_dir: Option<PathBuf>,
+    /// Append the timestamped log to this exact file.
+    #[arg(long, value_name = "FILE", conflicts_with = "log_dir")]
+    pub log_file: Option<PathBuf>,
+}
+
+#[derive(Debug, Args)]
+pub struct RttArgs {
+    #[command(subcommand)]
+    pub action: RttAction,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum RttAction {
+    /// Attach to RTT and list up channels.
+    Info,
+    /// Poll RTT up channels and print logs.
+    Monitor(RttMonitorArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct RttMonitorArgs {
+    /// Comma-separated up channel numbers to monitor.
+    #[arg(long, default_value = "0")]
+    pub channel: String,
+    /// Poll interval in milliseconds.
+    #[arg(long, value_parser = parse_u32_arg, default_value_t = 200)]
+    pub interval_ms: u32,
+    /// Number of polls; 0 runs until Ctrl-C.
+    #[arg(long, value_parser = parse_u32_arg, default_value_t = 0)]
+    pub count: u32,
+    /// RTT control block address override (default: --elf _SEGGER_RTT, then RAM scan).
+    #[arg(long, value_parser = parse_u64_arg)]
+    pub address: Option<u64>,
+    /// Maximum bytes to read per channel per poll.
+    #[arg(long, value_parser = parse_u32_arg, default_value_t = 1024)]
+    pub max_bytes: u32,
+    /// Write a timestamped log into this directory (default: current dir).
+    #[arg(long, value_name = "DIR", conflicts_with = "log_file")]
+    pub log_dir: Option<PathBuf>,
+    /// Append the timestamped log to this exact file.
+    #[arg(long, value_name = "FILE", conflicts_with = "log_dir")]
+    pub log_file: Option<PathBuf>,
+}
+
+#[derive(Debug, Args)]
+pub struct EvrArgs {
+    #[command(subcommand)]
+    pub action: EvrAction,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum EvrAction {
+    /// Attach to the Event Recorder and show its state.
+    Info,
+    /// Poll committed events and print decoded records.
+    Monitor(EvrMonitorArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct EvrMonitorArgs {
+    /// Poll interval in milliseconds.
+    #[arg(long, value_parser = parse_u32_arg, default_value_t = 200)]
+    pub interval_ms: u32,
+    /// Number of polls; 0 runs until Ctrl-C.
+    #[arg(long, value_parser = parse_u32_arg, default_value_t = 0)]
+    pub count: u32,
+    /// Level filter (repeatable or comma list); default: all levels.
+    #[arg(long, value_delimiter = ',', value_parser = ["error", "api", "op", "detail"])]
+    pub level: Vec<String>,
+    /// EventRecorderInfo address override (default: --elf EventRecorderInfo).
+    #[arg(long, value_parser = parse_u64_arg)]
+    pub address: Option<u64>,
+    /// Write a timestamped log into this directory (default: current dir).
+    #[arg(long, value_name = "DIR", conflicts_with = "log_file")]
+    pub log_dir: Option<PathBuf>,
+    /// Append the timestamped log to this exact file.
+    #[arg(long, value_name = "FILE", conflicts_with = "log_dir")]
+    pub log_file: Option<PathBuf>,
+}
+
 #[derive(Debug, Clone)]
 pub struct ReplOptions {
     pub json: bool,
@@ -459,6 +595,7 @@ pub struct ReplOptions {
     pub speed_khz: Option<u32>,
     pub target: Option<String>,
     pub under_reset: bool,
+    pub elf: Option<PathBuf>,
 }
 
 impl Default for ReplOptions {
@@ -470,6 +607,7 @@ impl Default for ReplOptions {
             speed_khz: None,
             target: None,
             under_reset: false,
+            elf: None,
         }
     }
 }
@@ -494,6 +632,7 @@ pub(crate) struct Globals {
     under_reset: bool,
     target_yaml: Option<PathBuf>,
     svd: Option<PathBuf>,
+    elf: Option<PathBuf>,
     json: bool,
 }
 
@@ -565,6 +704,7 @@ pub fn run(
         under_reset: args.under_reset,
         target_yaml: args.target_yaml.clone(),
         svd: args.svd.clone(),
+        elf: args.elf.clone(),
         json: args.json,
     };
     match args.command {
@@ -716,6 +856,91 @@ pub fn run(
             ChipAction::List => Ok(Some(actions::chip_list(&globals)?)),
             ChipAction::Search(s) => Ok(Some(actions::chip_search(&globals, &s)?)),
         },
+        Command::Symbols(a) => match a.action {
+            SymbolsAction::List(l) => Ok(Some(live::symbols_list(
+                globals.elf.as_deref(),
+                l.pattern.as_deref(),
+            )?)),
+            SymbolsAction::Resolve(r) => Ok(Some(live::symbols_resolve(
+                globals.elf.as_deref(),
+                &r.name,
+            )?)),
+        },
+        Command::Watch(a) => {
+            connect(&globals, &mut session)?;
+            let symbols = match globals.elf.as_deref() {
+                Some(path) => Some(symbols::load_symbols(path)?),
+                None => None,
+            };
+            let width = parse_width(&a.width)?;
+            let mut items = Vec::new();
+            for target in &a.targets {
+                let (address, label) = live::resolve_target(target, symbols.as_ref())?;
+                items.push(live::WatchItem {
+                    label,
+                    address,
+                    width,
+                });
+            }
+            let stdout = std::io::stdout();
+            let mut out = stdout.lock();
+            live::watch_run(
+                &mut session,
+                &items,
+                a.interval_ms,
+                a.count,
+                globals.json,
+                &mut out,
+                live::LogTarget::from_args(a.log_dir, a.log_file),
+            )?;
+            Ok(None)
+        }
+        Command::Rtt(a) => match a.action {
+            RttAction::Info => {
+                connect(&globals, &mut session)?;
+                Ok(Some(live::rtt_info(
+                    &mut session,
+                    globals.elf.as_deref(),
+                    None,
+                )?))
+            }
+            RttAction::Monitor(m) => {
+                connect(&globals, &mut session)?;
+                let stdout = std::io::stdout();
+                let mut out = stdout.lock();
+                live::rtt_monitor(
+                    &mut session,
+                    &m,
+                    globals.elf.as_deref(),
+                    globals.json,
+                    &mut out,
+                )?;
+                Ok(None)
+            }
+        },
+        Command::Evr(a) => match a.action {
+            EvrAction::Info => {
+                connect(&globals, &mut session)?;
+                Ok(Some(live::evr_info(
+                    &mut session,
+                    globals.elf.as_deref(),
+                    None,
+                )?))
+            }
+            EvrAction::Monitor(m) => {
+                connect(&globals, &mut session)?;
+                let stdout = std::io::stdout();
+                let mut out = stdout.lock();
+                live::evr_monitor(
+                    &mut session,
+                    &m,
+                    globals.elf.as_deref(),
+                    globals.json,
+                    &mut out,
+                )?;
+                Ok(None)
+            }
+        },
         Command::Repl => {
             let stdin = std::io::stdin();
             let interactive = stdin.is_terminal();
@@ -727,6 +952,7 @@ pub fn run(
                 speed_khz: globals.speed_khz,
                 target: globals.target.clone(),
                 under_reset: globals.under_reset,
+                elf: globals.elf.clone(),
             };
             repl::run(&opts, &mut session, &mut reader, interactive)?;
             Ok(None)

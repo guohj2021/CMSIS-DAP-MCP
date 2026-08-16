@@ -1,4 +1,4 @@
-use crate::error::McpError;
+use crate::error::{ErrorCode, McpError};
 pub mod mock;
 pub mod probe_rs;
 use std::path::Path;
@@ -179,6 +179,85 @@ pub struct MemoryMismatch {
     pub actual: u64,
 }
 
+/// A channel of the target's RTT control block, as seen by the host.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct RttChannelInfo {
+    pub number: usize,
+    pub name: Option<String>,
+    pub buffer_size: usize,
+}
+
+/// Bytes read from one RTT up channel in a single poll.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct RttRead {
+    pub channel: usize,
+    pub name: Option<String>,
+    pub data: Vec<u8>,
+}
+
+/// Event Recorder level (bits 16..17 of the composed event id).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EvrLevel {
+    Error,
+    Api,
+    Op,
+    Detail,
+}
+
+impl EvrLevel {
+    pub fn from_bits(bits: u8) -> Self {
+        match bits & 0x3 {
+            0 => Self::Error,
+            1 => Self::Api,
+            2 => Self::Op,
+            _ => Self::Detail,
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Error => "error",
+            Self::Api => "api",
+            Self::Op => "op",
+            Self::Detail => "detail",
+        }
+    }
+}
+
+/// One decoded CMSIS-View Event Recorder event.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct EvrEvent {
+    pub timestamp_ticks: u64,
+    pub timestamp_secs: f64,
+    pub level: EvrLevel,
+    pub component: u16,
+    pub message: u16,
+    pub data_length: u8,
+    pub irq: bool,
+    pub first: bool,
+    pub last: bool,
+    pub sequence: u8,
+    pub val1: u32,
+    pub val2: u32,
+}
+
+/// Summary of the Event Recorder state read from the target.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct EvrStatus {
+    pub state: u8,
+    pub protocol_version: String,
+    pub record_count: u32,
+    pub records_written: u64,
+    pub records_dumped: u64,
+    pub ts_freq: u32,
+    pub ts_source: u8,
+    pub init_count: u32,
+    pub signature: u32,
+    pub event_buffer: u64,
+    pub event_status: u64,
+}
+
 /// A pure helper that maps a register name to a lookup strategy.
 ///
 /// Special roles (pc/sp/fp/lr/psr/msp/psp/fpsr) and general registers
@@ -272,4 +351,54 @@ pub trait Backend: Send {
         address: u64,
         size: u64,
     ) -> Result<u64, McpError>;
+
+    /// Attach to the target's RTT control block.
+    ///
+    /// `address` is an optional explicit control block address (from the
+    /// firmware ELF `_SEGGER_RTT` symbol or `--address`); when absent the
+    /// backend scans the target RAM.
+    fn attach_rtt(&mut self, _address: Option<u64>) -> Result<Vec<RttChannelInfo>, McpError> {
+        Err(McpError::new(
+            ErrorCode::UnsupportedFeature,
+            "RTT is not supported by this backend",
+        ))
+    }
+
+    /// Read available bytes from the given RTT up channels.
+    fn read_rtt(
+        &mut self,
+        _channels: &[usize],
+        _max_bytes: usize,
+    ) -> Result<Vec<RttRead>, McpError> {
+        Err(McpError::new(
+            ErrorCode::UnsupportedFeature,
+            "RTT is not supported by this backend",
+        ))
+    }
+
+    /// Detach from the target's RTT control block.
+    fn detach_rtt(&mut self) -> Result<(), McpError> {
+        Ok(())
+    }
+
+    /// Attach to the CMSIS-View Event Recorder at `EventRecorderInfo`.
+    fn attach_evr(&mut self, _info_address: u64) -> Result<EvrStatus, McpError> {
+        Err(McpError::new(
+            ErrorCode::UnsupportedFeature,
+            "Event Recorder is not supported by this backend",
+        ))
+    }
+
+    /// Read newly committed Event Recorder events (state is kept per backend).
+    fn read_evr(&mut self) -> Result<Vec<EvrEvent>, McpError> {
+        Err(McpError::new(
+            ErrorCode::UnsupportedFeature,
+            "Event Recorder is not supported by this backend",
+        ))
+    }
+
+    /// Detach from the Event Recorder.
+    fn detach_evr(&mut self) -> Result<(), McpError> {
+        Ok(())
+    }
 }
