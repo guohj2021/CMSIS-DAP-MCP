@@ -425,6 +425,30 @@ impl Backend for ProbeRsBackend {
         width: AccessWidth,
         data: &[u64],
     ) -> Result<(), McpError> {
+        // Direct writes to flash (NVM) regions are ignored by the flash
+        // controller; programming must go through the flash algorithm.
+        let width_bytes = match width {
+            AccessWidth::U8 => 1u64,
+            AccessWidth::U16 => 2,
+            AccessWidth::U32 => 4,
+            AccessWidth::U64 => 8,
+        };
+        if let Some(session) = self.session.as_ref() {
+            let end = address.saturating_add(width_bytes);
+            let in_flash = session
+                .target()
+                .memory_map
+                .iter()
+                .filter_map(MemoryRegion::as_nvm_region)
+                .filter(|r| !r.is_alias)
+                .any(|r| address >= r.range.start && end <= r.range.end);
+            if in_flash {
+                return Err(McpError::new(
+                    ErrorCode::UnsupportedFeature,
+                    "flash memory cannot be written directly; use flash program (erase/program via the flash algorithm)",
+                ));
+            }
+        }
         let mut core = self.core()?;
         let map_err = |e: probe_rs::Error| McpError::new(ErrorCode::MemoryFault, e.to_string());
         match width {
