@@ -1,7 +1,7 @@
 # CMSIS-DAP MCP
 
-> An MCP server that lets AI assistants operate CMSIS-DAP debug probes and
-> access Cortex-M chip resources over SWD / JTAG.
+> CMSIS-DAP tools for Cortex-M: an MCP server for AI assistants plus a
+> standalone CLI, both built on the same engine.
 
 [English](#english) · [中文](#chinese)
 
@@ -22,11 +22,16 @@
 
 ## What is it?
 
-**CMSIS-DAP MCP** is a [Model Context Protocol](https://modelcontextprotocol.io)
-server that exposes your CMSIS-DAP debug probe to AI assistants. An AI client
-can enumerate probes, connect over SWD or JTAG, read/write memory and core
+**CMSIS-DAP MCP** is a repository with two tools built on the same engine:
+
+- **cmsis-dap-mcp** — a [Model Context Protocol](https://modelcontextprotocol.io)
+  server that exposes your CMSIS-DAP debug probe to AI assistants;
+- **cmsis-dap-cli** — a standalone command-line tool for humans, scripts and
+  automation, with the same capabilities and no AI client needed.
+
+Both enumerate probes, connect over SWD / JTAG, read/write memory and core
 registers, control execution, use named peripherals via SVD files, program
-flash from firmware files, and run repeatable debug scripts.
+flash from firmware files, and run J-Link / OpenOCD style debug scripts.
 
 - Generic Cortex-M support: standard cores work without chip-specific
   adaptation.
@@ -34,12 +39,8 @@ flash from firmware files, and run repeatable debug scripts.
   never bundled.
 - Flash programming from `axf` / `elf` / `bin` / `hex` files, plus `bin` /
   `hex` memory export.
-- J-Link Commander / OpenOCD style debug scripts via `run_script`.
 - Zero runtime dependencies for end users: `npx -y cmsis-dap-mcp` or one
-  native binary.
-- Companion CLI for humans and scripts: `cmsis-dap-cli` enumerates probes,
-  reads/writes memory and registers, programs flash, exports memory and runs
-  the same J-Link / OpenOCD style scripts without an AI client.
+  native binary (`npx -y cmsis-dap-cli` for the CLI).
 - Cross-platform: Windows / Linux / macOS.
 
 ## Features
@@ -56,6 +57,9 @@ flash from firmware files, and run repeatable debug scripts.
 | Files | `program_flash` (`axf`/`elf`/`bin`/`hex`), `read_memory` export |
 | Scripts | `run_script` (J-Link / OpenOCD style) |
 | Flash | `erase_flash`, `program_flash` |
+
+The CLI mirrors these capabilities as subcommands (`read`, `write`, `reg`,
+`halt`, `flash program`, `svd read`, ...); see the [CLI section](#cli).
 
 ## Architecture
 
@@ -236,9 +240,9 @@ Full documentation (English and Chinese) is published on GitHub Pages:
 
 ```bash
 cargo fmt --check
-cargo clippy --all-targets -- -D warnings
-cargo test
-cargo build --release
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+cargo build --release --workspace
 mdbook build docs        # English docs
 mdbook build docs/zh     # Chinese docs
 ```
@@ -254,18 +258,21 @@ MIT OR Apache-2.0
 
 ## 这是什么
 
-**CMSIS-DAP MCP** 是一个 [模型上下文协议（MCP）](https://modelcontextprotocol.io)
-服务器，把 CMSIS-DAP 调试探针开放给 AI 助手。AI 客户端可以枚举探针、通过
-SWD 或 JTAG 连接、读写内存与内核寄存器、控制执行、用 SVD 做命名外设访问、
-从固件文件烧录 Flash、导出内存，以及运行可复用的调试脚本。
+**CMSIS-DAP MCP** 是一个包含两个工具的仓库，两者共用同一套引擎：
+
+- **cmsis-dap-mcp** —— 一个 [模型上下文协议（MCP）](https://modelcontextprotocol.io)
+  服务器，把 CMSIS-DAP 调试探针开放给 AI 助手；
+- **cmsis-dap-cli** —— 面向人、脚本与自动化的独立命令行工具，能力一致，
+  无需 AI 客户端。
+
+两者都可以枚举探针、通过 SWD 或 JTAG 连接、读写内存与内核寄存器、控制执行、
+用 SVD 做命名外设访问、从固件文件烧录 Flash、导出内存，以及运行 J-Link /
+OpenOCD 风格调试脚本。
 
 - 通用 Cortex-M 支持：标准内核无需芯片适配。
 - 命名外设访问：运行时加载任意 CMSIS-SVD 文件；仓库不捆绑芯片文件。
 - 支持 `axf`/`elf`/`bin`/`hex` 固件烧录，以及 `bin`/`hex` 内存导出。
-- `run_script` 支持 J-Link Commander / OpenOCD 风格调试脚本。
 - 终端用户零安装：`npx -y cmsis-dap-mcp` 或单个原生二进制。
-- 配套命令行工具 `cmsis-dap-cli`：枚举探针、读写内存与寄存器、烧录 Flash、
-  导出内存并执行同样的 J-Link / OpenOCD 风格脚本，无需 AI 客户端。
 - 跨平台：Windows / Linux / macOS。
 
 ## 功能
@@ -282,6 +289,9 @@ SWD 或 JTAG 连接、读写内存与内核寄存器、控制执行、用 SVD �
 | 文件 | `program_flash`（`axf`/`elf`/`bin`/`hex`）、`read_memory` 导出 |
 | 脚本 | `run_script`（J-Link / OpenOCD 风格） |
 | Flash | `erase_flash`、`program_flash` |
+
+CLI 以子命令形式提供相同能力（`read`、`write`、`reg`、`halt`、`flash program`、
+`svd read` 等），见[命令行工具](#命令行工具)。
 
 ## 架构
 
@@ -454,9 +464,9 @@ Flash 擦除、Option 字节修改、读保护与调试解锁可能导致设备�
 
 ```bash
 cargo fmt --check
-cargo clippy --all-targets -- -D warnings
-cargo test
-cargo build --release
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+cargo build --release --workspace
 mdbook build docs        # 英文文档
 mdbook build docs/zh     # 中文文档
 ```
