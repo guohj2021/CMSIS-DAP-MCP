@@ -6,6 +6,8 @@ host) drives it, and it never renders its own UI.
 
 ## System overview
 
+![Architecture overview](images/architecture.png)
+
 ```text
 MCP client (Codex / Claude Code / opencode / any MCP host)
     |

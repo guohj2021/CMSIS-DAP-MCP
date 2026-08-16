@@ -6,6 +6,8 @@
 
 ## 系统总览
 
+![架构总览](images/architecture.png)
+
 ```text
 MCP 客户端（Codex / Claude Code / opencode / 任意 MCP 主机）
     |
