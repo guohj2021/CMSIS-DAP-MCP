@@ -1,5 +1,5 @@
 use cmsis_dap_core::backend::mock::MockBackend;
-use cmsis_dap_core::backend::{AccessWidth, Backend, ConnectOptions, EvrLevel, Protocol};
+use cmsis_dap_core::backend::{AccessWidth, Backend, ConnectOptions, Protocol};
 use cmsis_dap_core::evr;
 
 const INFO_VALID: u32 = 0x0800_0000;
@@ -14,8 +14,8 @@ fn record(ts: u32, val1: u32, val2: u32, info: u32) -> [u8; 16] {
     r
 }
 
-fn info(message: u8, component: u8, level_bits: u8, extra: u32) -> u32 {
-    (message as u32) | ((component as u32) << 8) | ((level_bits as u32) << 16) | extra | INFO_VALID
+fn info(message: u8, component: u8, context: u8, extra: u32) -> u32 {
+    (message as u32) | ((component as u32) << 8) | ((context as u32) << 16) | extra | INFO_VALID
 }
 
 #[test]
@@ -24,12 +24,12 @@ fn decodes_valid_record_fields() {
         0x0000_1000,
         0x1111_1111,
         0x2222_2222,
-        info(0x05, 0xFE, 2, 0x0040_0000), // level op, seq=4
+        info(0x05, 0xFE, 2, 0x0040_0000), // context 2, seq=4
     );
     let event = evr::decode_record(&raw, 0, 1_000_000).expect("valid record");
     assert_eq!(event.timestamp_ticks, 0x1000);
     assert!((event.timestamp_secs - 0.004096).abs() < 1e-9);
-    assert_eq!(event.level, EvrLevel::Op);
+    assert_eq!(event.context, 2);
     assert_eq!(event.component, 0xFE);
     assert_eq!(event.message, 0x05);
     assert_eq!(event.sequence, 4);
@@ -60,7 +60,7 @@ fn reconstructs_msb_and_overflow() {
     let raw = record(ts & 0x7FFF_FFFF, 0, 0, info(0, 1, 1, 0) | evr::INFO_MSB_TS);
     let event = evr::decode_record(&raw, 3, 0).expect("valid record");
     assert_eq!(event.timestamp_ticks, (3u64 << 32) | (ts as u64));
-    assert_eq!(event.level, EvrLevel::Api);
+    assert_eq!(event.context, 1);
 }
 
 #[test]
@@ -182,8 +182,8 @@ fn mock_rtt_reads_and_drains_channels() {
 #[test]
 fn mock_evr_reads_committed_records() {
     let events = vec![
-        record(0x1000, 1, 2, info(0x01, 0xFE, 0, 0)), // error level
-        record(0x2000, 3, 4, info(0x02, 0x03, 3, 0)), // detail level
+        record(0x1000, 1, 2, info(0x01, 0xFE, 0, 0)),
+        record(0x2000, 3, 4, info(0x02, 0x03, 3, 0)),
     ];
     let mut mock = MockBackend::with_evr(8, 1_000_000, events);
     connect(&mut mock);
@@ -194,8 +194,8 @@ fn mock_evr_reads_committed_records() {
 
     let decoded = mock.read_evr().unwrap();
     assert_eq!(decoded.len(), 2);
-    assert_eq!(decoded[0].level, EvrLevel::Error);
-    assert_eq!(decoded[1].level, EvrLevel::Detail);
+    assert_eq!(decoded[0].context, 0);
+    assert_eq!(decoded[1].context, 3);
     assert_eq!(decoded[1].timestamp_ticks, 0x2000);
 
     // All records consumed.
