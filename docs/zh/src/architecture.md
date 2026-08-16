@@ -4,6 +4,10 @@
 由 MCP 客户端（Codex、Claude Code、opencode 或任意兼容 MCP 的主机）驱动，
 自身不提供界面。
 
+仓库是包含三个 crate 的 Cargo workspace：`cmsis-dap-core`（两个工具共用的
+MCP 无关引擎）、`cmsis-dap-mcp`（本服务器）与 `cmsis-dap-cli`（基于同一
+引擎的独立命令行工具）。下图展示的是该 workspace 中服务器一侧的构成。
+
 ## 系统总览
 
 ![架构总览](images/architecture.png)

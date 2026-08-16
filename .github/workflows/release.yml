@@ -14,14 +14,29 @@ jobs:
           - os: windows-latest
             scope: cmsis-dap-mcp-win32-x64
             artifact: cmsis-dap-mcp.exe
+            npmdir: npm/platforms
           - os: ubuntu-latest
             scope: cmsis-dap-mcp-linux-x64
             artifact: cmsis-dap-mcp
+            npmdir: npm/platforms
           # macos-15-intel is the hosted Intel (x64) macOS runner; using it
           # guarantees a genuine x86_64 darwin artifact for darwin-x64.
           - os: macos-15-intel
             scope: cmsis-dap-mcp-darwin-x64
             artifact: cmsis-dap-mcp
+            npmdir: npm/platforms
+          - os: windows-latest
+            scope: cmsis-dap-cli-win32-x64
+            artifact: cmsis-dap-cli.exe
+            npmdir: npm-cli/platforms
+          - os: ubuntu-latest
+            scope: cmsis-dap-cli-linux-x64
+            artifact: cmsis-dap-cli
+            npmdir: npm-cli/platforms
+          - os: macos-15-intel
+            scope: cmsis-dap-cli-darwin-x64
+            artifact: cmsis-dap-cli
+            npmdir: npm-cli/platforms
     runs-on: ${{ matrix.os }}
     env:
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -29,14 +44,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.97.1
-      - run: cargo build --release
+      - run: cargo build --release --workspace
       - name: Stage npm platform package
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          mkdir -p "npm/platforms/${{ matrix.scope }}/bin"
-          cp "target/release/${{ matrix.artifact }}" "npm/platforms/${{ matrix.scope }}/bin/"
-          npm --prefix "npm/platforms/${{ matrix.scope }}" pkg set version="$VERSION"
+          mkdir -p "${{ matrix.npmdir }}/${{ matrix.scope }}/bin"
+          cp "target/release/${{ matrix.artifact }}" "${{ matrix.npmdir }}/${{ matrix.scope }}/bin/"
+          npm --prefix "${{ matrix.npmdir }}/${{ matrix.scope }}" pkg set version="$VERSION"
       - name: Publish platform package to npmjs
         if: env.NPM_TOKEN != ''
         shell: bash
@@ -44,7 +59,7 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           PACKAGE="@guohj2021/${{ matrix.scope }}"
           echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
-          cd "npm/platforms/${{ matrix.scope }}"
+          cd "${{ matrix.npmdir }}/${{ matrix.scope }}"
           if npm view "${PACKAGE}@${VERSION}" version >/dev/null 2>&1; then
             echo "already published on npmjs: ${PACKAGE}@${VERSION}"
           else
@@ -58,7 +73,7 @@ jobs:
           PACKAGE="@guohj2021/${{ matrix.scope }}"
           echo "registry=https://npm.pkg.github.com/" > ~/.npmrc
           echo "//npm.pkg.github.com/:_authToken=${GH_TOKEN}" >> ~/.npmrc
-          cd "npm/platforms/${{ matrix.scope }}"
+          cd "${{ matrix.npmdir }}/${{ matrix.scope }}"
           if npm view "${PACKAGE}@${VERSION}" version >/dev/null 2>&1; then
             echo "already published on GitHub Packages: ${PACKAGE}@${VERSION}"
           else
@@ -84,6 +99,9 @@ jobs:
           cp dist/cmsis-dap-mcp-win32-x64/cmsis-dap-mcp.exe release/cmsis-dap-mcp-win32-x64.exe
           cp dist/cmsis-dap-mcp-linux-x64/cmsis-dap-mcp release/cmsis-dap-mcp-linux-x64
           cp dist/cmsis-dap-mcp-darwin-x64/cmsis-dap-mcp release/cmsis-dap-mcp-darwin-x64
+          cp dist/cmsis-dap-cli-win32-x64/cmsis-dap-cli.exe release/cmsis-dap-cli-win32-x64.exe
+          cp dist/cmsis-dap-cli-linux-x64/cmsis-dap-cli release/cmsis-dap-cli-linux-x64
+          cp dist/cmsis-dap-cli-darwin-x64/cmsis-dap-cli release/cmsis-dap-cli-darwin-x64
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -95,9 +113,11 @@ jobs:
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-      - name: Copy bilingual README into npm package
-        run: cp README.md npm/README.md
-      - name: Set versions from tag
+      - name: Copy bilingual README into npm packages
+        run: |
+          cp README.md npm/README.md
+          cp README.md npm-cli/README.md
+      - name: Set versions from tag (cmsis-dap-mcp)
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
@@ -105,7 +125,15 @@ jobs:
           npm --prefix npm pkg set "optionalDependencies.@guohj2021/cmsis-dap-mcp-win32-x64=$VERSION"
           npm --prefix npm pkg set "optionalDependencies.@guohj2021/cmsis-dap-mcp-linux-x64=$VERSION"
           npm --prefix npm pkg set "optionalDependencies.@guohj2021/cmsis-dap-mcp-darwin-x64=$VERSION"
-      - name: Publish meta package to npmjs
+      - name: Set versions from tag (cmsis-dap-cli)
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          npm --prefix npm-cli pkg set version="$VERSION"
+          npm --prefix npm-cli pkg set "optionalDependencies.@guohj2021/cmsis-dap-cli-win32-x64=$VERSION"
+          npm --prefix npm-cli pkg set "optionalDependencies.@guohj2021/cmsis-dap-cli-linux-x64=$VERSION"
+          npm --prefix npm-cli pkg set "optionalDependencies.@guohj2021/cmsis-dap-cli-darwin-x64=$VERSION"
+      - name: Publish cmsis-dap-mcp meta package to npmjs
         if: env.NPM_TOKEN != ''
         shell: bash
         run: |
@@ -114,6 +142,18 @@ jobs:
           cd npm
           if npm view "cmsis-dap-mcp@${VERSION}" version >/dev/null 2>&1; then
             echo "already published on npmjs: cmsis-dap-mcp@${VERSION}"
+          else
+            npm publish --access public
+          fi
+      - name: Publish cmsis-dap-cli meta package to npmjs
+        if: env.NPM_TOKEN != ''
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+          cd npm-cli
+          if npm view "cmsis-dap-cli@${VERSION}" version >/dev/null 2>&1; then
+            echo "already published on npmjs: cmsis-dap-cli@${VERSION}"
           else
             npm publish --access public
           fi
