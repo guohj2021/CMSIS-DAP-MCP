@@ -26,11 +26,10 @@ pub enum CliError {
 
 impl CliError {
     /// Exit code convention: 0 ok, 1 runtime error, 2 usage error, 3 aborted
-    /// or destructive operation missing confirmation.
+    /// (e.g. stdin read failure in the REPL).
     pub fn exit_code(&self) -> i32 {
         match self {
             CliError::Aborted(_) => 3,
-            CliError::Mcp(e) if e.code == ErrorCode::DestructiveDisabled => 3,
             CliError::Mcp(_) => 1,
             CliError::InvalidArgument(_) => 2,
         }
