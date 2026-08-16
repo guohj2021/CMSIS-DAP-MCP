@@ -1,9 +1,10 @@
 use crate::backend::{
-    AccessWidth, Backend, ConnectOptions, CoreRegister, CoreStatusInfo, ExportFormat,
-    ImageFileFormat, MemoryMismatch, MemoryRegionSummary, MemoryVerifyReport, ProbeInfo, ResetMode,
-    TargetInfo, WatchAccess, Watchpoint,
+    AccessWidth, Backend, ConnectOptions, CoreRegister, CoreStatusInfo, EvrEvent, EvrStatus,
+    ExportFormat, ImageFileFormat, MemoryMismatch, MemoryRegionSummary, MemoryVerifyReport,
+    ProbeInfo, ResetMode, RttChannelInfo, RttRead, TargetInfo, WatchAccess, Watchpoint,
 };
 use crate::error::{ErrorCode, McpError};
+use crate::evr;
 use std::collections::HashMap;
 
 pub struct MockBackend {
@@ -15,6 +16,15 @@ pub struct MockBackend {
     halted: bool,
     breakpoints: Vec<u64>,
     watchpoints: Vec<Watchpoint>,
+    rtt_attached: bool,
+    rtt_names: Vec<Option<String>>,
+    rtt_pending: Vec<Vec<u8>>,
+    evr_attached: bool,
+    evr_records: Vec<[u8; evr::RECORD_SIZE]>,
+    evr_record_count: u32,
+    evr_ts_freq: u32,
+    evr_ts_overflow: u32,
+    evr_last_index: u32,
 }
 
 impl Default for MockBackend {
@@ -41,6 +51,15 @@ impl MockBackend {
             halted: false,
             breakpoints: Vec::new(),
             watchpoints: Vec::new(),
+            rtt_attached: false,
+            rtt_names: Vec::new(),
+            rtt_pending: Vec::new(),
+            evr_attached: false,
+            evr_records: Vec::new(),
+            evr_record_count: 8,
+            evr_ts_freq: 1_000_000,
+            evr_ts_overflow: 0,
+            evr_last_index: 0,
         }
     }
 
@@ -51,6 +70,26 @@ impl MockBackend {
             with_flash: false,
             ..Self::new()
         }
+    }
+
+    /// A mock backend with RTT up channels and pending bytes per channel.
+    pub fn with_rtt(channels: &[(Option<&str>, &[u8])]) -> Self {
+        let mut backend = Self::new();
+        backend.rtt_names = channels
+            .iter()
+            .map(|(name, _)| name.map(|s| s.to_string()))
+            .collect();
+        backend.rtt_pending = channels.iter().map(|(_, data)| data.to_vec()).collect();
+        backend
+    }
+
+    /// A mock backend whose Event Recorder already contains `records`.
+    pub fn with_evr(record_count: u32, ts_freq: u32, records: Vec<[u8; evr::RECORD_SIZE]>) -> Self {
+        let mut backend = Self::new();
+        backend.evr_record_count = record_count.max(1);
+        backend.evr_ts_freq = ts_freq;
+        backend.evr_records = records;
+        backend
     }
 }
 
@@ -114,6 +153,8 @@ impl Backend for MockBackend {
 
     fn disconnect(&mut self) -> Result<(), McpError> {
         self.connected = false;
+        self.rtt_attached = false;
+        self.evr_attached = false;
         Ok(())
     }
 
@@ -450,5 +491,106 @@ impl Backend for MockBackend {
                 .map_err(|e| McpError::new(ErrorCode::FileError, e.to_string()))?,
         }
         Ok(size)
+    }
+
+    fn attach_rtt(&mut self, _address: Option<u64>) -> Result<Vec<RttChannelInfo>, McpError> {
+        if !self.connected {
+            return Err(not_connected());
+        }
+        self.rtt_attached = true;
+        Ok((0..self.rtt_names.len())
+            .map(|number| RttChannelInfo {
+                number,
+                name: self.rtt_names[number].clone(),
+                buffer_size: 1024,
+            })
+            .collect())
+    }
+
+    fn read_rtt(&mut self, channels: &[usize], max_bytes: usize) -> Result<Vec<RttRead>, McpError> {
+        if !self.connected {
+            return Err(not_connected());
+        }
+        if !self.rtt_attached {
+            return Err(McpError::new(
+                ErrorCode::NotConnected,
+                "RTT is not attached; run 'rtt info' or 'rtt monitor' first",
+            ));
+        }
+        let mut out = Vec::new();
+        for &channel in channels {
+            let Some(pending) = self.rtt_pending.get_mut(channel) else {
+                continue;
+            };
+            if pending.is_empty() {
+                continue;
+            }
+            let take = pending.len().min(max_bytes.max(1));
+            let data = pending.drain(..take).collect::<Vec<_>>();
+            out.push(RttRead {
+                channel,
+                name: self.rtt_names.get(channel).cloned().flatten(),
+                data,
+            });
+        }
+        Ok(out)
+    }
+
+    fn detach_rtt(&mut self) -> Result<(), McpError> {
+        self.rtt_attached = false;
+        Ok(())
+    }
+
+    fn attach_evr(&mut self, _info_address: u64) -> Result<EvrStatus, McpError> {
+        if !self.connected {
+            return Err(not_connected());
+        }
+        self.evr_attached = true;
+        self.evr_last_index = 0;
+        Ok(EvrStatus {
+            state: 1,
+            protocol_version: "1.1".into(),
+            record_count: self.evr_record_count,
+            records_written: self.evr_records.len() as u64,
+            records_dumped: 0,
+            ts_freq: self.evr_ts_freq,
+            ts_source: 0,
+            init_count: 1,
+            signature: 0x4556_5254,
+            event_buffer: 0x2000_0000,
+            event_status: 0x2000_0100,
+        })
+    }
+
+    fn read_evr(&mut self) -> Result<Vec<EvrEvent>, McpError> {
+        if !self.connected {
+            return Err(not_connected());
+        }
+        if !self.evr_attached {
+            return Err(McpError::new(
+                ErrorCode::NotConnected,
+                "Event Recorder is not attached; run 'evr info' or 'evr monitor' first",
+            ));
+        }
+        let mut events = Vec::new();
+        while (self.evr_last_index as usize) < self.evr_records.len() {
+            let index = self.evr_last_index;
+            let Some(record) = self.evr_records.get(index as usize) else {
+                break;
+            };
+            match evr::decode_record(record, self.evr_ts_overflow, self.evr_ts_freq) {
+                Some(event) => {
+                    self.evr_last_index = index.wrapping_add(1);
+                    events.push(event);
+                }
+                None => break,
+            }
+        }
+        Ok(events)
+    }
+
+    fn detach_evr(&mut self) -> Result<(), McpError> {
+        self.evr_attached = false;
+        Ok(())
     }
 }

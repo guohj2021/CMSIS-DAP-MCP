@@ -63,6 +63,7 @@ target: {"ap_count":1,"core_count":1,"core_type":"Armv6m",...,
 | `--under-reset` | 按住复位连接（锁定/无响应目标） |
 | `--target-yaml FILE` | 加载 target YAML（芯片 + Flash 算法定义） |
 | `--svd FILE` | SVD 文件（`svd` 子命令用） |
+| `--elf FILE` | 固件 ELF（`symbols`/`watch`/`rtt`/`evr` 符号解析用） |
 | `--json` | 输出机器可读 JSON 而非人类文本 |
 | `--log-level LEVEL` | 日志过滤级别；日志只写 stderr（默认 `warn`） |
 | `--log-file FILE` | 日志写入文件而非 stderr |
@@ -185,6 +186,99 @@ chip search KEYWORD
 `chip search` 列出或搜索内置芯片库（也可包含 `--target-yaml` 自定义芯片）；
 结果带 Flash/RAM 范围，一眼能看出能不能烧录。
 
+### 符号
+
+```text
+symbols list [PATTERN]
+symbols resolve NAME
+```
+
+查看 `--elf` 固件的符号表。`list` 列出全部符号（可按大小写不敏感的子串
+过滤）及虚拟地址；`resolve` 查询单个名字。`watch`/`rtt`/`evr` 正是用同一套
+符号去定位变量和控制块。
+
+```bash
+cmsis-dap-cli --elf firmware.axf symbols resolve counter
+cmsis-dap-cli --elf firmware.axf symbols list counter
+```
+
+### 变量实时观察（Live watch）
+
+```text
+watch [--interval-ms N] [--count N] [--width u8|u16|u32|u64]
+      [--log-dir DIR | --log-file FILE] TARGET...
+```
+
+按刷新间隔轮询一个或多个变量并打印带时间戳的采样行。`TARGET` 可以是符号名
+（经 `--elf` 解析）或 `0xADDR` 地址。默认 `--interval-ms 500`、`--count 1`
+（采样一次）、`--width u32`。`--count 0` 一直运行到 Ctrl-C；干净停止后退出码
+为 0，并在 stderr 打印 `stopped (Ctrl-C)`。
+
+```bash
+cmsis-dap-cli --target STM32F030C8 --elf firmware.axf \
+  watch counter 0x20000004 --interval-ms 200 --count 0
+```
+
+### RTT（J-Link RTT 日志）
+
+```text
+rtt info
+rtt monitor --channel 0,1 [--interval-ms N] [--count N]
+            [--address A] [--log-dir DIR | --log-file FILE]
+```
+
+`rtt info` 附着目标 RTT 控制块并列出上行通道。`rtt monitor` 轮询所选上行
+通道（逗号列表，默认 `0`），每收到一段数据就打印带主机时间戳和通道前缀的
+一行（`[RTT0 "Channel 0"] ...`）。控制块地址依次取自 `--elf` 的
+`_SEGGER_RTT` 符号、`--address`，或扫描目标 RAM（扫描需要芯片目标定义了
+RAM：内置芯片或 `--target-yaml`）。默认 `--interval-ms 200`、`--count 0`
+（直到 Ctrl-C）、每通道每轮 `--max-bytes 1024`。
+
+固件需要运行 SEGGER RTT（例如 `rtt_target` 或 SEGGER RTT 实现），并且主机
+附着前控制块已初始化。
+
+```bash
+cmsis-dap-cli --target STM32F030C8 --elf firmware.axf \
+  rtt monitor --channel 0 --count 0 --log-dir logs
+```
+
+### Event Recorder（CMSIS-View）
+
+```text
+evr info
+evr monitor [--interval-ms N] [--count N]
+            [--level error|api|op|detail] [--address A]
+            [--log-dir DIR | --log-file FILE]
+```
+
+`evr info` 附着片上 Event Recorder 并报告协议版本、记录数、时间戳频率与
+计数器。`evr monitor` 通过纯 SWD/JTAG 内存读（无需 trace 硬件、无需串口）
+轮询环形缓冲，并按官方 16 字节记录布局解码每个新事件：主机时间戳、目标侧
+tick 数与秒数（按 `ts_freq` 换算）、级别（`error`/`api`/`op`/`detail`）、
+组件与消息编号、序号以及两个 32 位数值。`--level` 可过滤（可重复或逗号列表）。
+
+固件需要包含 CMSIS-View Event Recorder 组件（符号 `EventRecorderInfo`）并在
+主机附着前完成初始化。信息头地址取自 `--elf` 的 `EventRecorderInfo` 符号或
+`--address`。
+
+```bash
+cmsis-dap-cli --target STM32F030C8 --elf firmware.axf \
+  evr monitor --level error,op --count 0 --log-dir logs
+```
+
+### 监控输出、时间戳与日志导出
+
+`watch`、`rtt monitor`、`evr monitor` 的每一行都带主机采集时间戳
+`[YYYY-MM-DD HH:MM:SS.mmm]`。`--json` 下每个采样/事件是 stdout 上的一行
+NDJSON，并带 `host_ts` 字段（RFC 3339，毫秒 + 时区）；EVR 事件额外保留
+目标侧 `timestamp_ticks`/`timestamp_secs`。
+
+监控输出默认同时写入日志文件，位置是当前目录，文件名为自动生成
+（`watch-<unix秒>.log`、`rtt-<unix秒>.log`、`evr-<unix秒>.log`）；
+`--log-dir DIR` 指定其他目录（不存在会自动创建），`--log-file FILE` 则追加
+写入确切文件。文件内容与 stdout 完全一致（每采样/事件一行），每行立即 flush；
+监控启动时在 stderr 打印 `logging to <路径>`。
+
 ### 交互式 shell
 
 ```text
@@ -293,6 +387,9 @@ cmsis-dap-cli --json read --address 0x20000000 --width u32 --count 2
   日志始终写 stderr。
 - 退出码：`0` 成功，`1` 运行时错误（探针/连接/烧录失败），`2` 用法错误
   （未知参数、非法取值、缺参）。
+- 监控命令（`watch`、`rtt monitor`、`evr monitor`）每采样/事件输出一行
+  （`--json` 为 NDJSON），Ctrl-C 干净停止后退出 `0`；`--count N` 限定轮数，
+  便于脚本与 CI。
 
 ## REPL
 
@@ -313,6 +410,19 @@ cmsis-dap-cli> q
 
 `?`/`help` 显示支持的命令；`q`/`exit` 退出。REPL 继承全局连接参数，`connect`
 直接使用它们（不用重敲 `--target`）。REPL 里 Flash 擦除/烧录同样直接执行。
+
+REPL 还提供带持久观察状态的实时调试命令：
+
+```text
+watch add <name|0xADDR> [--width u8|u16|u32|u64] [--label TEXT]
+watch list | watch remove <idx|name> | watch clear
+watch interval <ms>
+watch run [--count N] [--log-dir DIR | --log-file FILE]
+rtt [info] [--channel 0,1] [--count N] [--interval-ms N] [--log-dir DIR | --log-file FILE]
+evr [info] [--level error|api|op|detail] [--count N] [--log-dir DIR | --log-file FILE]
+```
+
+监控命令运行到 Ctrl-C（或 `--count N`）后回到提示符。
 
 ## 脚本命令
 
