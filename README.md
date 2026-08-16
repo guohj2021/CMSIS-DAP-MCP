@@ -60,6 +60,10 @@ flash from firmware files, and run J-Link / OpenOCD style debug scripts.
 
 The CLI mirrors these capabilities as subcommands (`read`, `write`, `reg`,
 `halt`, `flash program`, `svd read`, ...); see the [CLI section](#cli).
+The CLI also ships live debugging features that are not part of the MCP
+server: `watch` (live variable polling), `rtt monitor` (SEGGER RTT logs) and
+`evr monitor` (CMSIS-View Event Recorder) all run over SWD/JTAG — no UART —
+with timestamped log export.
 
 ## Architecture
 
@@ -207,12 +211,18 @@ cmsis-dap-cli --target STM32F030C8 read --address 0x20000000 --width u32 --count
 cmsis-dap-cli --target STM32F030C8 halt
 cmsis-dap-cli --target STM32F030C8 reg get pc
 cmsis-dap-cli --target STM32F030C8 flash program --address 0x08000000 --file fw.hex --verify
+cmsis-dap-cli --target STM32F030C8 --elf fw.axf watch counter --interval-ms 200 --count 0
+cmsis-dap-cli --target STM32F030C8 --elf fw.axf rtt monitor --channel 0 --count 0
+cmsis-dap-cli --target STM32F030C8 --elf fw.axf evr monitor --level error,op --count 0
 cmsis-dap-cli --target STM32F030C8 repl
 ```
 
 `--json` gives machine-readable output; flash erase/program run directly. The
 npm package (`npx -y cmsis-dap-cli`) ships with each release; for local builds
-use `target/release/cmsis-dap-cli`. See the
+use `target/release/cmsis-dap-cli`. `--elf` adds symbol names for `watch` /
+RTT / Event Recorder; monitor commands print timestamped lines and export the
+same log to the current directory by default (`--log-dir` / `--log-file` to
+choose the location). See the
 [CLI documentation](./docs/src/cli.md) for the full command reference.
 
 ## Security
@@ -292,6 +302,9 @@ OpenOCD 风格调试脚本。
 
 CLI 以子命令形式提供相同能力（`read`、`write`、`reg`、`halt`、`flash program`、
 `svd read` 等），见[命令行工具](#命令行工具)。
+CLI 还提供 MCP 服务器没有的实时调试能力：`watch`（变量实时轮询）、`rtt
+monitor`（SEGGER RTT 日志）与 `evr monitor`（CMSIS-View Event Recorder）都
+走 SWD/JTAG——无需串口——并支持带时间戳的日志导出。
 
 ## 架构
 
@@ -434,12 +447,17 @@ cmsis-dap-cli --target STM32F030C8 read --address 0x20000000 --width u32 --count
 cmsis-dap-cli --target STM32F030C8 halt
 cmsis-dap-cli --target STM32F030C8 reg get pc
 cmsis-dap-cli --target STM32F030C8 flash program --address 0x08000000 --file fw.hex --verify
+cmsis-dap-cli --target STM32F030C8 --elf fw.axf watch counter --interval-ms 200 --count 0
+cmsis-dap-cli --target STM32F030C8 --elf fw.axf rtt monitor --channel 0 --count 0
+cmsis-dap-cli --target STM32F030C8 --elf fw.axf evr monitor --level error,op --count 0
 cmsis-dap-cli --target STM32F030C8 repl
 ```
 
 `--json` 输出机器可读结果；Flash 擦除/烧录直接执行。npm 包
 （`npx -y cmsis-dap-cli`）随每次发布提供；本地构建用
-`target/release/cmsis-dap-cli`。完整命令参考见
+`target/release/cmsis-dap-cli`。`--elf` 为 `watch`/RTT/Event Recorder 提供
+符号名；监控命令打印带时间戳的行，并默认把同样内容导出到当前目录的日志
+（`--log-dir`/`--log-file` 指定位置）。完整命令参考见
 [命令行工具文档](./docs/zh/src/cli.md)。
 
 ## 安全
