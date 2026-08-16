@@ -292,6 +292,75 @@ fn repl_executes_lines_with_persistent_state() {
 }
 
 #[test]
+fn repl_destructive_prompt_reads_from_repl_reader() {
+    // Regression: the approval prompt must read from the same reader that
+    // drives the REPL; reading from a fresh stdin handle deadlocks because
+    // the REPL already holds the stdin lock.
+    let mut session = SessionManager::new(Box::new(MockBackend::new()));
+    session
+        .connect(&ConnectOptions {
+            probe_id: None,
+            protocol: Protocol::Swd,
+            speed_khz: None,
+            target: None,
+            under_reset: false,
+        })
+        .unwrap();
+    session
+        .backend()
+        .write_memory(
+            0x2000_0000,
+            cmsis_dap_core::backend::AccessWidth::U32,
+            &[0xAA],
+        )
+        .unwrap();
+
+    // Approve destructive mode with 'y': the erase must run and clear memory.
+    let mut reader = Cursor::new(b"connect\nerase\ny\nq\n".to_vec());
+    repl::run(false, false, &mut session, &mut reader, true).unwrap();
+    assert_eq!(
+        session
+            .backend()
+            .read_memory(0x2000_0000, cmsis_dap_core::backend::AccessWidth::U32, 1)
+            .unwrap()[0],
+        0
+    );
+}
+
+#[test]
+fn repl_destructive_prompt_decline_keeps_readonly() {
+    let mut session = SessionManager::new(Box::new(MockBackend::new()));
+    session
+        .connect(&ConnectOptions {
+            probe_id: None,
+            protocol: Protocol::Swd,
+            speed_khz: None,
+            target: None,
+            under_reset: false,
+        })
+        .unwrap();
+    session
+        .backend()
+        .write_memory(
+            0x2000_0000,
+            cmsis_dap_core::backend::AccessWidth::U32,
+            &[0xAA],
+        )
+        .unwrap();
+
+    // Declining with 'n' keeps the session read-only: memory stays intact.
+    let mut reader = Cursor::new(b"connect\nerase\nn\nq\n".to_vec());
+    repl::run(false, false, &mut session, &mut reader, true).unwrap();
+    assert_eq!(
+        session
+            .backend()
+            .read_memory(0x2000_0000, cmsis_dap_core::backend::AccessWidth::U32, 1)
+            .unwrap()[0],
+        0xAA
+    );
+}
+
+#[test]
 fn read_exports_bin_file() {
     let out_dir = tempfile::tempdir().unwrap();
     let dump = out_dir.path().join("dump.bin");
