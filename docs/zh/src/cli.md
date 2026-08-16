@@ -247,15 +247,17 @@ cmsis-dap-cli --target STM32F030C8 --elf firmware.axf \
 ```text
 evr info
 evr monitor [--interval-ms N] [--count N]
-            [--level error|api|op|detail] [--address A]
+            [--ctx 0..7] [--address A]
             [--log-dir DIR | --log-file FILE]
 ```
 
 `evr info` 附着片上 Event Recorder 并报告协议版本、记录数、时间戳频率与
 计数器。`evr monitor` 通过纯 SWD/JTAG 内存读（无需 trace 硬件、无需串口）
 轮询环形缓冲，并按官方 16 字节记录布局解码每个新事件：主机时间戳、目标侧
-tick 数与秒数（按 `ts_freq` 换算）、级别（`error`/`api`/`op`/`detail`）、
-组件与消息编号、序号以及两个 32 位数值。`--level` 可过滤（可重复或逗号列表）。
+tick 数与秒数（按 `ts_freq` 换算）、事件上下文（记录 `info` 的 bit16..18，
+取值 0..7）、组件与消息编号、序号以及
+两个 32 位数值。`--ctx` 可按上下文过滤（可重复或逗号列表）。注意片上记录
+只存 16 位事件 id（组件 + 消息）；API 层的 level 用于固件内过滤，不写入记录。
 
 固件需要包含 CMSIS-View Event Recorder 组件（符号 `EventRecorderInfo`）并在
 主机附着前完成初始化。信息头地址取自 `--elf` 的 `EventRecorderInfo` 符号或
@@ -263,7 +265,7 @@ tick 数与秒数（按 `ts_freq` 换算）、级别（`error`/`api`/`op`/`detai
 
 ```bash
 cmsis-dap-cli --target STM32F030C8 --elf firmware.axf \
-  evr monitor --level error,op --count 0 --log-dir logs
+  evr monitor --ctx 0,2 --count 0 --log-dir logs
 ```
 
 ### 监控输出、时间戳与日志导出
@@ -419,7 +421,7 @@ watch list | watch remove <idx|name> | watch clear
 watch interval <ms>
 watch run [--count N] [--log-dir DIR | --log-file FILE]
 rtt [info] [--channel 0,1] [--count N] [--interval-ms N] [--log-dir DIR | --log-file FILE]
-evr [info] [--level error|api|op|detail] [--count N] [--log-dir DIR | --log-file FILE]
+evr [info] [--ctx 0..7] [--count N] [--log-dir DIR | --log-file FILE]
 ```
 
 监控命令运行到 Ctrl-C（或 `--count N`）后回到提示符。

@@ -38,7 +38,7 @@ cmsis-dap-cli --target STM32F030C8 reg get pc
 cmsis-dap-cli --target STM32F030C8 flash program --address 0x08000000 --file fw.hex --verify
 cmsis-dap-cli --target STM32F030C8 --elf fw.axf watch counter --interval-ms 200 --count 0
 cmsis-dap-cli --target STM32F030C8 --elf fw.axf rtt monitor --channel 0 --count 0
-cmsis-dap-cli --target STM32F030C8 --elf fw.axf evr monitor --level error,op --count 0
+cmsis-dap-cli --target STM32F030C8 --elf fw.axf evr monitor --ctx 0,2 --count 0
 cmsis-dap-cli --target STM32F030C8 repl
 ```
 
@@ -145,7 +145,7 @@ cmsis-dap-cli --target STM32F030C8 reg get pc
 cmsis-dap-cli --target STM32F030C8 flash program --address 0x08000000 --file fw.hex --verify
 cmsis-dap-cli --target STM32F030C8 --elf fw.axf watch counter --interval-ms 200 --count 0
 cmsis-dap-cli --target STM32F030C8 --elf fw.axf rtt monitor --channel 0 --count 0
-cmsis-dap-cli --target STM32F030C8 --elf fw.axf evr monitor --level error,op --count 0
+cmsis-dap-cli --target STM32F030C8 --elf fw.axf evr monitor --ctx 0,2 --count 0
 cmsis-dap-cli --target STM32F030C8 repl
 ```
 
