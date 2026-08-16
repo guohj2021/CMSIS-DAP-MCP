@@ -85,6 +85,16 @@ fn destructive_commands_run_with_flag() {
 }
 
 #[test]
+fn erase_requires_flash_definition() {
+    let mut sm = SessionManager::new(Box::new(MockBackend::without_flash()));
+    let report = script::run(&mut sm, &policy(true), "connect\nerase").unwrap();
+    assert!(!report.ok);
+    let last = report.results.last().unwrap();
+    assert_eq!(last.status, "error");
+    assert_eq!(last.output["code"], "UnsupportedFeature");
+}
+
+#[test]
 fn savebin_and_loadbin_roundtrip() {
     let mut sm = session();
     connect(&mut sm);
