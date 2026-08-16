@@ -37,6 +37,7 @@ npx -y cmsis-dap-cli --help
 | `svd list` / `svd read PERIPH.REG[.FIELD]` / `svd write PERIPH.REG[.FIELD] VALUE` | SVD 命名访问（需 `--svd FILE`） |
 | `flash erase --address A --size N` / `flash program --address A --file F [--format elf\|axf\|bin\|hex] [--verify]` | Flash 擦除 / 烧录 |
 | `script --file F` 或 `--text TEXT` | 运行 J-Link / OpenOCD 风格脚本 |
+| `chip generate --flm F --flash-start A --flash-size N --sram-start A --sram-size N [--name NAME] [--output FILE]` | 从 Keil FLM 生成 probe-rs target YAML |
 | `repl` | 交互式 shell（J-Link Commander 风格） |
 
 需要目标的命令会自动使用全局连接参数建立连接。数字支持十进制或十六进制
@@ -59,6 +60,32 @@ cmsis-dap-cli repl
 ```
 
 REPL 中输入 `?`/`help` 查看支持的 J-Link / OpenOCD 风格命令，`q`/`exit` 退出。
+
+## 从 FLM 生成 target YAML
+
+对于 probe-rs 内置库没有的芯片，烧录需要一份描述芯片并内嵌厂商 Flash 算法
+的 target YAML。不用手写：`chip generate` 读取 Keil FLM 文件（厂商 Flash
+算法），你只需要提供 Flash 与 SRAM 地址范围：
+
+```bash
+cmsis-dap-cli chip generate \
+  --flm MyChip_64.FLM \
+  --flash-start 0x08000000 --flash-size 0x10000 \
+  --sram-start 0x20000000 --sram-size 0x2000 \
+  --name MYCHIP --output MYCHIP.yaml
+```
+
+其余信息全部从 FLM 自动提取：算法指令、入口偏移（`Init`/`ProgramPage`/
+`EraseSector`/`EraseChip`）、静态数据基址、FlashDevice 描述符（页大小、
+擦除值、扇区大小、超时）与设备名。`--name` 默认取 FLM 文件名；用
+`--output -` 把 YAML 打印到 stdout。随后用同一工具加载：
+
+```bash
+cmsis-dap-cli --target-yaml MYCHIP.yaml --target MYCHIP connect
+```
+
+生成的 YAML 会把算法放在 `SRAM 起始 + 0x20`；请确保提供的 SRAM 范围能容纳
+算法（放不下时命令会拒绝生成）。
 
 ## 输出与退出码
 

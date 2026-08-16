@@ -6,11 +6,14 @@ license.workspace = true
 
 [dependencies]
 cmsis-dap-core = { path = "../cmsis-dap-core" }
+base64 = "0.22"
 clap.workspace = true
+object = { version = "0.39", default-features = false, features = ["read", "std"] }
 serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 
 [dev-dependencies]
+object = { version = "0.39", default-features = false, features = ["read", "write", "std"] }
 tempfile.workspace = true

@@ -38,6 +38,7 @@ Global options (before the subcommand): `--probe-id`, `--protocol swd|jtag`,
 | `svd list` / `svd read PERIPH.REG[.FIELD]` / `svd write PERIPH.REG[.FIELD] VALUE` | SVD named access (requires `--svd FILE`) |
 | `flash erase --address A --size N` / `flash program --address A --file F [--format elf\|axf\|bin\|hex] [--verify]` | flash erase / program |
 | `script --file F` or `--text TEXT` | run a J-Link / OpenOCD style script |
+| `chip generate --flm F --flash-start A --flash-size N --sram-start A --sram-size N [--name NAME] [--output FILE]` | generate a probe-rs target YAML from a Keil FLM |
 | `repl` | interactive shell (J-Link Commander style) |
 
 Commands that need a target auto-connect using the global connection options.
@@ -61,6 +62,36 @@ cmsis-dap-cli repl
 
 In the REPL, `?`/`help` shows the supported J-Link / OpenOCD style commands and
 `q`/`exit` quits.
+
+## Generating a target YAML from an FLM
+
+For chips that are not built into probe-rs, flashing needs a target YAML that
+describes the chip and embeds the vendor flash algorithm. You do not have to
+hand-write it: `chip generate` reads a Keil FLM file (the vendor flash
+algorithm) and needs only the Flash and SRAM address ranges from you:
+
+```bash
+cmsis-dap-cli chip generate \
+  --flm MyChip_64.FLM \
+  --flash-start 0x08000000 --flash-size 0x10000 \
+  --sram-start 0x20000000 --sram-size 0x2000 \
+  --name MYCHIP --output MYCHIP.yaml
+```
+
+Everything else is extracted from the FLM automatically: the algorithm
+instructions, the entry-point offsets (`Init`/`ProgramPage`/`EraseSector`/
+`EraseChip`), the static data base, the FlashDevice descriptor (page size,
+erased value, sector size, timeouts) and the device name. `--name` defaults to
+the FLM file stem; use `--output -` to print the YAML to stdout. Then load it
+with the same tool:
+
+```bash
+cmsis-dap-cli --target-yaml MYCHIP.yaml --target MYCHIP connect
+```
+
+The generated YAML places the algorithm at `SRAM start + 0x20`; make sure the
+SRAM range you provide is large enough for the algorithm (the command refuses
+to emit a YAML whose algorithm does not fit).
 
 ## Output and exit codes
 
