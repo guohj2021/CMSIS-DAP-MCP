@@ -18,7 +18,7 @@ npx -y cmsis-dap-cli --help
 ## 命令一览
 
 全局参数（子命令之前）：`--probe-id`、`--protocol swd|jtag`、`--speed-khz`、
-`--target`、`--under-reset`、`--target-yaml`、`--svd`、`--yes`、`--json`、
+`--target`、`--under-reset`、`--target-yaml`、`--svd`、`--json`、
 `--log-level`、`--log-file`。
 
 | 命令 | 用途 |
@@ -55,7 +55,7 @@ cmsis-dap-cli halt
 cmsis-dap-cli reg get pc
 cmsis-dap-cli read --address 0x08000000 --width u8 --count 0x1000 --output fw.bin --format bin
 cmsis-dap-cli --svd target.svd svd read GPIOA.ODR.ODR0
-cmsis-dap-cli --yes flash program --address 0x08000000 --file fw.hex --verify
+cmsis-dap-cli flash program --address 0x08000000 --file fw.hex --verify
 cmsis-dap-cli script --file flash.jlink
 cmsis-dap-cli repl
 ```
@@ -110,13 +110,11 @@ cmsis-dap-cli chip search stm32f103c8
 - 退出码：`0` 成功，`1` 运行时错误，`2` 用法错误，`3` 确认被拒或破坏性
   操作缺少确认。
 
-## 破坏性操作
+## Flash 操作
 
-`flash erase`、`flash program` 以及脚本中的破坏性命令（`erase`、`loadbin`、
-`loadfile`、`flash write_image`、`flash erase_sector`）受门禁保护：
+`flash erase` 与 `flash program` 在 CLI 中直接执行（包括在 `script` 与
+`repl` 里），没有确认提示，也没有 `--yes` 参数。但目标必须定义了 Flash：
+用 `--target-yaml`/`--target` 连接（脚本/REPL 里 `device NAME` 后重新
+`connect`），否则操作会明确报错而不是静默无效果。
 
-- 有终端时要求交互确认（除非带 `--yes`）。
-- 无终端时必须带 `--yes`，否则命令被拒绝并以退出码 3 结束。
-- REPL 默认只读；可在提示时交互开启破坏性模式，或用 `--yes` 启动。
-
-Flash 擦除与烧录可能导致设备永久损坏。确认前请仔细核对地址与文件。
+Flash 擦除与烧录可能导致设备永久损坏。执行前请仔细核对地址与文件。
