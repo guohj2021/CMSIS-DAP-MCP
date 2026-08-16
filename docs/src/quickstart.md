@@ -1,17 +1,49 @@
 # Quickstart
 
-## Native binary
+## npm (recommended)
 
-Download the binary for your platform from the GitHub Releases page, then add
-it to your MCP client (see [AI client configuration](./ai-clients.md)).
-
-## npm
+Install nothing — let your MCP client launch the server with `npx`:
 
 ```bash
 codex mcp add cmsis-dap -- npx -y cmsis-dap-mcp
 ```
 
-The npm package downloads the correct platform binary automatically.
+The npm package `cmsis-dap-mcp` downloads the correct platform binary
+automatically on first launch and caches it afterwards.
+
+To pin a version:
+
+```bash
+codex mcp add cmsis-dap -- npx -y cmsis-dap-mcp@0.3.0
+```
+
+## Native binary
+
+Download the binary for your platform from the GitHub Releases page, then
+point the client at it:
+
+```bash
+codex mcp add cmsis-dap -- /path/to/cmsis-dap-mcp --log-level warn
+```
+
+This is the standard way to run an unpublished or locally built server, or
+when you need an exact, offline-pinned binary.
+
+## Configuration styles
+
+MCP clients can start a stdio server in three equivalent ways. The
+`npx` form is the standard for published packages; the local-binary form is
+equivalent and used for local builds.
+
+| Style | Example | Best for |
+| --- | --- | --- |
+| `npx` package | `command = "npx", args = ["-y", "cmsis-dap-mcp"]` | Published releases; updates with npm |
+| Local binary | `command = "/path/to/cmsis-dap-mcp"` | Local builds, offline, exact version |
+| Remote URL | `url = "https://..."` | Streamable-HTTP servers (not supported by this project) |
+
+All three clients covered on the [AI client configuration](./ai-clients.md)
+page accept both the `npx` form and a local binary path; the server behaves
+identically either way.
 
 ## First session
 

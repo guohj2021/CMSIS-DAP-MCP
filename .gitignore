@@ -8,6 +8,7 @@ node_modules/
 .vscode/
 .serial_mcp/
 .worktrees/
+.codex/
 docs/book/
 docs/zh/book/
 npm/bin/*.exe
