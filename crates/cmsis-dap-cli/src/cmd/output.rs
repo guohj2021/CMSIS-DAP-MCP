@@ -53,6 +53,62 @@ fn print_human(value: &Value) {
         );
         return;
     }
+    if value.get("state").and_then(|v| v.as_str()).is_some()
+        && value.get("registers").and_then(|v| v.as_array()).is_some()
+    {
+        println!("state: {}", value["state"].as_str().unwrap_or(""));
+        if let Some(reason) = value["halt_reason"].as_str() {
+            println!("halt_reason: {reason}");
+        }
+        if let Some(pc) = value["pc"].as_u64() {
+            println!("pc: 0x{pc:X}");
+        }
+        if let Some(registers) = value["registers"].as_array() {
+            println!("registers:");
+            for r in registers {
+                println!(
+                    "  {:<10} = 0x{:08X}",
+                    r["name"].as_str().unwrap_or(""),
+                    r["value"].as_u64().unwrap_or(0)
+                );
+            }
+        }
+        if let Some(fault) = value["fault"].as_array() {
+            if !fault.is_empty() {
+                println!("fault:");
+                for f in fault {
+                    println!(
+                        "  {:<10} = 0x{:08X}",
+                        f["name"].as_str().unwrap_or(""),
+                        f["value"].as_u64().unwrap_or(0)
+                    );
+                }
+            }
+        }
+        for (label, key) in [("stack_msp", "stack_msp"), ("stack_psp", "stack_psp")] {
+            if let Some(words) = value.get(key).and_then(|v| v.as_array()) {
+                if !words.is_empty() {
+                    println!("{label}:");
+                    for (i, w) in words.iter().enumerate() {
+                        println!("  [{i:02}] 0x{:08X}", w.as_u64().unwrap_or(0));
+                    }
+                }
+            }
+        }
+        if let Some(memory) = value.get("memory").and_then(|v| v.as_array()) {
+            if !memory.is_empty() {
+                println!("memory:");
+                for m in memory {
+                    println!(
+                        "  0x{:08X} = 0x{:08X}",
+                        m["address"].as_u64().unwrap_or(0),
+                        m["value"].as_u64().unwrap_or(0)
+                    );
+                }
+            }
+        }
+        return;
+    }
     if let Some(registers) = value.get("registers").and_then(|v| v.as_array()) {
         for r in registers {
             println!("{}", r.as_str().unwrap_or(""));

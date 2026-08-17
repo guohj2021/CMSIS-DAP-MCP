@@ -145,6 +145,26 @@ Any MCP-compatible client can use a stdio server:
 
 ## Quick start (verified on hardware)
 
+## Remote TCP, GDB and non-invasive debugging
+
+The server can expose additional endpoints alongside MCP stdio:
+
+- `--tcp PORT` — line-delimited JSON-RPC over TCP (`read_memory`,
+  `write_memory`, `read_core_register`, `halt`, `resume`, `step`, `reset`,
+  `status`, `dump_cpu_state`, ...) that reuses the same session, so follow-up
+  requests never reconnect.
+- `--gdb-port PORT` — GDB Remote Serial Protocol stub (non-invasive attach;
+  registers, memory, run/step, hardware breakpoints).
+- MCP tool `dump_cpu_state` — non-invasive CPU snapshot (registers, fault
+  status, stacks, optional memory) that never resets and restores the previous
+  run state by default.
+
+```bash
+npx -y cmsis-dap-mcp --tcp 4000 --gdb-port 1337
+```
+
+## Quick start (verified on hardware)
+
 The following workflow was verified end to end with a CMSIS-DAP probe and a
 Cortex-M0+ board, driven through Claude Code, opencode and raw MCP stdio:
 
@@ -373,6 +393,24 @@ opencode mcp add cmsis-dap -- /path/to/cmsis-dap-mcp --log-level warn
     }
   }
 }
+```
+
+## 快速开始（已实测）
+
+## 远程 TCP、GDB 与非侵入调试
+
+服务器可以在 MCP stdio 之外额外提供以下端点：
+
+- `--tcp PORT` —— 按行分隔的 JSON-RPC over TCP（`read_memory`、
+  `write_memory`、`read_core_register`、`halt`、`resume`、`step`、`reset`、
+  `status`、`dump_cpu_state` 等），复用同一会话，后续请求无需重连。
+- `--gdb-port PORT` —— GDB Remote Serial Protocol stub（非侵入附着；
+  寄存器、内存、运行/单步、硬件断点）。
+- MCP 工具 `dump_cpu_state` —— 非侵入 CPU 快照（寄存器、fault 状态、栈、
+  可选内存），永不复位，默认读取后恢复原运行状态。
+
+```bash
+npx -y cmsis-dap-mcp --tcp 4000 --gdb-port 1337
 ```
 
 ## 快速开始（已实测）
