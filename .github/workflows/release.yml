@@ -25,6 +25,19 @@ jobs:
             scope: cmsis-dap-mcp-darwin-x64
             artifact: cmsis-dap-mcp
             npmdir: npm/platforms
+          # macos-14 is the hosted ARM64 macOS runner.
+          - os: macos-14
+            scope: cmsis-dap-mcp-darwin-arm64
+            artifact: cmsis-dap-mcp
+            npmdir: npm/platforms
+          - os: ubuntu-24.04-arm
+            scope: cmsis-dap-mcp-linux-arm64
+            artifact: cmsis-dap-mcp
+            npmdir: npm/platforms
+          - os: windows-11-arm
+            scope: cmsis-dap-mcp-win32-arm64
+            artifact: cmsis-dap-mcp.exe
+            npmdir: npm/platforms
           - os: windows-latest
             scope: cmsis-dap-cli-win32-x64
             artifact: cmsis-dap-cli.exe
@@ -36,6 +49,18 @@ jobs:
           - os: macos-15-intel
             scope: cmsis-dap-cli-darwin-x64
             artifact: cmsis-dap-cli
+            npmdir: npm-cli/platforms
+          - os: macos-14
+            scope: cmsis-dap-cli-darwin-arm64
+            artifact: cmsis-dap-cli
+            npmdir: npm-cli/platforms
+          - os: ubuntu-24.04-arm
+            scope: cmsis-dap-cli-linux-arm64
+            artifact: cmsis-dap-cli
+            npmdir: npm-cli/platforms
+          - os: windows-11-arm
+            scope: cmsis-dap-cli-win32-arm64
+            artifact: cmsis-dap-cli.exe
             npmdir: npm-cli/platforms
     runs-on: ${{ matrix.os }}
     env:
@@ -99,9 +124,15 @@ jobs:
           cp dist/cmsis-dap-mcp-win32-x64/cmsis-dap-mcp.exe release/cmsis-dap-mcp-win32-x64.exe
           cp dist/cmsis-dap-mcp-linux-x64/cmsis-dap-mcp release/cmsis-dap-mcp-linux-x64
           cp dist/cmsis-dap-mcp-darwin-x64/cmsis-dap-mcp release/cmsis-dap-mcp-darwin-x64
+          cp dist/cmsis-dap-mcp-win32-arm64/cmsis-dap-mcp.exe release/cmsis-dap-mcp-win32-arm64.exe
+          cp dist/cmsis-dap-mcp-linux-arm64/cmsis-dap-mcp release/cmsis-dap-mcp-linux-arm64
+          cp dist/cmsis-dap-mcp-darwin-arm64/cmsis-dap-mcp release/cmsis-dap-mcp-darwin-arm64
           cp dist/cmsis-dap-cli-win32-x64/cmsis-dap-cli.exe release/cmsis-dap-cli-win32-x64.exe
           cp dist/cmsis-dap-cli-linux-x64/cmsis-dap-cli release/cmsis-dap-cli-linux-x64
           cp dist/cmsis-dap-cli-darwin-x64/cmsis-dap-cli release/cmsis-dap-cli-darwin-x64
+          cp dist/cmsis-dap-cli-win32-arm64/cmsis-dap-cli.exe release/cmsis-dap-cli-win32-arm64.exe
+          cp dist/cmsis-dap-cli-linux-arm64/cmsis-dap-cli release/cmsis-dap-cli-linux-arm64
+          cp dist/cmsis-dap-cli-darwin-arm64/cmsis-dap-cli release/cmsis-dap-cli-darwin-arm64
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -121,6 +152,9 @@ jobs:
           npm --prefix npm pkg set "optionalDependencies.@guohj2021/cmsis-dap-mcp-win32-x64=$VERSION"
           npm --prefix npm pkg set "optionalDependencies.@guohj2021/cmsis-dap-mcp-linux-x64=$VERSION"
           npm --prefix npm pkg set "optionalDependencies.@guohj2021/cmsis-dap-mcp-darwin-x64=$VERSION"
+          npm --prefix npm pkg set "optionalDependencies.@guohj2021/cmsis-dap-mcp-win32-arm64=$VERSION"
+          npm --prefix npm pkg set "optionalDependencies.@guohj2021/cmsis-dap-mcp-linux-arm64=$VERSION"
+          npm --prefix npm pkg set "optionalDependencies.@guohj2021/cmsis-dap-mcp-darwin-arm64=$VERSION"
       - name: Set versions from tag (cmsis-dap-cli)
         shell: bash
         run: |
@@ -129,6 +163,9 @@ jobs:
           npm --prefix npm-cli pkg set "optionalDependencies.@guohj2021/cmsis-dap-cli-win32-x64=$VERSION"
           npm --prefix npm-cli pkg set "optionalDependencies.@guohj2021/cmsis-dap-cli-linux-x64=$VERSION"
           npm --prefix npm-cli pkg set "optionalDependencies.@guohj2021/cmsis-dap-cli-darwin-x64=$VERSION"
+          npm --prefix npm-cli pkg set "optionalDependencies.@guohj2021/cmsis-dap-cli-win32-arm64=$VERSION"
+          npm --prefix npm-cli pkg set "optionalDependencies.@guohj2021/cmsis-dap-cli-linux-arm64=$VERSION"
+          npm --prefix npm-cli pkg set "optionalDependencies.@guohj2021/cmsis-dap-cli-darwin-arm64=$VERSION"
       - name: Publish cmsis-dap-mcp meta package to npmjs
         if: env.NPM_TOKEN != ''
         shell: bash

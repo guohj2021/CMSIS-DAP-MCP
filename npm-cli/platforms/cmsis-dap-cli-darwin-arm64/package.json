@@ -1,8 +1,8 @@
 {
-  "name": "@guohj2021/cmsis-dap-cli-darwin-x64",
+  "name": "@guohj2021/cmsis-dap-cli-darwin-arm64",
   "version": "0.4.1",
   "os": ["darwin"],
-  "cpu": ["x64"],
+  "cpu": ["arm64"],
   "license": "MIT OR Apache-2.0",
   "bin": { "cmsis-dap-cli": "bin/cmsis-dap-cli" },
   "files": ["bin"]

@@ -23,8 +23,7 @@ npx -y cmsis-dap-cli --help
 ```
 
 The npm package downloads the correct platform binary automatically
-(`cmsis-dap-cli-win32-x64`, `cmsis-dap-cli-linux-x64`,
-`cmsis-dap-cli-darwin-x64`). Native binaries are also published on
+(win32/linux/darwin × x64/arm64). Native binaries are also published on
 [GitHub Releases](https://github.com/guohj2021/CMSIS-DAP-MCP/releases).
 
 ## Quick start
@@ -130,8 +129,8 @@ monitor`），全部走 SWD/JTAG——无需串口——并支持带时间戳的
 npx -y cmsis-dap-cli --help
 ```
 
-npm 包会自动下载对应平台的二进制（`cmsis-dap-cli-win32-x64`、
-`cmsis-dap-cli-linux-x64`、`cmsis-dap-cli-darwin-x64`）。原生二进制同时发布在
+npm 包会自动下载对应平台的二进制（win32/linux/darwin × x64/arm64）。
+原生二进制同时发布在
 [GitHub Releases](https://github.com/guohj2021/CMSIS-DAP-MCP/releases)。
 
 ## 快速上手
