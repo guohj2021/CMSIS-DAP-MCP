@@ -1108,4 +1108,109 @@ impl Backend for ProbeRsBackend {
         self.evr = None;
         Ok(())
     }
+
+    fn dump_cpu_state(
+        &mut self,
+        addresses: &[u64],
+        stack_words: usize,
+        restore: bool,
+    ) -> Result<crate::backend::CpuStateDump, McpError> {
+        let mut core = self.core()?;
+        let status = core
+            .status()
+            .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))?;
+        let was_running = matches!(status, CoreStatus::Running | CoreStatus::Sleeping);
+        let halt_reason = match status {
+            CoreStatus::Halted(reason) => Some(format!("{reason:?}")),
+            _ => None,
+        };
+        let should_restore = was_running && restore;
+
+        if was_running {
+            core.halt(Duration::from_secs(1))
+                .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))?;
+        }
+
+        // Core registers (only valid while halted).
+        let mut registers = Vec::new();
+        for name in Self::register_names(&core) {
+            let Ok(reg) = Self::resolve_register(&core, &CoreRegister::Name(name.clone())) else {
+                continue;
+            };
+            if let Ok(value) = core.read_core_reg::<u32>(reg) {
+                registers.push(crate::backend::RegisterValue {
+                    name,
+                    value: value as u64,
+                });
+            }
+        }
+        let pc = registers.iter().find(|r| r.name == "pc").map(|r| r.value);
+
+        // Cortex-M SCB fault status registers (memory reads, no halt needed).
+        const SCB_BASE: u64 = 0xE000_E000;
+        const FAULT_REGS: [(&str, u64); 5] = [
+            ("CFSR", SCB_BASE + 0xD28),
+            ("HFSR", SCB_BASE + 0xD2C),
+            ("DFSR", SCB_BASE + 0xD30),
+            ("MMFAR", SCB_BASE + 0xD34),
+            ("BFAR", SCB_BASE + 0xD38),
+        ];
+        let mut fault = Vec::new();
+        for (name, address) in FAULT_REGS {
+            let mut value = [0u32];
+            if core.read_32(address, &mut value).is_ok() {
+                fault.push(crate::backend::RegisterValue {
+                    name: name.to_string(),
+                    value: value[0] as u64,
+                });
+            }
+        }
+
+        // Stack dumps from MSP/PSP register values.
+        let sp_value = |registers: &[crate::backend::RegisterValue], name: &str| {
+            registers.iter().find(|r| r.name == name).map(|r| r.value)
+        };
+        let mut read_stack = |sp: Option<u64>| -> Vec<u64> {
+            let mut out = Vec::new();
+            let Some(sp) = sp else { return out };
+            for i in 0..stack_words.min(1024) {
+                let mut value = [0u32];
+                if core.read_32(sp + (i as u64) * 4, &mut value).is_err() {
+                    break;
+                }
+                out.push(value[0] as u64);
+            }
+            out
+        };
+        let stack_msp = read_stack(sp_value(&registers, "msp"));
+        let stack_psp = read_stack(sp_value(&registers, "psp"));
+
+        // Caller-requested memory samples (word reads).
+        let mut memory = Vec::new();
+        for &address in addresses {
+            let mut value = [0u32];
+            if core.read_32(address, &mut value).is_ok() {
+                memory.push(crate::backend::MemorySample {
+                    address,
+                    value: value[0] as u64,
+                });
+            }
+        }
+
+        if should_restore {
+            core.run()
+                .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))?;
+        }
+
+        Ok(crate::backend::CpuStateDump {
+            state: if was_running { "running" } else { "halted" }.into(),
+            halt_reason,
+            pc,
+            registers,
+            fault,
+            stack_msp,
+            stack_psp,
+            memory,
+        })
+    }
 }
