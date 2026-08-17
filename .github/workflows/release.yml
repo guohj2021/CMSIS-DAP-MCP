@@ -176,35 +176,15 @@ jobs:
           cp dist/cmsis-dap-cli-darwin-arm64/cmsis-dap-cli release/cmsis-dap-cli-darwin-arm64
           cp dist/cmsis-dap-cli-win32-ia32/cmsis-dap-cli.exe release/cmsis-dap-cli-win32-ia32.exe
           cp dist/cmsis-dap-cli-linux-ia32/cmsis-dap-cli release/cmsis-dap-cli-linux-ia32
-      - name: Extract changelog for release notes
-        shell: bash
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          python3 - "$VERSION" > release_notes.md <<'EOF'
-          import sys
-          sys.stdout.reconfigure(encoding="utf-8")
-          version = "v" + sys.argv[1]
-          capture = False
-          out = []
-          with open("CHANGELOG.md", encoding="utf-8") as f:
-              for line in f.read().splitlines():
-                  if line.startswith("## [" + version + "]"):
-                      capture = True
-                      continue
-                  if capture and line.startswith("## ["):
-                      break
-                  if capture:
-                      out.append(line)
-          print("\n".join(out))
-          EOF
-          if [ ! -s release_notes.md ]; then
-            printf '## v%s\n\nSee the repository CHANGELOG for details.\n' "${VERSION}" > release_notes.md
-          fi
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: release/*
-          body_path: release_notes.md
+          body: |
+            Release ${{ github.ref_name }} of the CMSIS-DAP MCP server and CLI.
+
+            Feature highlights and fixes for this release are documented in the
+            [CHANGELOG](https://github.com/guohj2021/CMSIS-DAP-MCP/blob/main/CHANGELOG.md#v050).
           update_release_body: true
   publish-npm:
     needs: build
