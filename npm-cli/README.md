@@ -46,6 +46,16 @@ Commands that need a target auto-connect using the global connection options
 `--target-yaml`). `--elf FILE` provides symbol names for `watch` / `rtt` /
 `evr`.
 
+## AI-assisted usage
+
+You can also let an AI assistant drive the CLI for you — just describe the
+task, for example:
+
+> Use `npx -y cmsis-dap-cli` to list probes, connect to STM32F030C8, read
+> memory at 0x20000000, then flash `fw.hex` with verification.
+
+The assistant runs the CLI and reads the output; same tool, no GUI needed.
+
 ## Command overview
 
 | Command | Purpose |
@@ -151,6 +161,15 @@ cmsis-dap-cli --target STM32F030C8 repl
 需要目标的命令会自动使用全局连接参数（`--probe-id`、`--protocol`、
 `--speed-khz`、`--target`、`--under-reset`、`--target-yaml`）。`--elf FILE`
 为 `watch`/`rtt`/`evr` 提供符号名。
+
+## AI 辅助使用
+
+也可以让 AI 助手直接帮你驱动这个 CLI，只需描述任务，例如：
+
+> 用 `npx -y cmsis-dap-cli` 列出探针，连接 STM32F030C8，读 0x20000000 处
+> 的内存，然后烧录 `fw.hex` 并校验。
+
+AI 会运行 CLI 并读取输出；同一工具，无需图形界面。
 
 ## 命令一览
 

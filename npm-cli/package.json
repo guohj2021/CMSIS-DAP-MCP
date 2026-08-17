@@ -11,6 +11,8 @@
     "@guohj2021/cmsis-dap-cli-darwin-x64": "^0.4.1",
     "@guohj2021/cmsis-dap-cli-win32-arm64": "^0.4.1",
     "@guohj2021/cmsis-dap-cli-linux-arm64": "^0.4.1",
-    "@guohj2021/cmsis-dap-cli-darwin-arm64": "^0.4.1"
+    "@guohj2021/cmsis-dap-cli-darwin-arm64": "^0.4.1",
+    "@guohj2021/cmsis-dap-cli-win32-ia32": "^0.4.1",
+    "@guohj2021/cmsis-dap-cli-linux-ia32": "^0.4.1"
   }
 }

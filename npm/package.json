@@ -11,6 +11,8 @@
     "@guohj2021/cmsis-dap-mcp-darwin-x64": "^0.4.1",
     "@guohj2021/cmsis-dap-mcp-win32-arm64": "^0.4.1",
     "@guohj2021/cmsis-dap-mcp-linux-arm64": "^0.4.1",
-    "@guohj2021/cmsis-dap-mcp-darwin-arm64": "^0.4.1"
+    "@guohj2021/cmsis-dap-mcp-darwin-arm64": "^0.4.1",
+    "@guohj2021/cmsis-dap-mcp-win32-ia32": "^0.4.1",
+    "@guohj2021/cmsis-dap-mcp-linux-ia32": "^0.4.1"
   }
 }

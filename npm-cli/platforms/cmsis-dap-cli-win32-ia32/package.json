@@ -1,0 +1,9 @@
+{
+  "name": "@guohj2021/cmsis-dap-cli-win32-ia32",
+  "version": "0.4.1",
+  "os": ["win32"],
+  "cpu": ["ia32"],
+  "license": "MIT OR Apache-2.0",
+  "bin": { "cmsis-dap-cli": "bin/cmsis-dap-cli.exe" },
+  "files": ["bin"]
+}
