@@ -39,6 +39,16 @@ jobs:
             artifact: cmsis-dap-mcp.exe
             npmdir: npm/platforms
           - os: windows-latest
+            scope: cmsis-dap-mcp-win32-ia32
+            artifact: cmsis-dap-mcp.exe
+            npmdir: npm/platforms
+            target: i686-pc-windows-msvc
+          - os: ubuntu-latest
+            scope: cmsis-dap-mcp-linux-ia32
+            artifact: cmsis-dap-mcp
+            npmdir: npm/platforms
+            target: i686-unknown-linux-gnu
+          - os: windows-latest
             scope: cmsis-dap-cli-win32-x64
             artifact: cmsis-dap-cli.exe
             npmdir: npm-cli/platforms
@@ -62,6 +72,16 @@ jobs:
             scope: cmsis-dap-cli-win32-arm64
             artifact: cmsis-dap-cli.exe
             npmdir: npm-cli/platforms
+          - os: windows-latest
+            scope: cmsis-dap-cli-win32-ia32
+            artifact: cmsis-dap-cli.exe
+            npmdir: npm-cli/platforms
+            target: i686-pc-windows-msvc
+          - os: ubuntu-latest
+            scope: cmsis-dap-cli-linux-ia32
+            artifact: cmsis-dap-cli
+            npmdir: npm-cli/platforms
+            target: i686-unknown-linux-gnu
     runs-on: ${{ matrix.os }}
     env:
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -69,7 +89,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.97.1
-      - run: cargo build --release --workspace
+      - name: Install 32-bit Linux build dependencies
+        if: matrix.target == 'i686-unknown-linux-gnu'
+        shell: bash
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y gcc-multilib libc6-dev-i386 libudev-dev:i386
+      - name: Build release binaries
+        shell: bash
+        run: |
+          export PKG_CONFIG_ALLOW_CROSS=1
+          if [ -n "${{ matrix.target }}" ]; then
+            export PKG_CONFIG_PATH=/usr/lib/i386-linux-gnu/pkgconfig
+            rustup target add "${{ matrix.target }}"
+            cargo build --release --workspace --target "${{ matrix.target }}"
+            cp "target/${{ matrix.target }}/release/${{ matrix.artifact }}" \
+               "target/release/${{ matrix.artifact }}"
+          else
+            cargo build --release --workspace
+          fi
       - name: Stage npm platform package
         shell: bash
         run: |
@@ -127,12 +166,16 @@ jobs:
           cp dist/cmsis-dap-mcp-win32-arm64/cmsis-dap-mcp.exe release/cmsis-dap-mcp-win32-arm64.exe
           cp dist/cmsis-dap-mcp-linux-arm64/cmsis-dap-mcp release/cmsis-dap-mcp-linux-arm64
           cp dist/cmsis-dap-mcp-darwin-arm64/cmsis-dap-mcp release/cmsis-dap-mcp-darwin-arm64
+          cp dist/cmsis-dap-mcp-win32-ia32/cmsis-dap-mcp.exe release/cmsis-dap-mcp-win32-ia32.exe
+          cp dist/cmsis-dap-mcp-linux-ia32/cmsis-dap-mcp release/cmsis-dap-mcp-linux-ia32
           cp dist/cmsis-dap-cli-win32-x64/cmsis-dap-cli.exe release/cmsis-dap-cli-win32-x64.exe
           cp dist/cmsis-dap-cli-linux-x64/cmsis-dap-cli release/cmsis-dap-cli-linux-x64
           cp dist/cmsis-dap-cli-darwin-x64/cmsis-dap-cli release/cmsis-dap-cli-darwin-x64
           cp dist/cmsis-dap-cli-win32-arm64/cmsis-dap-cli.exe release/cmsis-dap-cli-win32-arm64.exe
           cp dist/cmsis-dap-cli-linux-arm64/cmsis-dap-cli release/cmsis-dap-cli-linux-arm64
           cp dist/cmsis-dap-cli-darwin-arm64/cmsis-dap-cli release/cmsis-dap-cli-darwin-arm64
+          cp dist/cmsis-dap-cli-win32-ia32/cmsis-dap-cli.exe release/cmsis-dap-cli-win32-ia32.exe
+          cp dist/cmsis-dap-cli-linux-ia32/cmsis-dap-cli release/cmsis-dap-cli-linux-ia32
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -155,6 +198,8 @@ jobs:
           npm --prefix npm pkg set "optionalDependencies.@guohj2021/cmsis-dap-mcp-win32-arm64=$VERSION"
           npm --prefix npm pkg set "optionalDependencies.@guohj2021/cmsis-dap-mcp-linux-arm64=$VERSION"
           npm --prefix npm pkg set "optionalDependencies.@guohj2021/cmsis-dap-mcp-darwin-arm64=$VERSION"
+          npm --prefix npm pkg set "optionalDependencies.@guohj2021/cmsis-dap-mcp-win32-ia32=$VERSION"
+          npm --prefix npm pkg set "optionalDependencies.@guohj2021/cmsis-dap-mcp-linux-ia32=$VERSION"
       - name: Set versions from tag (cmsis-dap-cli)
         shell: bash
         run: |
@@ -166,6 +211,8 @@ jobs:
           npm --prefix npm-cli pkg set "optionalDependencies.@guohj2021/cmsis-dap-cli-win32-arm64=$VERSION"
           npm --prefix npm-cli pkg set "optionalDependencies.@guohj2021/cmsis-dap-cli-linux-arm64=$VERSION"
           npm --prefix npm-cli pkg set "optionalDependencies.@guohj2021/cmsis-dap-cli-darwin-arm64=$VERSION"
+          npm --prefix npm-cli pkg set "optionalDependencies.@guohj2021/cmsis-dap-cli-win32-ia32=$VERSION"
+          npm --prefix npm-cli pkg set "optionalDependencies.@guohj2021/cmsis-dap-cli-linux-ia32=$VERSION"
       - name: Publish cmsis-dap-mcp meta package to npmjs
         if: env.NPM_TOKEN != ''
         shell: bash

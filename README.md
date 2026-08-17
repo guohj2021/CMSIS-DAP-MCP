@@ -88,6 +88,10 @@ Install nothing. Configure your MCP client to launch the server with `npx`:
 codex mcp add cmsis-dap -- npx -y cmsis-dap-mcp
 ```
 
+Or just tell your AI assistant: "install the CMSIS-DAP MCP server launched
+with `npx -y cmsis-dap-mcp`" — it configures and verifies the server for you,
+no manual configuration needed.
+
 The `cmsis-dap-mcp` npm package automatically downloads the correct platform
 binary (win32/linux/darwin × x64/arm64).
 
@@ -368,6 +372,9 @@ monitor`（SEGGER RTT 日志）与 `evr monitor`（CMSIS-View Event Recorder）�
 ```bash
 codex mcp add cmsis-dap -- npx -y cmsis-dap-mcp
 ```
+
+也可以直接告诉 AI 助手：“帮我安装 CMSIS-DAP MCP 服务器，用
+`npx -y cmsis-dap-mcp` 启动”——它会替你完成配置并验证，无需手动改配置。
 
 `cmsis-dap-mcp` npm 包会自动下载对应平台的二进制
 （win32/linux/darwin × x64/arm64）。
