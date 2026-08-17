@@ -23,8 +23,7 @@ npx -y cmsis-dap-cli --help
 ```
 
 The npm package downloads the correct platform binary automatically
-(`cmsis-dap-cli-win32-x64`, `cmsis-dap-cli-linux-x64`,
-`cmsis-dap-cli-darwin-x64`). Native binaries are also published on
+(win32/linux/darwin × x64/arm64). Native binaries are also published on
 [GitHub Releases](https://github.com/guohj2021/CMSIS-DAP-MCP/releases).
 
 ## Quick start
@@ -47,6 +46,16 @@ Commands that need a target auto-connect using the global connection options
 `--target-yaml`). `--elf FILE` provides symbol names for `watch` / `rtt` /
 `evr`.
 
+## AI-assisted usage
+
+You can also let an AI assistant drive the CLI for you — just describe the
+task, for example:
+
+> Use `npx -y cmsis-dap-cli` to list probes, connect to STM32F030C8, read
+> memory at 0x20000000, then flash `fw.hex` with verification.
+
+The assistant runs the CLI and reads the output; same tool, no GUI needed.
+
 ## Command overview
 
 | Command | Purpose |
@@ -66,6 +75,9 @@ Commands that need a target auto-connect using the global connection options
 | `watch` | poll variables live with a refresh interval (needs a session) |
 | `rtt info/monitor` | SEGGER RTT up-channel logging (needs `--elf` or RAM scan) |
 | `evr info/monitor` | CMSIS-View Event Recorder decoding (needs `--elf`) |
+| `dump` | non-invasive CPU snapshot (never resets; restores run state) |
+| `tcp-server` | remote JSON-RPC server over TCP (reuses one session) |
+| `gdb-server` | GDB Remote Serial Protocol stub (non-invasive attach) |
 | `repl` | interactive shell |
 
 Use `--json` for machine-readable output. Flash erase/program run directly;
@@ -87,6 +99,9 @@ cmsis-dap-cli --target STM32F030C8 script --file flash.jlink
 cmsis-dap-cli --target STM32F030C8 --elf fw.axf watch counter --count 0 --log-dir logs
 cmsis-dap-cli --target STM32F030C8 --elf fw.axf rtt monitor --channel 0,1 --count 0
 cmsis-dap-cli --target STM32F030C8 --elf fw.axf evr monitor --count 0
+cmsis-dap-cli --target STM32F030C8 dump --address 0x20000000 --stack-words 16
+cmsis-dap-cli --target STM32F030C8 tcp-server --port 4000
+cmsis-dap-cli --target STM32F030C8 gdb-server --port 1337
 cmsis-dap-cli --target STM32F030C8 repl
 ```
 
@@ -130,8 +145,8 @@ monitor`），全部走 SWD/JTAG——无需串口——并支持带时间戳的
 npx -y cmsis-dap-cli --help
 ```
 
-npm 包会自动下载对应平台的二进制（`cmsis-dap-cli-win32-x64`、
-`cmsis-dap-cli-linux-x64`、`cmsis-dap-cli-darwin-x64`）。原生二进制同时发布在
+npm 包会自动下载对应平台的二进制（win32/linux/darwin × x64/arm64）。
+原生二进制同时发布在
 [GitHub Releases](https://github.com/guohj2021/CMSIS-DAP-MCP/releases)。
 
 ## 快速上手
@@ -153,6 +168,15 @@ cmsis-dap-cli --target STM32F030C8 repl
 `--speed-khz`、`--target`、`--under-reset`、`--target-yaml`）。`--elf FILE`
 为 `watch`/`rtt`/`evr` 提供符号名。
 
+## AI 辅助使用
+
+也可以让 AI 助手直接帮你驱动这个 CLI，只需描述任务，例如：
+
+> 用 `npx -y cmsis-dap-cli` 列出探针，连接 STM32F030C8，读 0x20000000 处
+> 的内存，然后烧录 `fw.hex` 并校验。
+
+AI 会运行 CLI 并读取输出；同一工具，无需图形界面。
+
 ## 命令一览
 
 | 命令 | 用途 |
@@ -172,6 +196,9 @@ cmsis-dap-cli --target STM32F030C8 repl
 | `watch` | 按刷新间隔实时轮询变量（需会话） |
 | `rtt info/monitor` | SEGGER RTT 上行通道日志（需 `--elf` 或 RAM 扫描） |
 | `evr info/monitor` | CMSIS-View Event Recorder 解码（需 `--elf`） |
+| `dump` | 非侵入 CPU 快照（永不复位；默认读取后恢复运行） |
+| `tcp-server` | 远程 JSON-RPC TCP 服务器（复用同一会话） |
+| `gdb-server` | GDB Remote Serial Protocol stub（非侵入附着） |
 | `repl` | 交互式 shell |
 
 `--json` 输出机器可读结果。Flash 擦除/烧录直接执行；目标必须定义了 Flash。
@@ -192,6 +219,9 @@ cmsis-dap-cli --target STM32F030C8 script --file flash.jlink
 cmsis-dap-cli --target STM32F030C8 --elf fw.axf watch counter --count 0 --log-dir logs
 cmsis-dap-cli --target STM32F030C8 --elf fw.axf rtt monitor --channel 0,1 --count 0
 cmsis-dap-cli --target STM32F030C8 --elf fw.axf evr monitor --count 0
+cmsis-dap-cli --target STM32F030C8 dump --address 0x20000000 --stack-words 16
+cmsis-dap-cli --target STM32F030C8 tcp-server --port 4000
+cmsis-dap-cli --target STM32F030C8 gdb-server --port 1337
 cmsis-dap-cli --target STM32F030C8 repl
 ```
 

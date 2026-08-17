@@ -97,7 +97,7 @@ feature branch -> develop -> main -> tag vX.Y.Z
                |                                               |
                v                                               v
    GitHub Release binaries                        npm platform packages
-   (win32-x64 / linux-x64 / darwin-x64)            (meta cmsis-dap-mcp + platform packages)
+   (win32/linux/darwin × x64/arm64)                (meta cmsis-dap-mcp + platform packages)
                |
                v
    GitHub Pages docs (English at /, Chinese at /zh/)

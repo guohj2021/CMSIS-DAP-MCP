@@ -593,4 +593,86 @@ impl Backend for MockBackend {
         self.evr_attached = false;
         Ok(())
     }
+
+    fn dump_cpu_state(
+        &mut self,
+        addresses: &[u64],
+        stack_words: usize,
+        restore: bool,
+    ) -> Result<crate::backend::CpuStateDump, McpError> {
+        if !self.connected {
+            return Err(not_connected());
+        }
+        let was_running = !self.halted;
+        let should_restore = was_running && restore;
+        if was_running {
+            self.halted = true;
+        }
+
+        let mut registers = Vec::new();
+        for name in self.list_core_registers()? {
+            let value = *self.registers.get(&name).unwrap_or(&0);
+            registers.push(crate::backend::RegisterValue { name, value });
+        }
+        let pc = registers.iter().find(|r| r.name == "pc").map(|r| r.value);
+
+        const FAULT_REGS: [(&str, u64); 5] = [
+            ("CFSR", 0xE000_ED28),
+            ("HFSR", 0xE000_ED2C),
+            ("DFSR", 0xE000_ED30),
+            ("MMFAR", 0xE000_ED34),
+            ("BFAR", 0xE000_ED38),
+        ];
+        let mut fault = Vec::new();
+        for (name, address) in FAULT_REGS {
+            let values = self.read_memory(address, AccessWidth::U32, 1)?;
+            fault.push(crate::backend::RegisterValue {
+                name: name.to_string(),
+                value: values[0],
+            });
+        }
+
+        let sp_of = |name: &str| registers.iter().find(|r| r.name == name).map(|r| r.value);
+        let mut stack_msp = Vec::new();
+        if let Some(sp) = sp_of("msp") {
+            for i in 0..stack_words.min(1024) {
+                let values = self.read_memory(sp + (i as u64) * 4, AccessWidth::U32, 1)?;
+                stack_msp.push(values[0]);
+            }
+        }
+        let mut stack_psp = Vec::new();
+        if let Some(sp) = sp_of("psp") {
+            for i in 0..stack_words.min(1024) {
+                let values = self.read_memory(sp + (i as u64) * 4, AccessWidth::U32, 1)?;
+                stack_psp.push(values[0]);
+            }
+        }
+
+        let mut memory = Vec::new();
+        for &address in addresses {
+            let values = self.read_memory(address, AccessWidth::U32, 1)?;
+            memory.push(crate::backend::MemorySample {
+                address,
+                value: values[0],
+            });
+        }
+
+        if should_restore {
+            self.halted = false;
+        }
+        Ok(crate::backend::CpuStateDump {
+            state: if was_running { "running" } else { "halted" }.into(),
+            halt_reason: if was_running {
+                None
+            } else {
+                Some("request".into())
+            },
+            pc,
+            registers,
+            fault,
+            stack_msp,
+            stack_psp,
+            memory,
+        })
+    }
 }

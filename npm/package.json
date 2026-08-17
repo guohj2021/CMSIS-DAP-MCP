@@ -1,13 +1,18 @@
 {
   "name": "cmsis-dap-mcp",
-  "version": "0.2.0",
+  "version": "0.4.1",
   "description": "MCP server for CMSIS-DAP debug probes (Cortex-M)",
   "license": "MIT OR Apache-2.0",
   "bin": { "cmsis-dap-mcp": "bin/cmsis-dap-mcp.js" },
   "files": ["bin"],
   "optionalDependencies": {
-    "@guohj2021/cmsis-dap-mcp-win32-x64": "^0.1.1",
-    "@guohj2021/cmsis-dap-mcp-linux-x64": "^0.1.1",
-    "@guohj2021/cmsis-dap-mcp-darwin-x64": "^0.1.1"
+    "@guohj2021/cmsis-dap-mcp-win32-x64": "^0.4.1",
+    "@guohj2021/cmsis-dap-mcp-linux-x64": "^0.4.1",
+    "@guohj2021/cmsis-dap-mcp-darwin-x64": "^0.4.1",
+    "@guohj2021/cmsis-dap-mcp-win32-arm64": "^0.4.1",
+    "@guohj2021/cmsis-dap-mcp-linux-arm64": "^0.4.1",
+    "@guohj2021/cmsis-dap-mcp-darwin-arm64": "^0.4.1",
+    "@guohj2021/cmsis-dap-mcp-win32-ia32": "^0.4.1",
+    "@guohj2021/cmsis-dap-mcp-linux-ia32": "^0.4.1"
   }
 }

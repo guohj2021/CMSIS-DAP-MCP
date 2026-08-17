@@ -18,10 +18,10 @@ use rmcp::{tool, tool_router, ServerHandler};
 use std::sync::Mutex;
 
 pub use tools_core::{
-    ClearBreakpointsParams, ClearWatchpointsParams, GetCoreStatusParams, HaltParams,
-    ListBreakpointsParams, ListCoreRegistersParams, ListWatchpointsParams, ReadCoreRegisterParams,
-    ResetParams, ResumeParams, SetBreakpointParams, SetWatchpointParams, StepParams,
-    WriteCoreRegisterParams,
+    ClearBreakpointsParams, ClearWatchpointsParams, DumpCpuStateParams, GetCoreStatusParams,
+    HaltParams, ListBreakpointsParams, ListCoreRegistersParams, ListWatchpointsParams,
+    ReadCoreRegisterParams, ResetParams, ResumeParams, SetBreakpointParams, SetWatchpointParams,
+    StepParams, WriteCoreRegisterParams,
 };
 pub use tools_dap::{ReadDapParams, WriteDapParams};
 pub use tools_flash::{EraseFlashParams, ProgramFlashParams};
@@ -42,7 +42,9 @@ tools (connect, disconnect, write_memory, write_core_register, halt, resume, ste
 clear_breakpoints, reset, write_dap, set_watchpoint, clear_watchpoints, load_svd, \
 write_peripheral) are marked write and governed by the MCP client approval policy; Destructive \
 tools (erase_flash, program_flash) are disabled unless the server was started with \
---allow-destructive. Workflow: call list_probes, then connect (protocol swd or jtag, optionally \
+--allow-destructive. dump_cpu_state takes a non-invasive CPU snapshot (never resets; it briefly \
+halts to read registers and restores the previous run state afterwards; memory and fault-status \
+registers are read without halting). Workflow: call list_probes, then connect (protocol swd or jtag, optionally \
 under_reset) with the probe id, then use memory/core tools; reset accepts mode run or halt; \
 program_flash accepts raw data or a firmware file (axf/elf/bin/hex) with verify for read-back \
 checking; read_memory can export a range as bin or hex when given a path; run_script executes \
@@ -73,16 +75,25 @@ fn register_params(
 }
 
 pub struct CmsisDapMcp {
-    pub session: Mutex<SessionManager>,
+    pub session: std::sync::Arc<Mutex<SessionManager>>,
     pub policy: SecurityPolicy,
 }
 
 impl CmsisDapMcp {
     pub fn new(session: SessionManager, policy: SecurityPolicy) -> Self {
         Self {
-            session: Mutex::new(session),
+            session: std::sync::Arc::new(Mutex::new(session)),
             policy,
         }
+    }
+
+    /// Build a server around a session shared with other endpoints
+    /// (e.g. the remote TCP server).
+    pub fn from_shared(
+        session: std::sync::Arc<Mutex<SessionManager>>,
+        policy: SecurityPolicy,
+    ) -> Self {
+        Self { session, policy }
     }
 }
 
@@ -821,6 +832,36 @@ impl CmsisDapMcp {
                 "halt_reason": status.halt_reason,
                 "pc": status.pc,
             })),
+            Err(e) => error_result(e.code, e.message),
+        }
+    }
+
+    #[tool(
+        description = "Take a non-invasive CPU state snapshot: registers, Cortex-M fault status registers, MSP/PSP stack words and optional memory samples. Never resets; briefly halts to read core registers and restores the previous run state afterwards (set restore=false to leave the core halted).",
+        annotations(
+            title = "Dump CPU state",
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    pub async fn dump_cpu_state(
+        &self,
+        Parameters(params): Parameters<DumpCpuStateParams>,
+    ) -> CallToolResult {
+        let addresses = params.addresses.unwrap_or_default();
+        let stack_words = params.stack_words.unwrap_or(16) as usize;
+        let restore = params.restore.unwrap_or(true);
+        match self.session.lock().unwrap().backend().dump_cpu_state(
+            &addresses,
+            stack_words,
+            restore,
+        ) {
+            Ok(dump) => match serde_json::to_value(dump) {
+                Ok(value) => CallToolResult::structured(value),
+                Err(e) => error_result(ErrorCode::InternalError, e.to_string()),
+            },
             Err(e) => error_result(e.code, e.message),
         }
     }
