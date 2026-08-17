@@ -54,8 +54,7 @@ codex mcp add cmsis-dap -- npx -y cmsis-dap-mcp
 ```
 
 The npm package `cmsis-dap-mcp` downloads the correct platform binary
-automatically (`cmsis-dap-mcp-win32-x64`, `cmsis-dap-mcp-linux-x64`,
-`cmsis-dap-mcp-darwin-x64`).
+automatically (win32/linux/darwin × x64/arm64).
 
 ## AI client configuration
 
@@ -266,7 +265,7 @@ codex mcp add cmsis-dap -- npx -y cmsis-dap-mcp
 ```
 
 npm 包 `cmsis-dap-mcp` 会自动下载对应平台的二进制
-（`cmsis-dap-mcp-win32-x64`、`cmsis-dap-mcp-linux-x64`、`cmsis-dap-mcp-darwin-x64`）。
+（win32/linux/darwin × x64/arm64）。
 
 ## AI 客户端配置
 

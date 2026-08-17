@@ -89,8 +89,7 @@ codex mcp add cmsis-dap -- npx -y cmsis-dap-mcp
 ```
 
 The `cmsis-dap-mcp` npm package automatically downloads the correct platform
-binary (`cmsis-dap-mcp-win32-x64`, `cmsis-dap-mcp-linux-x64`,
-`cmsis-dap-mcp-darwin-x64`).
+binary (win32/linux/darwin × x64/arm64).
 
 Or use a native binary from [GitHub Releases](https://github.com/guohj2021/CMSIS-DAP-MCP/releases).
 
@@ -371,8 +370,7 @@ codex mcp add cmsis-dap -- npx -y cmsis-dap-mcp
 ```
 
 `cmsis-dap-mcp` npm 包会自动下载对应平台的二进制
-（`cmsis-dap-mcp-win32-x64`、`cmsis-dap-mcp-linux-x64`、
-`cmsis-dap-mcp-darwin-x64`）。
+（win32/linux/darwin × x64/arm64）。
 
 也可以从 [GitHub Releases](https://github.com/guohj2021/CMSIS-DAP-MCP/releases)
 下载原生二进制。

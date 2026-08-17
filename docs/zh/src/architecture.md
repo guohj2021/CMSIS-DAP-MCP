@@ -95,7 +95,7 @@ run_script {path | script}   ->  script::run           ->  逐命令分派到后
              |                                         |
              v                                         v
  GitHub Release 二进制                        npm 平台包
- （win32-x64 / linux-x64 / darwin-x64）        （元包 cmsis-dap-mcp + 平台包）
+ （win32/linux/darwin × x64/arm64）           （元包 cmsis-dap-mcp + 平台包）
              |
              v
  GitHub Pages 文档（英文 /，中文 /zh/）
