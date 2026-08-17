@@ -1,12 +1,37 @@
 use super::{
     parse_register, parse_svd_target, parse_width, BpAction, BpArgs, ChipGenerateArgs,
-    ChipSearchArgs, CliError, DapAction, DapArgs, FlashAction, FlashArgs, Globals, ReadArgs,
-    RegAction, RegArgs, ResetArgs, SvdAction, SvdArgs, VerifyArgs, WpAction, WpArgs, WriteArgs,
+    ChipSearchArgs, CliError, DapAction, DapArgs, DumpArgs, FlashAction, FlashArgs, Globals,
+    ReadArgs, RegAction, RegArgs, ResetArgs, SvdAction, SvdArgs, VerifyArgs, WpAction, WpArgs,
+    WriteArgs,
 };
 use cmsis_dap_core::backend::{AccessWidth, ExportFormat, ImageFileFormat, ResetMode, WatchAccess};
 use cmsis_dap_core::error::{ErrorCode, McpError};
 use cmsis_dap_core::session::SessionManager;
 use serde_json::{json, Value};
+use std::path::Path;
+
+/// Non-invasive CPU state snapshot.
+pub fn dump(
+    session: &mut SessionManager,
+    elf: Option<&Path>,
+    a: &DumpArgs,
+) -> Result<Value, CliError> {
+    let symbols = match elf {
+        Some(path) => Some(super::symbols::load_symbols(path)?),
+        None => None,
+    };
+    let mut addresses = Vec::new();
+    for target in &a.addresses {
+        let (address, _) = super::live::resolve_target(target, symbols.as_ref())?;
+        addresses.push(address);
+    }
+    let dump =
+        session
+            .backend()
+            .dump_cpu_state(&addresses, a.stack_words as usize, !a.no_restore)?;
+    serde_json::to_value(dump)
+        .map_err(|e| CliError::Mcp(McpError::new(ErrorCode::InternalError, e.to_string())))
+}
 
 pub fn read(session: &mut SessionManager, a: &ReadArgs) -> Result<Value, CliError> {
     if let Some(path) = &a.output {

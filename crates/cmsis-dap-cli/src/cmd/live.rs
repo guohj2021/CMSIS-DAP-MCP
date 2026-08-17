@@ -2,7 +2,7 @@
 //! CMSIS-View Event Recorder, all with timestamped log export.
 
 use super::symbols;
-use super::{parse_u64_arg, CliError, EvrMonitorArgs, RttMonitorArgs};
+use super::{parse_u64_arg, CliError, DumpArgs, EvrMonitorArgs, RttMonitorArgs};
 use crate::cmd::signal;
 use cmsis_dap_core::backend::{AccessWidth, EvrEvent};
 use cmsis_dap_core::error::{ErrorCode, McpError};
@@ -780,6 +780,41 @@ pub fn parse_evr_repl(tokens: &[&str]) -> Result<EvrMonitorArgs, CliError> {
         return Err(CliError::InvalidArgument(
             "--log-dir and --log-file are mutually exclusive".into(),
         ));
+    }
+    Ok(args)
+}
+
+/// Parse REPL `dump [--address A]... [--stack-words N] [--no-restore]`.
+pub fn parse_dump_repl(tokens: &[&str]) -> Result<DumpArgs, CliError> {
+    let mut args = DumpArgs {
+        addresses: Vec::new(),
+        stack_words: 16,
+        no_restore: false,
+    };
+    let mut iter = tokens.iter().peekable();
+    while let Some(token) = iter.next() {
+        match *token {
+            "--address" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| CliError::InvalidArgument("--address needs a value".into()))?;
+                args.addresses.push(value.to_string());
+            }
+            "--stack-words" => {
+                let value = iter.next().ok_or_else(|| {
+                    CliError::InvalidArgument("--stack-words needs a value".into())
+                })?;
+                args.stack_words = parse_u32_repl(value)?;
+            }
+            "--no-restore" => {
+                args.no_restore = true;
+            }
+            other => {
+                return Err(CliError::InvalidArgument(format!(
+                    "unknown dump option '{other}'"
+                )))
+            }
+        }
     }
     Ok(args)
 }

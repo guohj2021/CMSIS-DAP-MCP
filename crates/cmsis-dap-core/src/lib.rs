@@ -1,7 +1,9 @@
 pub mod backend;
 pub mod error;
 pub mod evr;
+pub mod gdb;
 pub mod hex;
+pub mod remote;
 pub mod script;
 pub mod security;
 pub mod session;

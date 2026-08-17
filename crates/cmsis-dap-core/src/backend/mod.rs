@@ -228,6 +228,42 @@ pub struct EvrStatus {
     pub event_status: u64,
 }
 
+/// One named register (or fault status register) value in a CPU dump.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct RegisterValue {
+    pub name: String,
+    pub value: u64,
+}
+
+/// One memory sample read during a CPU dump.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct MemorySample {
+    pub address: u64,
+    pub value: u64,
+}
+
+/// A non-invasive snapshot of the target CPU.
+///
+/// Memory and fault-status registers are read without halting; core registers
+/// require a short halt, after which the original run state is restored when
+/// `restore` was requested.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CpuStateDump {
+    /// "running" or "halted" as observed before the dump.
+    pub state: String,
+    pub halt_reason: Option<String>,
+    pub pc: Option<u64>,
+    pub registers: Vec<RegisterValue>,
+    /// Cortex-M SCB fault status registers (CFSR/HFSR/DFSR/MMFAR/BFAR).
+    pub fault: Vec<RegisterValue>,
+    /// Top words of the main stack (MSP) when available.
+    pub stack_msp: Vec<u64>,
+    /// Top words of the process stack (PSP) when available.
+    pub stack_psp: Vec<u64>,
+    /// Samples for caller-requested addresses (word reads).
+    pub memory: Vec<MemorySample>,
+}
+
 /// A pure helper that maps a register name to a lookup strategy.
 ///
 /// Special roles (pc/sp/fp/lr/psr/msp/psp/fpsr) and general registers
@@ -370,5 +406,22 @@ pub trait Backend: Send {
     /// Detach from the Event Recorder.
     fn detach_evr(&mut self) -> Result<(), McpError> {
         Ok(())
+    }
+
+    /// Take a non-invasive snapshot of the target CPU.
+    ///
+    /// Never resets the target. Core registers are read while halted (a short
+    /// halt when the core was running, restored afterwards when `restore` is
+    /// set); memory and fault-status registers are read without halting.
+    fn dump_cpu_state(
+        &mut self,
+        _addresses: &[u64],
+        _stack_words: usize,
+        _restore: bool,
+    ) -> Result<CpuStateDump, McpError> {
+        Err(McpError::new(
+            ErrorCode::UnsupportedFeature,
+            "CPU state dump is not supported by this backend",
+        ))
     }
 }

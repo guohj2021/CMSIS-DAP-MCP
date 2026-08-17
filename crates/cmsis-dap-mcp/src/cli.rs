@@ -32,6 +32,13 @@ pub struct AppConfig {
     pub svd: Option<PathBuf>,
     #[arg(long)]
     pub target_yaml: Option<PathBuf>,
+    /// Also serve a remote JSON-RPC TCP server on this port (127.0.0.1).
+    #[arg(long)]
+    pub tcp: Option<u16>,
+    /// Also start a GDB server on this port (default 1337 semantics; uses the
+    /// same probe via a non-invasive attach).
+    #[arg(long)]
+    pub gdb_port: Option<u16>,
 }
 
 impl AppConfig {

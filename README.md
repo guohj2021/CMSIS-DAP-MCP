@@ -267,6 +267,21 @@ SEGGER RTT and the Event Recorder:
 In `repl` use `connect` + `reset run` first (a fresh session attaches with the
 core halted), then `watch run` / `rtt monitor` / `evr monitor`.
 
+## Non-invasive debugging, remote TCP and GDB
+
+- **Non-invasive CPU dump** — `cmsis-dap-cli dump` / MCP `dump_cpu_state`
+  snapshot registers, Cortex-M fault status registers, stacks and optional
+  memory **without resetting** the target; the previous run state is restored
+  afterwards by default.
+- **Remote TCP server** — `cmsis-dap-cli tcp-server --port 4000` or
+  `cmsis-dap-mcp --tcp 4000` serve a line-delimited JSON-RPC protocol
+  (`read_memory`, `dump_cpu_state`, ...) that reuses one session, so follow-up
+  requests never reconnect.
+- **GDB server** — `cmsis-dap-cli gdb-server --port 1337` or
+  `cmsis-dap-mcp --gdb-port 1337` expose a GDB Remote Serial Protocol stub
+  (ported from [probe-rs-tools](https://github.com/probe-rs/probe-rs) via
+  [gdbstub](https://github.com/daniel5151/gdbstub)); attach is non-invasive.
+
 ## Security
 
 - Read-only tools are always available.
@@ -544,6 +559,19 @@ Cortex-M0+ 目标）：
 
 在 `repl` 里先 `connect` + `reset run`（新会话附着时核心处于停机），再执行
 `watch run` / `rtt monitor` / `evr monitor`。
+
+## 非侵入调试、远程 TCP 与 GDB
+
+- **非侵入 CPU 快照** —— `cmsis-dap-cli dump` / MCP `dump_cpu_state` 在不
+  复位目标的前提下采集寄存器、Cortex-M fault 状态寄存器、栈与可选内存；
+  默认读取后恢复原运行状态。
+- **远程 TCP 服务器** —— `cmsis-dap-cli tcp-server --port 4000` 或
+  `cmsis-dap-mcp --tcp 4000` 提供按行分隔的 JSON-RPC 协议
+  （`read_memory`、`dump_cpu_state` 等），复用同一会话，后续请求无需重连。
+- **GDB 服务器** —— `cmsis-dap-cli gdb-server --port 1337` 或
+  `cmsis-dap-mcp --gdb-port 1337` 提供 GDB Remote Serial Protocol stub
+  （移植自 [probe-rs-tools](https://github.com/probe-rs/probe-rs)，基于
+  [gdbstub](https://github.com/daniel5151/gdbstub)）；附着为非侵入。
 
 ## 安全
 
