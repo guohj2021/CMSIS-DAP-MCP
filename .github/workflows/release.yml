@@ -180,11 +180,23 @@ jobs:
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          awk -v ver="v${VERSION}" '
-            $0 ~ "^## \\[" ver "\\]" { capture = 1; next }
-            capture && $0 ~ "^## \\[" { exit }
-            capture { print }
-          ' CHANGELOG.md > release_notes.md
+          python3 - "$VERSION" > release_notes.md <<'EOF'
+          import sys
+          sys.stdout.reconfigure(encoding="utf-8")
+          version = "v" + sys.argv[1]
+          capture = False
+          out = []
+          with open("CHANGELOG.md", encoding="utf-8") as f:
+              for line in f.read().splitlines():
+                  if line.startswith("## [" + version + "]"):
+                      capture = True
+                      continue
+                  if capture and line.startswith("## ["):
+                      break
+                  if capture:
+                      out.append(line)
+          print("\n".join(out))
+          EOF
           if [ ! -s release_notes.md ]; then
             printf '## v%s\n\nSee the repository CHANGELOG for details.\n' "${VERSION}" > release_notes.md
           fi
