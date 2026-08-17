@@ -47,6 +47,16 @@ pub struct ListCoreRegistersParams {}
 pub struct GetCoreStatusParams {}
 
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
+pub struct DumpCpuStateParams {
+    /// Optional addresses to sample (word reads) alongside the registers.
+    pub addresses: Option<Vec<u64>>,
+    /// Number of words to dump from the top of MSP/PSP stacks (default 16).
+    pub stack_words: Option<u32>,
+    /// Restore the previous run state after the dump (default true).
+    pub restore: Option<bool>,
+}
+
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct SetWatchpointParams {
     pub address: u64,
     /// Access type to watch: "read", "write" or "rw".

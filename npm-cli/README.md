@@ -75,6 +75,9 @@ The assistant runs the CLI and reads the output; same tool, no GUI needed.
 | `watch` | poll variables live with a refresh interval (needs a session) |
 | `rtt info/monitor` | SEGGER RTT up-channel logging (needs `--elf` or RAM scan) |
 | `evr info/monitor` | CMSIS-View Event Recorder decoding (needs `--elf`) |
+| `dump` | non-invasive CPU snapshot (never resets; restores run state) |
+| `tcp-server` | remote JSON-RPC server over TCP (reuses one session) |
+| `gdb-server` | GDB Remote Serial Protocol stub (non-invasive attach) |
 | `repl` | interactive shell |
 
 Use `--json` for machine-readable output. Flash erase/program run directly;
@@ -96,6 +99,9 @@ cmsis-dap-cli --target STM32F030C8 script --file flash.jlink
 cmsis-dap-cli --target STM32F030C8 --elf fw.axf watch counter --count 0 --log-dir logs
 cmsis-dap-cli --target STM32F030C8 --elf fw.axf rtt monitor --channel 0,1 --count 0
 cmsis-dap-cli --target STM32F030C8 --elf fw.axf evr monitor --count 0
+cmsis-dap-cli --target STM32F030C8 dump --address 0x20000000 --stack-words 16
+cmsis-dap-cli --target STM32F030C8 tcp-server --port 4000
+cmsis-dap-cli --target STM32F030C8 gdb-server --port 1337
 cmsis-dap-cli --target STM32F030C8 repl
 ```
 
@@ -190,6 +196,9 @@ AI 会运行 CLI 并读取输出；同一工具，无需图形界面。
 | `watch` | 按刷新间隔实时轮询变量（需会话） |
 | `rtt info/monitor` | SEGGER RTT 上行通道日志（需 `--elf` 或 RAM 扫描） |
 | `evr info/monitor` | CMSIS-View Event Recorder 解码（需 `--elf`） |
+| `dump` | 非侵入 CPU 快照（永不复位；默认读取后恢复运行） |
+| `tcp-server` | 远程 JSON-RPC TCP 服务器（复用同一会话） |
+| `gdb-server` | GDB Remote Serial Protocol stub（非侵入附着） |
 | `repl` | 交互式 shell |
 
 `--json` 输出机器可读结果。Flash 擦除/烧录直接执行；目标必须定义了 Flash。
@@ -210,6 +219,9 @@ cmsis-dap-cli --target STM32F030C8 script --file flash.jlink
 cmsis-dap-cli --target STM32F030C8 --elf fw.axf watch counter --count 0 --log-dir logs
 cmsis-dap-cli --target STM32F030C8 --elf fw.axf rtt monitor --channel 0,1 --count 0
 cmsis-dap-cli --target STM32F030C8 --elf fw.axf evr monitor --count 0
+cmsis-dap-cli --target STM32F030C8 dump --address 0x20000000 --stack-words 16
+cmsis-dap-cli --target STM32F030C8 tcp-server --port 4000
+cmsis-dap-cli --target STM32F030C8 gdb-server --port 1337
 cmsis-dap-cli --target STM32F030C8 repl
 ```
 
