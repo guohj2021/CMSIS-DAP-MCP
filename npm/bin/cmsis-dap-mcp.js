@@ -4,7 +4,7 @@ const path = require("path");
 
 const SCOPE = "@guohj2021";
 const platformMap = { win32: "win32", linux: "linux", darwin: "darwin" };
-const archMap = { x64: "x64", arm64: "arm64" };
+const archMap = { x64: "x64", arm64: "arm64", ia32: "ia32" };
 
 const platform = platformMap[process.platform];
 const arch = archMap[process.arch];

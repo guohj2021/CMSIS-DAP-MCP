@@ -1,13 +1,13 @@
 use cmsis_dap_core::backend::mock::MockBackend;
-use cmsis_dap_core::backend::{ConnectOptions, Protocol};
+use cmsis_dap_core::backend::{AccessWidth, ConnectOptions, Protocol};
 use cmsis_dap_core::security::SecurityPolicy;
 use cmsis_dap_core::session::SessionManager;
 use cmsis_dap_mcp::mcp::{
-    ClearBreakpointsParams, CmsisDapMcp, ConnectParams, DisconnectParams, EraseFlashParams,
-    GetProbeInfoParams, GetTargetInfoParams, HaltParams, ListBreakpointsParams, ListProbesParams,
-    ProgramFlashParams, ReadCoreRegisterParams, ReadDapParams, ReadMemoryParams, ResetParams,
-    ResumeParams, SetBreakpointParams, StepParams, WriteCoreRegisterParams, WriteDapParams,
-    WriteMemoryParams,
+    ClearBreakpointsParams, CmsisDapMcp, ConnectParams, DisconnectParams, DumpCpuStateParams,
+    EraseFlashParams, GetProbeInfoParams, GetTargetInfoParams, HaltParams, ListBreakpointsParams,
+    ListProbesParams, ProgramFlashParams, ReadCoreRegisterParams, ReadDapParams, ReadMemoryParams,
+    ResetParams, ResumeParams, SetBreakpointParams, StepParams, WriteCoreRegisterParams,
+    WriteDapParams, WriteMemoryParams,
 };
 use rmcp::handler::server::wrapper::Parameters;
 
@@ -20,6 +20,44 @@ fn connect(mcp: &CmsisDapMcp) {
         under_reset: false,
     };
     mcp.session.lock().unwrap().connect(&opts).unwrap();
+}
+
+#[tokio::test]
+async fn dump_cpu_state_returns_structured_dump() {
+    let mcp = CmsisDapMcp::new(
+        SessionManager::new(Box::new(MockBackend::new())),
+        SecurityPolicy {
+            allow_destructive: false,
+        },
+    );
+    connect(&mcp);
+    mcp.session
+        .lock()
+        .unwrap()
+        .backend()
+        .write_memory(0x2000_0000, AccessWidth::U32, &[0x1234_5678])
+        .unwrap();
+    let params = DumpCpuStateParams {
+        addresses: Some(vec![0x2000_0000]),
+        stack_words: Some(4),
+        restore: Some(true),
+    };
+    let res = mcp.dump_cpu_state(Parameters(params)).await;
+    assert!(!res.is_error.unwrap_or(true));
+    let structured = res.structured_content.unwrap();
+    assert_eq!(structured["state"], "running");
+    assert!(!structured["registers"].as_array().unwrap().is_empty());
+    assert_eq!(structured["memory"][0]["value"].as_u64(), Some(0x1234_5678));
+    assert_eq!(
+        mcp.session
+            .lock()
+            .unwrap()
+            .backend()
+            .get_core_status()
+            .unwrap()
+            .state,
+        "running"
+    );
 }
 
 #[tokio::test]

@@ -88,9 +88,12 @@ Install nothing. Configure your MCP client to launch the server with `npx`:
 codex mcp add cmsis-dap -- npx -y cmsis-dap-mcp
 ```
 
+Or just tell your AI assistant: "install the CMSIS-DAP MCP server launched
+with `npx -y cmsis-dap-mcp`" — it configures and verifies the server for you,
+no manual configuration needed.
+
 The `cmsis-dap-mcp` npm package automatically downloads the correct platform
-binary (`cmsis-dap-mcp-win32-x64`, `cmsis-dap-mcp-linux-x64`,
-`cmsis-dap-mcp-darwin-x64`).
+binary (win32/linux/darwin × x64/arm64).
 
 Or use a native binary from [GitHub Releases](https://github.com/guohj2021/CMSIS-DAP-MCP/releases).
 
@@ -264,6 +267,21 @@ SEGGER RTT and the Event Recorder:
 In `repl` use `connect` + `reset run` first (a fresh session attaches with the
 core halted), then `watch run` / `rtt monitor` / `evr monitor`.
 
+## Non-invasive debugging, remote TCP and GDB
+
+- **Non-invasive CPU dump** — `cmsis-dap-cli dump` / MCP `dump_cpu_state`
+  snapshot registers, Cortex-M fault status registers, stacks and optional
+  memory **without resetting** the target; the previous run state is restored
+  afterwards by default.
+- **Remote TCP server** — `cmsis-dap-cli tcp-server --port 4000` or
+  `cmsis-dap-mcp --tcp 4000` serve a line-delimited JSON-RPC protocol
+  (`read_memory`, `dump_cpu_state`, ...) that reuses one session, so follow-up
+  requests never reconnect.
+- **GDB server** — `cmsis-dap-cli gdb-server --port 1337` or
+  `cmsis-dap-mcp --gdb-port 1337` expose a GDB Remote Serial Protocol stub
+  (ported from [probe-rs-tools](https://github.com/probe-rs/probe-rs) via
+  [gdbstub](https://github.com/daniel5151/gdbstub)); attach is non-invasive.
+
 ## Security
 
 - Read-only tools are always available.
@@ -370,9 +388,11 @@ monitor`（SEGGER RTT 日志）与 `evr monitor`（CMSIS-View Event Recorder）�
 codex mcp add cmsis-dap -- npx -y cmsis-dap-mcp
 ```
 
+也可以直接告诉 AI 助手：“帮我安装 CMSIS-DAP MCP 服务器，用
+`npx -y cmsis-dap-mcp` 启动”——它会替你完成配置并验证，无需手动改配置。
+
 `cmsis-dap-mcp` npm 包会自动下载对应平台的二进制
-（`cmsis-dap-mcp-win32-x64`、`cmsis-dap-mcp-linux-x64`、
-`cmsis-dap-mcp-darwin-x64`）。
+（win32/linux/darwin × x64/arm64）。
 
 也可以从 [GitHub Releases](https://github.com/guohj2021/CMSIS-DAP-MCP/releases)
 下载原生二进制。
@@ -539,6 +559,19 @@ Cortex-M0+ 目标）：
 
 在 `repl` 里先 `connect` + `reset run`（新会话附着时核心处于停机），再执行
 `watch run` / `rtt monitor` / `evr monitor`。
+
+## 非侵入调试、远程 TCP 与 GDB
+
+- **非侵入 CPU 快照** —— `cmsis-dap-cli dump` / MCP `dump_cpu_state` 在不
+  复位目标的前提下采集寄存器、Cortex-M fault 状态寄存器、栈与可选内存；
+  默认读取后恢复原运行状态。
+- **远程 TCP 服务器** —— `cmsis-dap-cli tcp-server --port 4000` 或
+  `cmsis-dap-mcp --tcp 4000` 提供按行分隔的 JSON-RPC 协议
+  （`read_memory`、`dump_cpu_state` 等），复用同一会话，后续请求无需重连。
+- **GDB 服务器** —— `cmsis-dap-cli gdb-server --port 1337` 或
+  `cmsis-dap-mcp --gdb-port 1337` 提供 GDB Remote Serial Protocol stub
+  （移植自 [probe-rs-tools](https://github.com/probe-rs/probe-rs)，基于
+  [gdbstub](https://github.com/daniel5151/gdbstub)）；附着为非侵入。
 
 ## 安全
 

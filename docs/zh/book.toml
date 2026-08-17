@@ -5,3 +5,5 @@ language = "zh"
 
 [output.html]
 site-url = "/CMSIS-DAP-MCP/zh/"
+additional-js = ["theme/language-switch.js"]
+additional-css = ["theme/language-switch.css"]

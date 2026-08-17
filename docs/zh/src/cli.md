@@ -295,6 +295,69 @@ NDJSON，并带 `host_ts` 字段（RFC 3339，毫秒 + 时区）；EVR 事件额
 repl
 ```
 
+### 非侵入调试
+
+```text
+dump [--address A]... [--stack-words N] [--no-restore]
+```
+
+在**不复位**目标的前提下采集 CPU 快照：寄存器、Cortex-M fault 状态寄存器
+（CFSR/HFSR/DFSR/MMFAR/BFAR，不经停机直接读）、MSP/PSP 栈顶若干字与可选
+内存采样。读核心寄存器需要短暂停机，默认读取后恢复原运行状态
+（`--no-restore` 则保持停机）。`--address` 支持 `0xADDR` 或 ELF 符号名
+（经 `--elf`）。
+
+```bash
+cmsis-dap-cli --probe-id 0123456789AB --target STM32F030C8 dump \
+  --address 0x20000000 --stack-words 16
+cmsis-dap-cli --probe-id 0123456789AB --target STM32F030C8 --elf fw.axf dump \
+  --address counter --no-restore --json
+```
+
+### 远程 TCP 服务器
+
+```text
+tcp-server [--port 4000]
+```
+
+在 `127.0.0.1` 上提供按行分隔的 JSON-RPC over TCP 协议，方法名与 MCP 工具
+对齐（`list_probes`、`connect`、`read_memory`、`write_memory`、
+`read_core_register`、`halt`、`resume`、`step`、`reset`、`status`、
+`dump_cpu_state` 等），每行一个请求，响应为
+`{"id":N,"result":...}` 或 `{"id":N,"error":{...}}`。后续请求复用同一会话，
+无需重连。`cmsis-dap-mcp --tcp PORT` 可在 MCP stdio 之外同时提供该协议。
+
+```bash
+cmsis-dap-cli --probe-id 0123456789AB --target STM32F030C8 tcp-server --port 4000
+echo '{"id":1,"method":"read_memory","params":{"address":536870912,"width":"u32","count":4}}' \
+  | nc 127.0.0.1 4000
+```
+
+### GDB 服务器
+
+```text
+gdb-server [--port 1337] [--reset-halt]
+```
+
+提供 GDB Remote Serial Protocol stub（移植自
+[probe-rs-tools](https://github.com/probe-rs/probe-rs)，基于
+[gdbstub](https://github.com/daniel5151/gdbstub)，MIT OR Apache-2.0）：
+任意 GDB（`target remote :1337`）可读写寄存器与内存、运行/单步/停机并使用
+硬件断点。附着为非侵入（不复位；`--reset-halt` 可选）。
+`cmsis-dap-mcp --gdb-port 1337` 可在 MCP 进程内启动同一服务器。
+
+```bash
+cmsis-dap-cli --probe-id 0123456789AB --target STM32F030C8 gdb-server --port 1337
+arm-none-eabi-gdb fw.elf -ex 'target remote :1337' -ex 'info registers'
+```
+
+参考资料：GDB Remote Serial Protocol 与 MCP 规范
+（[modelcontextprotocol.io](https://modelcontextprotocol.io)）；Cortex-M fault
+状态寄存器属于 ARM System Control Block（见
+[ARMv6-M Architecture Reference Manual](https://developer.arm.com/documentation/ddi0419/)）；
+Event Recorder 详见
+[CMSIS-View 文档](https://arm-software.github.io/CMSIS-View/latest/)。
+
 启动 J-Link Commander 风格 shell（见[REPL](#repl)）。
 
 ## 从 FLM 生成 target YAML

@@ -5,3 +5,5 @@ language = "en"
 
 [output.html]
 site-url = "/CMSIS-DAP-MCP/"
+additional-js = ["theme/language-switch.js"]
+additional-css = ["theme/language-switch.css"]

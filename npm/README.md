@@ -54,8 +54,30 @@ codex mcp add cmsis-dap -- npx -y cmsis-dap-mcp
 ```
 
 The npm package `cmsis-dap-mcp` downloads the correct platform binary
-automatically (`cmsis-dap-mcp-win32-x64`, `cmsis-dap-mcp-linux-x64`,
-`cmsis-dap-mcp-darwin-x64`).
+automatically (win32/linux/darwin × x64/arm64).
+
+### Zero-config for AI clients
+
+The easiest way to get started is to let the AI assistant do the setup. Just
+tell your AI client (Codex, Claude Code, opencode, ...) something like:
+
+> Please install the CMSIS-DAP MCP server for me: an MCP stdio server launched
+> with `npx -y cmsis-dap-mcp`.
+
+The assistant adds the server and verifies it with its own `mcp list`
+command — you never need to touch configuration. For a manual setup in any
+MCP-compatible client, add a stdio server with:
+
+```json
+{
+  "mcpServers": {
+    "cmsis-dap": {
+      "command": "npx",
+      "args": ["-y", "cmsis-dap-mcp"]
+    }
+  }
+}
+```
 
 ## AI client configuration
 
@@ -114,11 +136,31 @@ Any MCP-compatible client can use a stdio server:
 {
   "mcpServers": {
     "cmsis-dap": {
-      "command": "/path/to/cmsis-dap-mcp",
-      "args": ["--log-level", "warn"]
+      "command": "npx",
+      "args": ["-y", "cmsis-dap-mcp"]
     }
   }
 }
+```
+
+## Quick start (verified on hardware)
+
+## Remote TCP, GDB and non-invasive debugging
+
+The server can expose additional endpoints alongside MCP stdio:
+
+- `--tcp PORT` — line-delimited JSON-RPC over TCP (`read_memory`,
+  `write_memory`, `read_core_register`, `halt`, `resume`, `step`, `reset`,
+  `status`, `dump_cpu_state`, ...) that reuses the same session, so follow-up
+  requests never reconnect.
+- `--gdb-port PORT` — GDB Remote Serial Protocol stub (non-invasive attach;
+  registers, memory, run/step, hardware breakpoints).
+- MCP tool `dump_cpu_state` — non-invasive CPU snapshot (registers, fault
+  status, stacks, optional memory) that never resets and restores the previous
+  run state by default.
+
+```bash
+npx -y cmsis-dap-mcp --tcp 4000 --gdb-port 1337
 ```
 
 ## Quick start (verified on hardware)
@@ -266,7 +308,29 @@ codex mcp add cmsis-dap -- npx -y cmsis-dap-mcp
 ```
 
 npm 包 `cmsis-dap-mcp` 会自动下载对应平台的二进制
-（`cmsis-dap-mcp-win32-x64`、`cmsis-dap-mcp-linux-x64`、`cmsis-dap-mcp-darwin-x64`）。
+（win32/linux/darwin × x64/arm64）。
+
+### AI 客户端零配置
+
+最简单的上手方式是让 AI 助手替你完成配置。直接对 AI 客户端（Codex、
+Claude Code、opencode 等）说类似下面的话即可：
+
+> 请帮我安装 CMSIS-DAP MCP 服务器：用 `npx -y cmsis-dap-mcp` 启动一个
+> MCP stdio 服务器。
+
+AI 会自行添加服务器并用它自己的 `mcp list` 命令验证——你完全不需要手动
+改配置。如需在任何兼容 MCP 的客户端里手动配置，添加一个 stdio 服务器：
+
+```json
+{
+  "mcpServers": {
+    "cmsis-dap": {
+      "command": "npx",
+      "args": ["-y", "cmsis-dap-mcp"]
+    }
+  }
+}
+```
 
 ## AI 客户端配置
 
@@ -324,11 +388,29 @@ opencode mcp add cmsis-dap -- /path/to/cmsis-dap-mcp --log-level warn
 {
   "mcpServers": {
     "cmsis-dap": {
-      "command": "/path/to/cmsis-dap-mcp",
-      "args": ["--log-level", "warn"]
+      "command": "npx",
+      "args": ["-y", "cmsis-dap-mcp"]
     }
   }
 }
+```
+
+## 快速开始（已实测）
+
+## 远程 TCP、GDB 与非侵入调试
+
+服务器可以在 MCP stdio 之外额外提供以下端点：
+
+- `--tcp PORT` —— 按行分隔的 JSON-RPC over TCP（`read_memory`、
+  `write_memory`、`read_core_register`、`halt`、`resume`、`step`、`reset`、
+  `status`、`dump_cpu_state` 等），复用同一会话，后续请求无需重连。
+- `--gdb-port PORT` —— GDB Remote Serial Protocol stub（非侵入附着；
+  寄存器、内存、运行/单步、硬件断点）。
+- MCP 工具 `dump_cpu_state` —— 非侵入 CPU 快照（寄存器、fault 状态、栈、
+  可选内存），永不复位，默认读取后恢复原运行状态。
+
+```bash
+npx -y cmsis-dap-mcp --tcp 4000 --gdb-port 1337
 ```
 
 ## 快速开始（已实测）

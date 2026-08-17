@@ -212,6 +212,12 @@ pub enum Command {
     Rtt(RttArgs),
     /// CMSIS-View Event Recorder decoding.
     Evr(EvrArgs),
+    /// Non-invasive CPU state snapshot (never resets; restores run state).
+    Dump(DumpArgs),
+    /// Run a GDB Remote Serial Protocol server.
+    GdbServer(GdbServerArgs),
+    /// Serve the remote JSON-RPC TCP protocol.
+    TcpServer(TcpServerArgs),
     /// Interactive shell (J-Link Commander style commands).
     Repl,
 }
@@ -596,6 +602,36 @@ pub struct EvrMonitorArgs {
     pub log_file: Option<PathBuf>,
 }
 
+#[derive(Debug, Args)]
+pub struct DumpArgs {
+    /// Addresses to sample (0xADDR or symbol names resolved via --elf); repeatable.
+    #[arg(long = "address", value_name = "ADDR")]
+    pub addresses: Vec<String>,
+    /// Number of words to dump from the top of the MSP/PSP stacks.
+    #[arg(long, value_parser = parse_u32_arg, default_value_t = 16)]
+    pub stack_words: u32,
+    /// Do not restore the previous run state after the dump.
+    #[arg(long)]
+    pub no_restore: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct GdbServerArgs {
+    /// TCP port for the GDB stub (default 1337).
+    #[arg(long, value_parser = parse_u32_arg, default_value_t = 1337)]
+    pub port: u32,
+    /// Reset and halt the core after attach instead of just attaching.
+    #[arg(long)]
+    pub reset_halt: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct TcpServerArgs {
+    /// TCP port for the remote JSON-RPC server (default 4000).
+    #[arg(long, value_parser = parse_u32_arg, default_value_t = 4000)]
+    pub port: u32,
+}
+
 #[derive(Debug, Clone)]
 pub struct ReplOptions {
     pub json: bool,
@@ -950,6 +986,46 @@ pub fn run(
                 Ok(None)
             }
         },
+        Command::Dump(a) => {
+            connect(&globals, &mut session)?;
+            Ok(Some(actions::dump(
+                &mut session,
+                globals.elf.as_deref(),
+                &a,
+            )?))
+        }
+        Command::GdbServer(a) => {
+            let options = cmsis_dap_core::gdb::GdbServerOptions {
+                probe_id: globals.probe_id.clone(),
+                protocol: Some(parse_protocol(&globals.protocol)?),
+                speed_khz: globals.speed_khz,
+                target: globals.target.clone(),
+                target_yaml: globals.target_yaml.clone(),
+                reset_halt: a.reset_halt,
+            };
+            cmsis_dap_core::gdb::connect_and_serve(
+                options,
+                Some(&format!("127.0.0.1:{}", a.port)),
+            )?;
+            Ok(None)
+        }
+        Command::TcpServer(a) => {
+            let shared = std::sync::Arc::new(std::sync::Mutex::new(session));
+            let runtime = tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()
+                .map_err(|e| {
+                    CliError::Mcp(McpError::new(
+                        ErrorCode::InternalError,
+                        format!("failed to start tokio runtime: {e}"),
+                    ))
+                })?;
+            runtime.block_on(cmsis_dap_core::remote::serve(
+                &shared,
+                &format!("127.0.0.1:{}", a.port),
+            ))?;
+            Ok(None)
+        }
         Command::Repl => {
             let stdin = std::io::stdin();
             let interactive = stdin.is_terminal();

@@ -311,6 +311,72 @@ flushed immediately. Monitor start prints `logging to <path>` on stderr.
 repl
 ```
 
+### Non-invasive debugging
+
+```text
+dump [--address A]... [--stack-words N] [--no-restore]
+```
+
+Takes a snapshot of the target CPU **without resetting it**: registers,
+Cortex-M fault status registers (CFSR/HFSR/DFSR/MMFAR/BFAR, read without
+halting), the top words of the MSP/PSP stacks and optional memory samples.
+Core registers require a short halt; by default the previous run state is
+restored afterwards (`--no-restore` leaves the core halted). `--address`
+accepts `0xADDR` or ELF symbol names (via `--elf`).
+
+```bash
+cmsis-dap-cli --probe-id 0123456789AB --target STM32F030C8 dump \
+  --address 0x20000000 --stack-words 16
+cmsis-dap-cli --probe-id 0123456789AB --target STM32F030C8 --elf fw.axf dump \
+  --address counter --no-restore --json
+```
+
+### Remote TCP server
+
+```text
+tcp-server [--port 4000]
+```
+
+Serves a line-delimited JSON-RPC protocol over TCP on `127.0.0.1`. Requests
+mirror the MCP tool names (`list_probes`, `connect`, `read_memory`,
+`write_memory`, `read_core_register`, `halt`, `resume`, `step`, `reset`,
+`status`, `dump_cpu_state`, ...), one JSON object per line, with
+`{"id":N,"result":...}` / `{"id":N,"error":{...}}` responses. A follow-up
+request reuses the same session — no reconnect needed. `cmsis-dap-mcp --tcp
+PORT` serves the same protocol alongside the MCP stdio server.
+
+```bash
+cmsis-dap-cli --probe-id 0123456789AB --target STM32F030C8 tcp-server --port 4000
+echo '{"id":1,"method":"read_memory","params":{"address":536870912,"width":"u32","count":4}}' \
+  | nc 127.0.0.1 4000
+```
+
+### GDB server
+
+```text
+gdb-server [--port 1337] [--reset-halt]
+```
+
+Exposes a GDB Remote Serial Protocol stub (ported from
+[probe-rs-tools](https://github.com/probe-rs/probe-rs) via
+[gdbstub](https://github.com/daniel5151/gdbstub), MIT OR Apache-2.0): connect
+any GDB (`target remote :1337`) to read/write registers and memory, run,
+single-step, halt and use hardware breakpoints. Attach is non-invasive (no
+reset; `--reset-halt` opts in). `cmsis-dap-mcp --gdb-port 1337` starts the
+same server inside the MCP process.
+
+```bash
+cmsis-dap-cli --probe-id 0123456789AB --target STM32F030C8 gdb-server --port 1337
+arm-none-eabi-gdb fw.elf -ex 'target remote :1337' -ex 'info registers'
+```
+
+Related references: the GDB Remote Serial Protocol and the MCP specification
+([modelcontextprotocol.io](https://modelcontextprotocol.io)); Cortex-M fault
+status registers are part of the ARM System Control Block (see the
+[ARMv6-M Architecture Reference Manual](https://developer.arm.com/documentation/ddi0419/));
+Event Recorder details are in the
+[CMSIS-View documentation](https://arm-software.github.io/CMSIS-View/latest/).
+
 Starts a J-Link Commander style shell (see [REPL](#repl)).
 
 ## Generating a target YAML from an FLM
