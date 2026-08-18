@@ -15,14 +15,20 @@ The repository is a Cargo workspace with three crates:
 
 ## Install
 
-Once the npm package is published with a release, zero-install works via:
+The npm package is published; zero-install works via `npx`, or install globally
+and use the `cmsis-dap-cli` command directly:
 
 ```bash
+# zero-install (recommended for quick use and scripts)
 npx -y cmsis-dap-cli --help
+
+# or install globally
+npm install -g cmsis-dap-cli
+cmsis-dap-cli --help
 ```
 
-Until then (or for offline use), download a native binary for Windows / Linux
-/ macOS from [GitHub Releases](https://github.com/guohj2021/CMSIS-DAP-MCP/releases),
+For offline use, download a native binary for Windows / Linux / macOS from
+[GitHub Releases](https://github.com/guohj2021/CMSIS-DAP-MCP/releases),
 or build locally:
 
 ```bash
