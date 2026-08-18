@@ -13,6 +13,11 @@ CLI 还额外提供实时调试能力：`watch`（按可配置刷新间隔轮询
 monitor`（SEGGER RTT 日志）与 `evr monitor`（CMSIS-View Event Recorder）都
 走 SWD/JTAG——无需串口——并支持带时间戳的日志导出。
 
+CLI 还提供 v0.5.0 引入的非侵入调试与远程访问端点：`dump` / MCP
+`dump_cpu_state`（不复位目标的 CPU 快照）、`--tcp` / `tcp-server`（远程
+JSON-RPC over TCP）与 `--gdb-port` / `gdb-server`（GDB Remote Serial
+Protocol stub）。
+
 - 通用 Cortex-M 支持：标准内核无需芯片适配即可调试。
 - 命名外设访问：运行时加载任意 CMSIS-SVD 文件；仓库不捆绑任何芯片文件。
 - Flash 编程：需要带 CMSIS-Pack 烧写算法的目标描述。

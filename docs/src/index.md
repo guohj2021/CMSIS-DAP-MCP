@@ -16,6 +16,11 @@ configurable refresh interval), `rtt monitor` (SEGGER RTT logs) and
 `evr monitor` (CMSIS-View Event Recorder) all run over SWD/JTAG — no UART —
 with timestamped log export.
 
+The CLI also exposes non-invasive debugging and remote access endpoints
+introduced in v0.5.0: `dump` / MCP `dump_cpu_state` (CPU snapshot without
+resetting), `--tcp` / `tcp-server` (remote JSON-RPC over TCP) and
+`--gdb-port` / `gdb-server` (GDB Remote Serial Protocol stub).
+
 - Generic Cortex-M support: standard cores work without chip-specific
   adaptation.
 - Named peripheral access: load any CMSIS-SVD file at runtime; chip files are

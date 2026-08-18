@@ -34,6 +34,27 @@ All notable changes are documented per release. Version numbers match the
 - mdBook language switch (EN ↔ 中文) on every page; English site-url fix.
 - npm READMEs: zero-config install guides for AI clients and standard
   `mcpServers` configuration.
+- Documentation audit and restructure: split SUMMARY into a "User guide"
+  group (introduction, quickstart, AI client config, tools, CLI, scripting,
+  SWD/JTAG, SVD/Flash, security, troubleshooting) and a "Developer guide"
+  group (architecture, development); Chinese mirror updated.
+- `docs/src/tools.md`: added `dump_cpu_state` (non-invasive CPU snapshot)
+  and made `run_script` explicit in the tool table; Chinese mirror updated.
+- `docs/src/architecture.md`: added `gdb` and `remote` modules to the
+  module responsibility table; Chinese mirror updated.
+- `docs/src/development.md`: added "Code style", "Contributing", "Testing
+  strategy" and "Documentation maintenance" sections; Chinese mirror updated.
+- `npm/README.md`: removed a duplicate "## Quick start" heading, relocated
+  the "Remote TCP, GDB and non-invasive debugging" section, and added
+  Files/Scripts rows to the feature table to match the top-level README.
+- `docs/src/quickstart.md` and `docs/src/ai-clients.md`: pinned-version
+  examples updated from `@0.4.0` to `@0.5.0`; Chinese mirrors updated.
+- npm `package.json` files (meta packages and 16 platform sub-packages)
+  synced from `0.4.1` to `0.5.0` to match the Cargo workspace version.
+- Top-level `README.md` Release badge `?branch=` synced from `v0.4.1` to
+  `v0.5.0`.
+- All new and modified documentation sections are mirrored between
+  `docs/src/` and `docs/zh/src/`.
 
 ## [v0.4.1] - 2026-08-16
 

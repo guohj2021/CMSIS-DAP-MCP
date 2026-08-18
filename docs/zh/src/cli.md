@@ -358,8 +358,6 @@ arm-none-eabi-gdb fw.elf -ex 'target remote :1337' -ex 'info registers'
 Event Recorder 详见
 [CMSIS-View 文档](https://arm-software.github.io/CMSIS-View/latest/)。
 
-启动 J-Link Commander 风格 shell（见[REPL](#repl)）。
-
 ## 从 FLM 生成 target YAML
 
 对于 probe-rs 内置库没有的芯片，烧录需要一份描述芯片并内嵌厂商 Flash 算法

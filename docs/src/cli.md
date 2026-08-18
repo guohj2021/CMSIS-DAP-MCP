@@ -377,8 +377,6 @@ status registers are part of the ARM System Control Block (see the
 Event Recorder details are in the
 [CMSIS-View documentation](https://arm-software.github.io/CMSIS-View/latest/).
 
-Starts a J-Link Commander style shell (see [REPL](#repl)).
-
 ## Generating a target YAML from an FLM
 
 For chips that are not built into probe-rs, flashing needs a target YAML that

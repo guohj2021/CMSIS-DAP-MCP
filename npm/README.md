@@ -27,18 +27,38 @@ CMSIS-DAP debug probes and access Cortex-M chip resources over **SWD** or
 | Area | Tools |
 | --- | --- |
 | Probe | `list_probes`, `get_probe_info`, `connect`, `disconnect`, `get_target_info` |
-| Memory | `read_memory`, `write_memory`, `verify_memory` |
+| Memory | `read_memory`, `write_memory`, `verify_memory`, memory export (`bin`/`hex`) |
 | Core | `read_core_register`, `write_core_register`, `list_core_registers`, `get_core_status`, `halt`, `resume`, `step`, `reset` |
 | Breakpoints | `set_breakpoint`, `clear_breakpoints`, `list_breakpoints` |
 | Watchpoints | `set_watchpoint`, `clear_watchpoints`, `list_watchpoints` |
 | DAP | `read_dap`, `write_dap` |
 | SVD | `load_svd`, `list_peripherals`, `read_peripheral`, `write_peripheral` |
+| Files | `program_flash` (`axf`/`elf`/`bin`/`hex`), `read_memory` export |
+| Scripts | `run_script` (J-Link / OpenOCD style) |
 | Flash | `erase_flash`, `program_flash` |
 
 `reset` supports `mode: "run"` (reset and continue) or `mode: "halt"` (reset
 and halt). `connect` supports `under_reset` for locked or non-responsive
 targets. `program_flash` supports `verify: true` for read-back checking, and
 `erase_flash` erases only the requested address range (sector erase).
+
+## Remote TCP, GDB and non-invasive debugging
+
+The server can expose additional endpoints alongside MCP stdio:
+
+- `--tcp PORT` — line-delimited JSON-RPC over TCP (`read_memory`,
+  `write_memory`, `read_core_register`, `halt`, `resume`, `step`, `reset`,
+  `status`, `dump_cpu_state`, ...) that reuses the same session, so follow-up
+  requests never reconnect.
+- `--gdb-port PORT` — GDB Remote Serial Protocol stub (non-invasive attach;
+  registers, memory, run/step, hardware breakpoints).
+- MCP tool `dump_cpu_state` — non-invasive CPU snapshot (registers, fault
+  status, stacks, optional memory) that never resets and restores the previous
+  run state by default.
+
+```bash
+npx -y cmsis-dap-mcp --tcp 4000 --gdb-port 1337
+```
 
 ## Installation
 
@@ -82,21 +102,21 @@ MCP-compatible client, add a stdio server with:
 ## AI client configuration
 
 The server speaks MCP over stdio. Below are verified configurations for
-Codex, Claude Code and opencode. Replace `/path/to/cmsis-dap-mcp` with your
-binary path or use `npx -y cmsis-dap-mcp`.
+Codex, Claude Code and opencode. All examples use `npx`; to run a local build
+instead, replace `npx -y cmsis-dap-mcp` with your binary path.
 
 ### Codex
 
 ```bash
-codex mcp add cmsis-dap -- /path/to/cmsis-dap-mcp --log-level warn
+codex mcp add cmsis-dap -- npx -y cmsis-dap-mcp
 ```
 
 Or add to `~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.cmsis-dap]
-command = "/path/to/cmsis-dap-mcp"
-args = ["--log-level", "warn"] # optional
+command = "npx"
+args = ["-y", "cmsis-dap-mcp"]
 ```
 
 Verify with `codex mcp list`. The Codex desktop app loads the server when a
@@ -105,7 +125,7 @@ new session starts.
 ### Claude Code
 
 ```bash
-claude mcp add --scope local cmsis-dap -- /path/to/cmsis-dap-mcp
+claude mcp add --scope local cmsis-dap -- npx -y cmsis-dap-mcp
 ```
 
 Verify with `claude mcp list` (shows `√ Connected`).
@@ -113,7 +133,7 @@ Verify with `claude mcp list` (shows `√ Connected`).
 ### opencode
 
 ```bash
-opencode mcp add cmsis-dap -- /path/to/cmsis-dap-mcp --log-level warn
+opencode mcp add cmsis-dap -- npx -y cmsis-dap-mcp
 ```
 
 Or add to `~/.config/opencode/opencode.jsonc`:
@@ -121,7 +141,7 @@ Or add to `~/.config/opencode/opencode.jsonc`:
 ```jsonc
 "cmsis-dap": {
   "type": "local",
-  "command": ["/path/to/cmsis-dap-mcp", "--log-level", "warn"],
+  "command": ["npx", "-y", "cmsis-dap-mcp"],
   "enabled": true
 }
 ```
@@ -141,26 +161,6 @@ Any MCP-compatible client can use a stdio server:
     }
   }
 }
-```
-
-## Quick start (verified on hardware)
-
-## Remote TCP, GDB and non-invasive debugging
-
-The server can expose additional endpoints alongside MCP stdio:
-
-- `--tcp PORT` — line-delimited JSON-RPC over TCP (`read_memory`,
-  `write_memory`, `read_core_register`, `halt`, `resume`, `step`, `reset`,
-  `status`, `dump_cpu_state`, ...) that reuses the same session, so follow-up
-  requests never reconnect.
-- `--gdb-port PORT` — GDB Remote Serial Protocol stub (non-invasive attach;
-  registers, memory, run/step, hardware breakpoints).
-- MCP tool `dump_cpu_state` — non-invasive CPU snapshot (registers, fault
-  status, stacks, optional memory) that never resets and restores the previous
-  run state by default.
-
-```bash
-npx -y cmsis-dap-mcp --tcp 4000 --gdb-port 1337
 ```
 
 ## Quick start (verified on hardware)
@@ -283,17 +283,35 @@ MIT OR Apache-2.0
 | 分类 | 工具 |
 | --- | --- |
 | 探针 | `list_probes`、`get_probe_info`、`connect`、`disconnect`、`get_target_info` |
-| 内存 | `read_memory`、`write_memory`、`verify_memory` |
+| 内存 | `read_memory`、`write_memory`、`verify_memory`、内存导出（`bin`/`hex`） |
 | 内核 | `read_core_register`、`write_core_register`、`list_core_registers`、`get_core_status`、`halt`、`resume`、`step`、`reset` |
 | 断点 | `set_breakpoint`、`clear_breakpoints`、`list_breakpoints` |
 | 数据观察点 | `set_watchpoint`、`clear_watchpoints`、`list_watchpoints` |
 | DAP | `read_dap`、`write_dap` |
 | SVD | `load_svd`、`list_peripherals`、`read_peripheral`、`write_peripheral` |
+| 文件 | `program_flash`（`axf`/`elf`/`bin`/`hex`）、`read_memory` 导出 |
+| 脚本 | `run_script`（J-Link / OpenOCD 风格） |
 | Flash | `erase_flash`、`program_flash` |
 
 `reset` 支持 `mode: "run"`（复位后继续运行）或 `mode: "halt"`（复位后暂停）；
 `connect` 支持 `under_reset`（用于锁定或无响应的目标）；`program_flash` 支持
 `verify: true` 烧写后读回校验；`erase_flash` 只擦除请求的地址范围（扇区擦除）。
+
+## 远程 TCP、GDB 与非侵入调试
+
+服务器可以在 MCP stdio 之外额外提供以下端点：
+
+- `--tcp PORT` —— 按行分隔的 JSON-RPC over TCP（`read_memory`、
+  `write_memory`、`read_core_register`、`halt`、`resume`、`step`、`reset`、
+  `status`、`dump_cpu_state` 等），复用同一会话，后续请求无需重连。
+- `--gdb-port PORT` —— GDB Remote Serial Protocol stub（非侵入附着；
+  寄存器、内存、运行/单步、硬件断点）。
+- MCP 工具 `dump_cpu_state` —— 非侵入 CPU 快照（寄存器、fault 状态、栈、
+  可选内存），永不复位，默认读取后恢复原运行状态。
+
+```bash
+npx -y cmsis-dap-mcp --tcp 4000 --gdb-port 1337
+```
 
 ## 安装
 
@@ -334,22 +352,22 @@ AI 会自行添加服务器并用它自己的 `mcp list` 命令验证——你�
 
 ## AI 客户端配置
 
-服务器通过 stdio 使用 MCP 协议。以下是经过实测的 Codex、Claude Code、
-opencode 配置。请把 `/path/to/cmsis-dap-mcp` 换成你的二进制路径，或使用
-`npx -y cmsis-dap-mcp`。
+服务器通过 stdio 使用 MCP 协议。以下是 Codex、Claude Code、opencode 的标准
+配置，全部以 `npx` 为例；要使用本地构建，把 `npx -y cmsis-dap-mcp` 换成
+二进制路径即可。
 
 ### Codex
 
 ```bash
-codex mcp add cmsis-dap -- /path/to/cmsis-dap-mcp --log-level warn
+codex mcp add cmsis-dap -- npx -y cmsis-dap-mcp
 ```
 
 或写入 `~/.codex/config.toml`：
 
 ```toml
 [mcp_servers.cmsis-dap]
-command = "/path/to/cmsis-dap-mcp"
-args = ["--log-level", "warn"] # 可选
+command = "npx"
+args = ["-y", "cmsis-dap-mcp"]
 ```
 
 用 `codex mcp list` 确认。Codex 桌面端会在新会话启动时加载该服务器。
@@ -357,7 +375,7 @@ args = ["--log-level", "warn"] # 可选
 ### Claude Code
 
 ```bash
-claude mcp add --scope local cmsis-dap -- /path/to/cmsis-dap-mcp
+claude mcp add --scope local cmsis-dap -- npx -y cmsis-dap-mcp
 ```
 
 用 `claude mcp list` 确认（显示 `√ Connected`）。
@@ -365,7 +383,7 @@ claude mcp add --scope local cmsis-dap -- /path/to/cmsis-dap-mcp
 ### opencode
 
 ```bash
-opencode mcp add cmsis-dap -- /path/to/cmsis-dap-mcp --log-level warn
+opencode mcp add cmsis-dap -- npx -y cmsis-dap-mcp
 ```
 
 或写入 `~/.config/opencode/opencode.jsonc`：
@@ -373,7 +391,7 @@ opencode mcp add cmsis-dap -- /path/to/cmsis-dap-mcp --log-level warn
 ```jsonc
 "cmsis-dap": {
   "type": "local",
-  "command": ["/path/to/cmsis-dap-mcp", "--log-level", "warn"],
+  "command": ["npx", "-y", "cmsis-dap-mcp"],
   "enabled": true
 }
 ```
@@ -393,24 +411,6 @@ opencode mcp add cmsis-dap -- /path/to/cmsis-dap-mcp --log-level warn
     }
   }
 }
-```
-
-## 快速开始（已实测）
-
-## 远程 TCP、GDB 与非侵入调试
-
-服务器可以在 MCP stdio 之外额外提供以下端点：
-
-- `--tcp PORT` —— 按行分隔的 JSON-RPC over TCP（`read_memory`、
-  `write_memory`、`read_core_register`、`halt`、`resume`、`step`、`reset`、
-  `status`、`dump_cpu_state` 等），复用同一会话，后续请求无需重连。
-- `--gdb-port PORT` —— GDB Remote Serial Protocol stub（非侵入附着；
-  寄存器、内存、运行/单步、硬件断点）。
-- MCP 工具 `dump_cpu_state` —— 非侵入 CPU 快照（寄存器、fault 状态、栈、
-  可选内存），永不复位，默认读取后恢复原运行状态。
-
-```bash
-npx -y cmsis-dap-mcp --tcp 4000 --gdb-port 1337
 ```
 
 ## 快速开始（已实测）
