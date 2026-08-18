@@ -18,8 +18,16 @@ SWD/JTAG — no UART needed — with timestamped log export.
 
 ## Install
 
+Run zero-install with `npx`, or install globally and use the `cmsis-dap-cli`
+command directly:
+
 ```bash
+# zero-install (recommended for quick use and scripts)
 npx -y cmsis-dap-cli --help
+
+# or install globally
+npm install -g cmsis-dap-cli
+cmsis-dap-cli --help
 ```
 
 The npm package downloads the correct platform binary automatically
@@ -141,8 +149,15 @@ monitor`），全部走 SWD/JTAG——无需串口——并支持带时间戳的
 
 ## 安装
 
+用 `npx` 零安装直接运行，或全局安装后直接使用 `cmsis-dap-cli` 命令：
+
 ```bash
+# 零安装（推荐快速试用与脚本调用）
 npx -y cmsis-dap-cli --help
+
+# 或全局安装
+npm install -g cmsis-dap-cli
+cmsis-dap-cli --help
 ```
 
 npm 包会自动下载对应平台的二进制（win32/linux/darwin × x64/arm64）。
