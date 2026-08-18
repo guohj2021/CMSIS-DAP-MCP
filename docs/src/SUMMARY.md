@@ -1,9 +1,10 @@
 # Summary
 
+# User guide
+
 - [Introduction](./index.md)
 - [Quickstart](./quickstart.md)
 - [AI client configuration](./ai-clients.md)
-- [Architecture](./architecture.md)
 - [Tools](./tools.md)
 - [CLI](./cli.md)
 - [Scripting](./scripting.md)
@@ -11,4 +12,8 @@
 - [SVD and Flash](./svd-flash.md)
 - [Security](./security.md)
 - [Troubleshooting](./troubleshooting.md)
+
+# Developer guide
+
+- [Architecture](./architecture.md)
 - [Development](./development.md)

@@ -57,6 +57,14 @@ read_memory { "address": 0x08000000, "width": "u8", "count": 0x1000, "path": "fi
 `get_core_status` 返回 `state`（`running`/`halted`/`sleeping`/`locked_up`/
 `unknown`）、暂停时的 `halt_reason` 与程序计数器。
 
+## 非侵入调试
+
+| 工具 | 参数 | 等级 |
+| --- | --- | --- |
+| `dump_cpu_state` | `address`（可重复，`0xADDR` 或 ELF 符号）、`stack_words`（可选）、`no_restore`（可选） | 读 |
+
+`dump_cpu_state` 在**永不复位**目标的前提下采集 CPU 快照：内核寄存器（在短暂停机时读取）、Cortex-M fault 状态寄存器（CFSR/HFSR/DFSR/MMFAR/BFAR，不停机读取）、MSP/PSP 栈顶字与按给定地址的可选内存采样。默认读取后恢复原运行状态；传入 `no_restore: true` 则保持核心停机。地址接受 `0xADDR` 或 ELF 符号名（当服务器以 `--elf` 文件启动时）。
+
 ## 断点与数据观察点
 
 | 工具 | 参数 | 等级 |

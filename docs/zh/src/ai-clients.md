@@ -14,7 +14,7 @@
 | 本地二进制 | `command = "/path/to/cmsis-dap-mcp"` | 未发布或本地构建、离线、精确版本 |
 | 远程 URL | `url = "https://..."` | Streamable-HTTP MCP 服务器（本项目暂不支持） |
 
-用 `npx` 固定版本：`npx -y cmsis-dap-mcp@0.4.0`。开发本仓库时，把客户端
+用 `npx` 固定版本：`npx -y cmsis-dap-mcp@0.5.0`。开发本仓库时，把客户端
 指向 `target/release/cmsis-dap-mcp`，即可使用刚构建的二进制而无需发布。
 
 ## Codex
