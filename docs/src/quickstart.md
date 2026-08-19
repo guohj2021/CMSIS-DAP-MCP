@@ -14,7 +14,7 @@ automatically on first launch and caches it afterwards.
 To pin a version:
 
 ```bash
-codex mcp add cmsis-dap -- npx -y cmsis-dap-mcp@0.4.0
+codex mcp add cmsis-dap -- npx -y cmsis-dap-mcp@0.5.0
 ```
 
 ## Native binary

@@ -15,14 +15,20 @@ The repository is a Cargo workspace with three crates:
 
 ## Install
 
-Once the npm package is published with a release, zero-install works via:
+The npm package is published; zero-install works via `npx`, or install globally
+and use the `cmsis-dap-cli` command directly:
 
 ```bash
+# zero-install (recommended for quick use and scripts)
 npx -y cmsis-dap-cli --help
+
+# or install globally
+npm install -g cmsis-dap-cli
+cmsis-dap-cli --help
 ```
 
-Until then (or for offline use), download a native binary for Windows / Linux
-/ macOS from [GitHub Releases](https://github.com/guohj2021/CMSIS-DAP-MCP/releases),
+For offline use, download a native binary for Windows / Linux / macOS from
+[GitHub Releases](https://github.com/guohj2021/CMSIS-DAP-MCP/releases),
 or build locally:
 
 ```bash
@@ -376,8 +382,6 @@ status registers are part of the ARM System Control Block (see the
 [ARMv6-M Architecture Reference Manual](https://developer.arm.com/documentation/ddi0419/));
 Event Recorder details are in the
 [CMSIS-View documentation](https://arm-software.github.io/CMSIS-View/latest/).
-
-Starts a J-Link Commander style shell (see [REPL](#repl)).
 
 ## Generating a target YAML from an FLM
 

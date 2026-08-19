@@ -9,7 +9,7 @@
 ![CI](https://img.shields.io/github/actions/workflow/status/guohj2021/CMSIS-DAP-MCP/ci.yml?branch=main&label=CI)
 <!-- Keep the Release badge ?branch= in sync with the latest release tag; the
      tag-triggered Release workflow never runs on main. -->
-![Release](https://img.shields.io/github/actions/workflow/status/guohj2021/CMSIS-DAP-MCP/release.yml?branch=v0.4.1&label=Release)
+![Release](https://img.shields.io/github/actions/workflow/status/guohj2021/CMSIS-DAP-MCP/release.yml?branch=v0.5.0&label=Release)
 ![Pages](https://img.shields.io/github/actions/workflow/status/guohj2021/CMSIS-DAP-MCP/pages.yml?branch=main&label=Pages)
 ![Version](https://img.shields.io/github/v/tag/guohj2021/CMSIS-DAP-MCP)
 ![Rust](https://img.shields.io/badge/rust-1.97.1-orange)
@@ -172,7 +172,7 @@ standard; pick the one that fits your situation.
 | Remote URL | `url = "https://..."` | Streamable-HTTP MCP servers (not supported by this project yet) |
 
 `npx` fetches the published package on first launch and caches it afterwards.
-To pin a version, use `npx -y cmsis-dap-mcp@0.4.0`. To run the freshly built
+To pin a version, use `npx -y cmsis-dap-mcp@0.5.0`. To run the freshly built
 local binary instead (for example while developing this repository), point
 the client at `target/release/cmsis-dap-mcp` — no npm publish needed.
 
@@ -469,7 +469,7 @@ opencode mcp add cmsis-dap -- npx -y cmsis-dap-mcp
 | 远程 URL | `url = "https://..."` | Streamable-HTTP MCP 服务器（本项目暂不支持） |
 
 `npx` 首次启动时下载已发布包并缓存。要固定版本，用
-`npx -y cmsis-dap-mcp@0.4.0`。要运行刚构建的本地二进制（例如开发本仓库时），
+`npx -y cmsis-dap-mcp@0.5.0`。要运行刚构建的本地二进制（例如开发本仓库时），
 把客户端指向 `target/release/cmsis-dap-mcp` 即可，无需发布 npm。
 
 ## 使用示例

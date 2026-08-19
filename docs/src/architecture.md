@@ -53,6 +53,8 @@ CMSIS-DAP probe ---- SWD / JTAG ----> Cortex-M target
 | `security` | Three-tier policy; destructive tools require `--allow-destructive` |
 | `session` | Single active session; owns probe/session and SVD state |
 | `backend` | `Backend` trait with `ProbeRsBackend` and `MockBackend` implementations, including RTT attach/read and Event Recorder attach/poll |
+| `gdb` | GDB Remote Serial Protocol stub (ported from probe-rs-tools via gdbstub); non-invasive attach, registers/memory/run/step/hardware breakpoints |
+| `remote` | Remote TCP JSON-RPC server reusing one session; methods mirror MCP tool names (`read_memory`, `write_memory`, `halt`, `resume`, `step`, `reset`, `status`, `dump_cpu_state`, ...) |
 | `evr` | CMSIS-View Event Recorder decoding (official 16-byte record layout), used by the CLI's `evr` command |
 | `svd` | SVD parsing and named peripheral/register/field resolution |
 | `error` | Error codes and structured `McpError` |

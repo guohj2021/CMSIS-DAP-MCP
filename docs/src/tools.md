@@ -61,6 +61,20 @@ register file. `list_core_registers` returns all available names.
 `unknown`), the `halt_reason` when halted, and the program counter when
 halted.
 
+## Non-invasive debugging
+
+| Tool | Params | Level |
+| --- | --- | --- |
+| `dump_cpu_state` | `address` (repeatable, `0xADDR` or ELF symbol), `stack_words` (optional), `no_restore` (optional) | Read |
+
+`dump_cpu_state` takes a CPU snapshot **without ever resetting** the target:
+core registers (read during a short halt), Cortex-M fault status registers
+(CFSR/HFSR/DFSR/MMFAR/BFAR, read without halting), the top words of the
+MSP/PSP stacks and optional memory samples at the given addresses. By default
+the previous run state is restored afterwards; pass `no_restore: true` to
+leave the core halted. Addresses accept `0xADDR` or ELF symbol names (when
+the server is started with an `--elf` file).
+
 ## Breakpoints and watchpoints
 
 | Tool | Params | Level |
