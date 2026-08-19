@@ -14,13 +14,18 @@
 
 ## 安装
 
-发布后可用 npm 零安装：
+npm 包已发布；可用 `npx` 零安装直接运行，或全局安装后直接使用 `cmsis-dap-cli` 命令：
 
 ```bash
+# 零安装（推荐快速试用与脚本调用）
 npx -y cmsis-dap-cli --help
+
+# 或全局安装
+npm install -g cmsis-dap-cli
+cmsis-dap-cli --help
 ```
 
-在发布前或离线环境下，从
+离线环境下，从
 [GitHub Releases](https://github.com/guohj2021/CMSIS-DAP-MCP/releases) 下载
 Windows / Linux / macOS 原生二进制，或本地构建：
 
@@ -357,8 +362,6 @@ arm-none-eabi-gdb fw.elf -ex 'target remote :1337' -ex 'info registers'
 [ARMv6-M Architecture Reference Manual](https://developer.arm.com/documentation/ddi0419/)）；
 Event Recorder 详见
 [CMSIS-View 文档](https://arm-software.github.io/CMSIS-View/latest/)。
-
-启动 J-Link Commander 风格 shell（见[REPL](#repl)）。
 
 ## 从 FLM 生成 target YAML
 
