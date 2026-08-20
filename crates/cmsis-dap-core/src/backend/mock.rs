@@ -493,6 +493,12 @@ impl Backend for MockBackend {
         Ok(size)
     }
 
+    fn define_target(&mut self, _yaml: &str) -> Result<(), McpError> {
+        // The mock backend does not resolve a real probe-rs target; accept the
+        // definition so callers can exercise the define_chip tool path.
+        Ok(())
+    }
+
     fn attach_rtt(&mut self, _address: Option<u64>) -> Result<Vec<RttChannelInfo>, McpError> {
         if !self.connected {
             return Err(not_connected());

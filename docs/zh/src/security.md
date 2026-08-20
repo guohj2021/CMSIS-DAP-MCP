@@ -2,8 +2,9 @@
 
 - 只读工具始终可用。
 - 写与调试控制工具标记为写操作，由你的 MCP 客户端审批策略决定。
-- `erase_flash` 与 `program_flash` 为破坏性工具，默认禁用，仅当以
-  `--allow-destructive` 启动时可用；未启用时调用返回 `DestructiveDisabled`。
+- `erase_flash` 与 `program_flash` 为破坏性工具，默认禁用。可通过启动参数
+  `--allow-destructive` **或** 运行时 `update_config` 设
+  `allow_destructive: true` 启用；未启用时调用返回 `DestructiveDisabled`。
 
 Flash 擦除、Option 字节修改、读保护与调试解锁可能导致设备永久损坏或不可恢复。
 只有明确要重新编程目标时才启用破坏性模式。

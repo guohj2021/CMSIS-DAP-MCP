@@ -19,6 +19,36 @@ To pin a version with `npx`: `npx -y cmsis-dap-mcp@0.5.0`. If you are
 developing this repository, point the client at `target/release/cmsis-dap-mcp`
 so the freshly built binary is used without publishing.
 
+## Server command-line options
+
+All options are optional — the server starts fine with no arguments and
+enters a to-be-configured state. Everything below (except logging) can
+also be changed at runtime via the `update_config` / `reload_config` /
+`get_config` MCP tools without a restart.
+
+| Option | Meaning |
+| --- | --- |
+| `--allow-destructive` | enable `erase_flash` / `program_flash` and destructive script commands at startup |
+| `--tcp PORT` | also serve the remote JSON-RPC TCP server on `127.0.0.1:PORT` |
+| `--gdb-port PORT` | also start a GDB server on `127.0.0.1:PORT` |
+| `--config-file FILE` | JSON config file (`allow_destructive`, `tcp_port`, `gdb_port` keys); loaded at startup, watchable for changes |
+| `--probe-id ID` | default probe id for connect |
+| `--protocol swd\|jtag` | default debug protocol (default `swd`) |
+| `--speed-khz N` | default SWD/JTAG clock speed |
+| `--target NAME` | default target chip name |
+| `--svd FILE` | SVD file to load at startup |
+| `--target-yaml FILE` | target YAML to pre-load into the chip registry |
+| `--log-level LEVEL` | tracing filter; logs go to stderr (default `info`) |
+| `--log-file FILE` | write logs to a file instead of stderr |
+
+Startup-only (not changeable at runtime): `--log-level`, `--log-file`,
+the `--config-file` path itself (its contents *can* be reloaded), and the
+backend registry seed (`--target-yaml`; `define_chip` adds to it at
+runtime). A GDB server port cannot be changed once the server is running.
+
+Precedence: CLI flags > config file > defaults; runtime `update_config`
+overrides both.
+
 ## Codex
 
 ```bash

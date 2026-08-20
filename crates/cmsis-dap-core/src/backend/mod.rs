@@ -1,4 +1,5 @@
 use crate::error::{ErrorCode, McpError};
+pub mod chip;
 pub mod mock;
 pub mod probe_rs;
 use std::path::Path;
@@ -357,6 +358,19 @@ pub trait Backend: Send {
         address: u64,
         size: u64,
     ) -> Result<u64, McpError>;
+
+    /// Register a probe-rs target YAML (chip definition) at runtime.
+    ///
+    /// This lets an MCP server define a custom/unknown chip (for example from
+    /// a Keil FLM flash algorithm via the `define_chip` tool) without a
+    /// standalone probe-rs CLI. After a successful call, a subsequent
+    /// `connect` with the chip `name` resolves to this definition.
+    fn define_target(&mut self, _yaml: &str) -> Result<(), McpError> {
+        Err(McpError::new(
+            ErrorCode::UnsupportedFeature,
+            "this backend does not support runtime target definition",
+        ))
+    }
 
     /// Attach to the target's RTT control block.
     ///
