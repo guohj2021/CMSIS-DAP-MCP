@@ -3,9 +3,10 @@
 - Read-only tools are always available.
 - Write and debug-control tools are marked as writes; your MCP client governs
   approval.
-- `erase_flash` and `program_flash` are destructive and disabled unless the
-  server is started with `--allow-destructive`. Calling them without the flag
-  returns `DestructiveDisabled`.
+- `erase_flash` and `program_flash` are destructive and disabled by
+  default. Enable them either at startup with `--allow-destructive` **or**
+  at runtime via `update_config` with `allow_destructive: true`. Calling
+  them while disabled returns `DestructiveDisabled`.
 
 Flash erasing, option-byte changes, read-protection and debug unlock can
 permanently damage a device or make it unrecoverable. Only enable destructive

@@ -1,7 +1,8 @@
 # Tools
 
 Levels: **Read** (always available), **Write** (governed by client approval),
-**Destructive** (requires `--allow-destructive`).
+**Destructive** (requires `--allow-destructive` at startup **or**
+`update_config` with `allow_destructive: true` at runtime).
 
 ## Probe and session
 
@@ -130,6 +131,92 @@ program_flash { "address": 0x08004000, "path": "/path/to/fw.hex", "format": "hex
 Supported formats: `elf`, `axf` (same container as ELF), `bin` (requires
 `address`), `hex`/`ihex`/`intelhex`, or `auto` (default, inferred from the
 file extension `.elf`/`.axf`/`.bin`/`.hex`/`.ihx`).
+
+## Chip definition
+
+| Tool | Params | Level |
+| --- | --- | --- |
+| `define_chip` | `flm`, `flash_start`, `flash_size`, `sram_start`, `sram_size`, `core` (optional, default `armv6m`), `name` (optional, default FLM file stem) | Write |
+
+`define_chip` registers a custom/unknown chip at runtime from a Keil FLM
+flash algorithm file — no standalone probe-rs CLI or pre-built target YAML
+is needed. The FLM is parsed to extract the flash algorithm (code, entry
+points, page size, sector layout, erased value, timeouts), and a probe-rs
+target YAML is generated and registered in the running server's backend
+registry. After registration, call `connect` with `target` set to the chip
+name (or omit it when only one variant is defined) to attach.
+
+Parameters:
+
+- `flm` — path to a Keil FLM file (ARM ELF containing the vendor flash
+  algorithm and a `FlashDevice` descriptor).
+- `flash_start` / `flash_size` — Flash memory address range (e.g.
+  `0x08000000` / `0x10000` for 64 KB). The FLM descriptor's own values are
+  unreliable, so you must supply these explicitly.
+- `sram_start` / `sram_size` — SRAM address range (e.g. `0x20000000` /
+  `0x2000` for 8 KB). The FLM does not contain this information.
+- `core` — ARM architecture profile: `armv6m` (Cortex-M0/M0+, default),
+  `armv7m` (Cortex-M3), or `armv7em` (Cortex-M4/M7).
+- `name` — chip/variant name used with `connect`. Defaults to the FLM file
+  stem.
+
+Example:
+
+```text
+define_chip {
+  "flm": "C:/SDK/Libraries/Flash/MyChip_64.FLM",
+  "flash_start": 0x08000000, "flash_size": 0x10000,
+  "sram_start": 0x20000000, "sram_size": 0x2000,
+  "core": "armv6m", "name": "MyChip"
+}
+connect { "target": "MyChip", "protocol": "swd" }
+load_svd { "path": "C:/SDK/SVD/MyChip.svd" }
+erase_flash { "address": 0x0800FC00, "size": 0x400 }
+program_flash { "address": 0x0800FC00, "data": [0xDE, 0xAD, 0xBE, 0xEF], "verify": true }
+```
+
+## Runtime configuration
+
+| Tool | Params | Level |
+| --- | --- | --- |
+| `get_config` | - | Read |
+| `update_config` | `allow_destructive` (optional), `tcp_port` (optional), `gdb_port` (optional) | Write |
+| `reload_config` | - | Write |
+
+These tools manage the server's runtime configuration. The server can be
+started with zero arguments (to-be-configured state) and fully configured
+at runtime — no restart needed.
+
+`get_config` returns the current configuration as JSON:
+`allow_destructive`, `tcp_port`, `gdb_port`, `config_file`.
+
+`update_config` applies a partial update: omit any field to keep its
+current value. The candidate config is validated *before* anything is
+written, so an invalid value rejects the whole update atomically (no
+partial apply). After a successful update, the server reconciles its
+running TCP/GDB tasks to match the new config (idempotent).
+
+- `allow_destructive` — `true` enables `erase_flash` / `program_flash` and
+  destructive script commands; `false` disables them.
+- `tcp_port` — set to a port number (1–65535) to start or move the remote
+  JSON-RPC TCP server on `127.0.0.1`; set to `null` to stop it.
+- `gdb_port` — set to a port number to start the GDB server. A running GDB
+  server **cannot** be moved at runtime; restart the server to change its
+  port.
+
+`reload_config` re-reads the config file supplied at startup via
+`--config-file` and applies it. Fails with a clear error when no file was
+provided, the file is missing, or the contents are invalid.
+
+Example:
+
+```text
+get_config
+  -> {"allow_destructive": false, "tcp_port": null, "gdb_port": null, "config_file": null}
+
+update_config { "allow_destructive": true, "tcp_port": 4000 }
+  -> {"allow_destructive": true, "tcp_port": 4000, "gdb_port": null, "config_file": null}
+```
 
 ## Scripts
 
