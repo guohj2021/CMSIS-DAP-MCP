@@ -1,4 +1,5 @@
 pub mod tools_chip;
+pub mod tools_config;
 pub mod tools_core;
 pub mod tools_dap;
 pub mod tools_flash;
@@ -7,17 +8,20 @@ pub mod tools_probe;
 pub mod tools_script;
 pub mod tools_svd;
 
+use crate::runtime::ServerRuntime;
 use cmsis_dap_core::backend::{
     CoreRegister, ExportFormat, ImageFileFormat, Protocol, ResetMode, WatchAccess,
 };
 use cmsis_dap_core::error::ErrorCode;
-use cmsis_dap_core::security::{SecurityLevel, SecurityPolicy};
+use cmsis_dap_core::security::SecurityPolicy;
 use cmsis_dap_core::session::SessionManager;
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{CallToolResult, ServerCapabilities, ServerInfo};
 use rmcp::{tool, tool_router, ServerHandler};
-use std::sync::Mutex;
+use std::sync::Arc;
 
+pub use tools_chip::DefineChipParams;
+pub use tools_config::{GetConfigParams, ReloadConfigParams, UpdateConfigParams};
 pub use tools_core::{
     ClearBreakpointsParams, ClearWatchpointsParams, DumpCpuStateParams, GetCoreStatusParams,
     HaltParams, ListBreakpointsParams, ListCoreRegistersParams, ListWatchpointsParams,
@@ -43,16 +47,21 @@ tools (connect, disconnect, write_memory, write_core_register, halt, resume, ste
 clear_breakpoints, reset, write_dap, set_watchpoint, clear_watchpoints, load_svd, \
 write_peripheral) are marked write and governed by the MCP client approval policy; Destructive \
 tools (erase_flash, program_flash) are disabled unless the server was started with \
---allow-destructive. dump_cpu_state takes a non-invasive CPU snapshot (never resets; it briefly \
-halts to read registers and restores the previous run state afterwards; memory and fault-status \
-registers are read without halting). Workflow: call list_probes, then connect (protocol swd or jtag, optionally \
-under_reset) with the probe id, then use memory/core tools; reset accepts mode run or halt; \
-program_flash accepts raw data or a firmware file (axf/elf/bin/hex) with verify for read-back \
-checking; read_memory can export a range as bin or hex when given a path; run_script executes \
-J-Link Commander / OpenOCD style scripts (destructive script commands require \
---allow-destructive). For named peripheral access, first call load_svd with a path to an SVD \
-file provided by the user; chip-specific files are never bundled. All tools return structured \
-JSON content. Logs go to stderr only.";
+--allow-destructive OR runtime configuration enabled them. Runtime configuration: the server can \
+be started with NO flags (a to-be-configured state where all read/write tools work and destructive \
+tools are gated). To enable destructive tools or the TCP/GDB servers at runtime, call \
+update_config (allow_destructive, tcp_port, gdb_port) or reload_config (if --config-file was given \
+at startup; the file is also watched and re-applied automatically on edit). get_config reports the \
+current settings. All config changes take effect immediately without a restart. dump_cpu_state takes \
+a non-invasive CPU snapshot (never resets; it briefly halts to read registers and restores the \
+previous run state afterwards; memory and fault-status registers are read without halting). \
+Workflow: call list_probes, then connect (protocol swd or jtag, optionally under_reset) with the \
+probe id, then use memory/core tools; reset accepts mode run or halt; program_flash accepts raw \
+data or a firmware file (axf/elf/bin/hex) with verify for read-back checking; read_memory can \
+export a range as bin or hex when given a path; run_script executes J-Link Commander / OpenOCD \
+style scripts (destructive script commands require allow_destructive). For named peripheral access, \
+first call load_svd with a path to an SVD file provided by the user; chip-specific files are never \
+bundled. All tools return structured JSON content. Logs go to stderr only.";
 
 pub fn error_result(code: ErrorCode, message: String) -> CallToolResult {
     CallToolResult::structured_error(serde_json::json!({
@@ -76,25 +85,37 @@ fn register_params(
 }
 
 pub struct CmsisDapMcp {
-    pub session: std::sync::Arc<Mutex<SessionManager>>,
-    pub policy: SecurityPolicy,
+    pub runtime: Arc<ServerRuntime>,
 }
 
 impl CmsisDapMcp {
-    pub fn new(session: SessionManager, policy: SecurityPolicy) -> Self {
+    pub fn new(session: SessionManager, allow_destructive: bool) -> Self {
         Self {
-            session: std::sync::Arc::new(Mutex::new(session)),
-            policy,
+            runtime: ServerRuntime::new(session, allow_destructive),
         }
     }
 
-    /// Build a server around a session shared with other endpoints
-    /// (e.g. the remote TCP server).
-    pub fn from_shared(
-        session: std::sync::Arc<Mutex<SessionManager>>,
-        policy: SecurityPolicy,
-    ) -> Self {
-        Self { session, policy }
+    /// Build a server around a runtime shared with other endpoints
+    /// (e.g. the remote TCP server and the config file watcher).
+    pub fn from_shared(runtime: Arc<ServerRuntime>) -> Self {
+        Self { runtime }
+    }
+
+    /// Check the destructive gate against the *current* runtime config. Unlike
+    /// a cached `SecurityPolicy`, this reflects changes made via `update_config`
+    /// or a reloaded config file without a restart.
+    fn require_destructive(&self) -> Result<(), CallToolResult> {
+        if self.runtime.config.read().unwrap().allow_destructive {
+            Ok(())
+        } else {
+            Err(error_result(
+                ErrorCode::DestructiveDisabled,
+                "destructive tools are disabled. Enable them at runtime by calling \
+                 update_config with allow_destructive=true, by editing the watched \
+                 --config-file, or by starting the server with --allow-destructive."
+                    .into(),
+            ))
+        }
     }
 }
 
@@ -131,12 +152,18 @@ impl CmsisDapMcp {
                     "export count must be greater than zero".into(),
                 );
             }
-            match self.session.lock().unwrap().backend().export_memory(
-                std::path::Path::new(path),
-                format,
-                params.address,
-                params.count as u64,
-            ) {
+            match self
+                .runtime
+                .session
+                .lock()
+                .unwrap()
+                .backend()
+                .export_memory(
+                    std::path::Path::new(path),
+                    format,
+                    params.address,
+                    params.count as u64,
+                ) {
                 Ok(bytes) => CallToolResult::structured(serde_json::json!({
                     "exported": true,
                     "path": path,
@@ -156,7 +183,7 @@ impl CmsisDapMcp {
                     )
                 }
             };
-            match self.session.lock().unwrap().backend().read_memory(
+            match self.runtime.session.lock().unwrap().backend().read_memory(
                 params.address,
                 width,
                 params.count,
@@ -195,7 +222,7 @@ impl CmsisDapMcp {
                 )
             }
         };
-        match self.session.lock().unwrap().backend().write_memory(
+        match self.runtime.session.lock().unwrap().backend().write_memory(
             params.address,
             width,
             &params.values,
@@ -228,6 +255,7 @@ impl CmsisDapMcp {
             Err(e) => return e,
         };
         match self
+            .runtime
             .session
             .lock()
             .unwrap()
@@ -260,6 +288,7 @@ impl CmsisDapMcp {
             Err(e) => return e,
         };
         match self
+            .runtime
             .session
             .lock()
             .unwrap()
@@ -284,7 +313,7 @@ impl CmsisDapMcp {
         )
     )]
     pub async fn halt(&self, Parameters(_): Parameters<HaltParams>) -> CallToolResult {
-        match self.session.lock().unwrap().backend().halt() {
+        match self.runtime.session.lock().unwrap().backend().halt() {
             Ok(()) => CallToolResult::structured(serde_json::json!({ "halted": true })),
             Err(e) => error_result(e.code, e.message),
         }
@@ -301,7 +330,7 @@ impl CmsisDapMcp {
         )
     )]
     pub async fn resume(&self, Parameters(_): Parameters<ResumeParams>) -> CallToolResult {
-        match self.session.lock().unwrap().backend().resume() {
+        match self.runtime.session.lock().unwrap().backend().resume() {
             Ok(()) => CallToolResult::structured(serde_json::json!({ "running": true })),
             Err(e) => error_result(e.code, e.message),
         }
@@ -318,7 +347,7 @@ impl CmsisDapMcp {
         )
     )]
     pub async fn step(&self, Parameters(_): Parameters<StepParams>) -> CallToolResult {
-        match self.session.lock().unwrap().backend().step() {
+        match self.runtime.session.lock().unwrap().backend().step() {
             Ok(()) => CallToolResult::structured(serde_json::json!({ "stepped": true })),
             Err(e) => error_result(e.code, e.message),
         }
@@ -339,6 +368,7 @@ impl CmsisDapMcp {
         Parameters(params): Parameters<SetBreakpointParams>,
     ) -> CallToolResult {
         match self
+            .runtime
             .session
             .lock()
             .unwrap()
@@ -366,7 +396,14 @@ impl CmsisDapMcp {
         &self,
         Parameters(_): Parameters<ClearBreakpointsParams>,
     ) -> CallToolResult {
-        match self.session.lock().unwrap().backend().clear_breakpoints() {
+        match self
+            .runtime
+            .session
+            .lock()
+            .unwrap()
+            .backend()
+            .clear_breakpoints()
+        {
             Ok(()) => CallToolResult::structured(serde_json::json!({ "cleared": true })),
             Err(e) => error_result(e.code, e.message),
         }
@@ -386,7 +423,14 @@ impl CmsisDapMcp {
         &self,
         Parameters(_): Parameters<ListBreakpointsParams>,
     ) -> CallToolResult {
-        match self.session.lock().unwrap().backend().list_breakpoints() {
+        match self
+            .runtime
+            .session
+            .lock()
+            .unwrap()
+            .backend()
+            .list_breakpoints()
+        {
             Ok(addresses) => {
                 CallToolResult::structured(serde_json::json!({ "breakpoints": addresses }))
             }
@@ -415,7 +459,7 @@ impl CmsisDapMcp {
                 )
             }
         };
-        match self.session.lock().unwrap().backend().reset(mode) {
+        match self.runtime.session.lock().unwrap().backend().reset(mode) {
             Ok(()) => CallToolResult::structured(serde_json::json!({
                 "reset": true,
                 "mode": if mode == ResetMode::Run { "run" } else { "halt" },
@@ -436,6 +480,7 @@ impl CmsisDapMcp {
     )]
     pub async fn read_dap(&self, Parameters(params): Parameters<ReadDapParams>) -> CallToolResult {
         match self
+            .runtime
             .session
             .lock()
             .unwrap()
@@ -464,6 +509,7 @@ impl CmsisDapMcp {
         Parameters(params): Parameters<WriteDapParams>,
     ) -> CallToolResult {
         match self
+            .runtime
             .session
             .lock()
             .unwrap()
@@ -489,6 +535,7 @@ impl CmsisDapMcp {
     )]
     pub async fn load_svd(&self, Parameters(params): Parameters<LoadSvdParams>) -> CallToolResult {
         match self
+            .runtime
             .session
             .lock()
             .unwrap()
@@ -516,7 +563,7 @@ impl CmsisDapMcp {
         &self,
         Parameters(_): Parameters<ListPeripheralsParams>,
     ) -> CallToolResult {
-        match self.session.lock().unwrap().svd() {
+        match self.runtime.session.lock().unwrap().svd() {
             Ok(db) => CallToolResult::structured(
                 serde_json::json!({ "peripherals": db.list_peripherals() }),
             ),
@@ -538,7 +585,7 @@ impl CmsisDapMcp {
         &self,
         Parameters(params): Parameters<ReadPeripheralParams>,
     ) -> CallToolResult {
-        let mut session = self.session.lock().unwrap();
+        let mut session = self.runtime.session.lock().unwrap();
         let db = match session.svd() {
             Ok(db) => db.clone(),
             Err(e) => return error_result(e.code, e.message),
@@ -586,7 +633,7 @@ impl CmsisDapMcp {
         &self,
         Parameters(params): Parameters<WritePeripheralParams>,
     ) -> CallToolResult {
-        let mut session = self.session.lock().unwrap();
+        let mut session = self.runtime.session.lock().unwrap();
         let db = match session.svd() {
             Ok(db) => db.clone(),
             Err(e) => return error_result(e.code, e.message),
@@ -648,13 +695,14 @@ impl CmsisDapMcp {
         &self,
         Parameters(params): Parameters<EraseFlashParams>,
     ) -> CallToolResult {
-        if let Err(e) = self.policy.check(SecurityLevel::Destructive) {
-            return error_result(e.code, e.message);
+        if let Err(e) = self.require_destructive() {
+            return e;
         }
-        if let Err(e) = self.session.lock().unwrap().require_flash_defined() {
+        if let Err(e) = self.runtime.session.lock().unwrap().require_flash_defined() {
             return error_result(e.code, e.message);
         }
         match self
+            .runtime
             .session
             .lock()
             .unwrap()
@@ -682,10 +730,10 @@ impl CmsisDapMcp {
         &self,
         Parameters(params): Parameters<ProgramFlashParams>,
     ) -> CallToolResult {
-        if let Err(e) = self.policy.check(SecurityLevel::Destructive) {
-            return error_result(e.code, e.message);
+        if let Err(e) = self.require_destructive() {
+            return e;
         }
-        if let Err(e) = self.session.lock().unwrap().require_flash_defined() {
+        if let Err(e) = self.runtime.session.lock().unwrap().require_flash_defined() {
             return error_result(e.code, e.message);
         }
         match (&params.data, &params.path) {
@@ -695,11 +743,14 @@ impl CmsisDapMcp {
             ),
             (None, None) => error_result(ErrorCode::InvalidArgument, "provide data or path".into()),
             (Some(data), None) => {
-                match self.session.lock().unwrap().backend().program_flash(
-                    params.address,
-                    data,
-                    params.verify.unwrap_or(false),
-                ) {
+                match self
+                    .runtime
+                    .session
+                    .lock()
+                    .unwrap()
+                    .backend()
+                    .program_flash(params.address, data, params.verify.unwrap_or(false))
+                {
                     Ok(()) => CallToolResult::structured(serde_json::json!({
                         "programmed": true,
                         "address": params.address,
@@ -730,7 +781,7 @@ impl CmsisDapMcp {
                         }
                     },
                 };
-                match self.session.lock().unwrap().backend().program_file(
+                match self.runtime.session.lock().unwrap().backend().program_file(
                     std::path::Path::new(path),
                     format,
                     params.address,
@@ -782,8 +833,11 @@ impl CmsisDapMcp {
             },
             (None, Some(script)) => script.clone(),
         };
-        let mut session = self.session.lock().unwrap();
-        match cmsis_dap_core::script::run(&mut session, &self.policy, &text) {
+        let mut session = self.runtime.session.lock().unwrap();
+        let policy = SecurityPolicy {
+            allow_destructive: self.runtime.config.read().unwrap().allow_destructive,
+        };
+        match cmsis_dap_core::script::run(&mut session, &policy, &text) {
             Ok(report) => {
                 CallToolResult::structured(serde_json::to_value(&report).unwrap_or_default())
             }
@@ -805,7 +859,14 @@ impl CmsisDapMcp {
         &self,
         Parameters(_): Parameters<ListCoreRegistersParams>,
     ) -> CallToolResult {
-        match self.session.lock().unwrap().backend().list_core_registers() {
+        match self
+            .runtime
+            .session
+            .lock()
+            .unwrap()
+            .backend()
+            .list_core_registers()
+        {
             Ok(registers) => {
                 CallToolResult::structured(serde_json::json!({ "registers": registers }))
             }
@@ -827,7 +888,14 @@ impl CmsisDapMcp {
         &self,
         Parameters(_): Parameters<GetCoreStatusParams>,
     ) -> CallToolResult {
-        match self.session.lock().unwrap().backend().get_core_status() {
+        match self
+            .runtime
+            .session
+            .lock()
+            .unwrap()
+            .backend()
+            .get_core_status()
+        {
             Ok(status) => CallToolResult::structured(serde_json::json!({
                 "state": status.state,
                 "halt_reason": status.halt_reason,
@@ -854,11 +922,14 @@ impl CmsisDapMcp {
         let addresses = params.addresses.unwrap_or_default();
         let stack_words = params.stack_words.unwrap_or(16) as usize;
         let restore = params.restore.unwrap_or(true);
-        match self.session.lock().unwrap().backend().dump_cpu_state(
-            &addresses,
-            stack_words,
-            restore,
-        ) {
+        match self
+            .runtime
+            .session
+            .lock()
+            .unwrap()
+            .backend()
+            .dump_cpu_state(&addresses, stack_words, restore)
+        {
             Ok(dump) => match serde_json::to_value(dump) {
                 Ok(value) => CallToolResult::structured(value),
                 Err(e) => error_result(ErrorCode::InternalError, e.to_string()),
@@ -891,6 +962,7 @@ impl CmsisDapMcp {
             }
         };
         match self
+            .runtime
             .session
             .lock()
             .unwrap()
@@ -920,7 +992,14 @@ impl CmsisDapMcp {
         &self,
         Parameters(_): Parameters<ClearWatchpointsParams>,
     ) -> CallToolResult {
-        match self.session.lock().unwrap().backend().clear_watchpoints() {
+        match self
+            .runtime
+            .session
+            .lock()
+            .unwrap()
+            .backend()
+            .clear_watchpoints()
+        {
             Ok(()) => CallToolResult::structured(serde_json::json!({ "cleared": true })),
             Err(e) => error_result(e.code, e.message),
         }
@@ -940,7 +1019,14 @@ impl CmsisDapMcp {
         &self,
         Parameters(_): Parameters<ListWatchpointsParams>,
     ) -> CallToolResult {
-        match self.session.lock().unwrap().backend().list_watchpoints() {
+        match self
+            .runtime
+            .session
+            .lock()
+            .unwrap()
+            .backend()
+            .list_watchpoints()
+        {
             Ok(watchpoints) => {
                 CallToolResult::structured(serde_json::json!({ "watchpoints": watchpoints }))
             }
@@ -971,11 +1057,14 @@ impl CmsisDapMcp {
                 )
             }
         };
-        match self.session.lock().unwrap().backend().verify_memory(
-            params.address,
-            width,
-            &params.data,
-        ) {
+        match self
+            .runtime
+            .session
+            .lock()
+            .unwrap()
+            .backend()
+            .verify_memory(params.address, width, &params.data)
+        {
             Ok(report) => CallToolResult::structured(serde_json::json!({
                 "address": params.address,
                 "width": params.width,
@@ -997,7 +1086,7 @@ impl CmsisDapMcp {
         )
     )]
     pub async fn list_probes(&self, Parameters(_): Parameters<ListProbesParams>) -> CallToolResult {
-        match self.session.lock().unwrap().backend().list_probes() {
+        match self.runtime.session.lock().unwrap().backend().list_probes() {
             Ok(probes) => CallToolResult::structured(serde_json::json!({ "probes": probes })),
             Err(e) => error_result(e.code, e.message),
         }
@@ -1017,7 +1106,7 @@ impl CmsisDapMcp {
         &self,
         Parameters(params): Parameters<GetProbeInfoParams>,
     ) -> CallToolResult {
-        let probes = match self.session.lock().unwrap().backend().list_probes() {
+        let probes = match self.runtime.session.lock().unwrap().backend().list_probes() {
             Ok(probes) => probes,
             Err(e) => return error_result(e.code, e.message),
         };
@@ -1033,68 +1122,6 @@ impl CmsisDapMcp {
                 ErrorCode::ProbeNotFound,
                 format!("no probe with id {:?}", params.probe_id),
             ),
-        }
-    }
-
-    #[tool(
-        description = "Generate a probe-rs target from a Keil FLM flash algorithm file. Set load=true to make it available for subsequent connect calls.",
-        annotations(
-            title = "Chip generate",
-            read_only_hint = false,
-            destructive_hint = false,
-            idempotent_hint = false,
-            open_world_hint = false
-        )
-    )]
-    pub async fn chip_generate(
-        &self,
-        Parameters(params): Parameters<tools_chip::ChipGenerateParams>,
-    ) -> CallToolResult {
-        let flm_path = std::path::Path::new(&params.flm);
-        let core = params.core.as_deref().unwrap_or("armv6m");
-        let name = params.name.as_deref();
-
-        match cmsis_dap_core::flm::registry_from_flm(
-            flm_path,
-            name,
-            params.flash_start,
-            params.flash_size,
-            params.sram_start,
-            params.sram_size,
-            core,
-        ) {
-            Ok(registry) => {
-                let chip_name_fallback;
-                let chip_name = match name {
-                    Some(n) => n.to_string(),
-                    None => {
-                        chip_name_fallback = flm_path
-                            .file_stem()
-                            .map(|s| s.to_string_lossy().to_string())
-                            .unwrap_or_else(|| "chip".to_string());
-                        chip_name_fallback
-                    }
-                };
-
-                if params.load.unwrap_or(false) {
-                    use cmsis_dap_core::backend::probe_rs::ProbeRsBackend;
-                    use cmsis_dap_core::session::SessionManager;
-                    let new_session =
-                        SessionManager::new(Box::new(ProbeRsBackend::with_registry(registry)));
-                    *self.session.lock().unwrap() = new_session;
-                }
-
-                CallToolResult::structured(serde_json::json!({
-                    "name": chip_name,
-                    "flash_start": params.flash_start,
-                    "flash_size": params.flash_size,
-                    "sram_start": params.sram_start,
-                    "sram_size": params.sram_size,
-                    "core": core,
-                    "loaded": params.load.unwrap_or(false),
-                }))
-            }
-            Err(e) => error_result(e.code, e.message),
         }
     }
 
@@ -1126,7 +1153,7 @@ impl CmsisDapMcp {
             target: params.target,
             under_reset: params.under_reset.unwrap_or(false),
         };
-        match self.session.lock().unwrap().connect(&opts) {
+        match self.runtime.session.lock().unwrap().connect(&opts) {
             Ok(info) => CallToolResult::structured(serde_json::json!({ "target": info })),
             Err(e) => error_result(e.code, e.message),
         }
@@ -1143,7 +1170,7 @@ impl CmsisDapMcp {
         )
     )]
     pub async fn disconnect(&self, Parameters(_): Parameters<DisconnectParams>) -> CallToolResult {
-        match self.session.lock().unwrap().disconnect() {
+        match self.runtime.session.lock().unwrap().disconnect() {
             Ok(()) => CallToolResult::structured(serde_json::json!({ "disconnected": true })),
             Err(e) => error_result(e.code, e.message),
         }
@@ -1163,7 +1190,7 @@ impl CmsisDapMcp {
         &self,
         Parameters(_): Parameters<GetTargetInfoParams>,
     ) -> CallToolResult {
-        let session = self.session.lock().unwrap();
+        let session = self.runtime.session.lock().unwrap();
         match session.target_info() {
             Some(info) => CallToolResult::structured(serde_json::json!({ "target": info })),
             None => error_result(
@@ -1172,7 +1199,123 @@ impl CmsisDapMcp {
             ),
         }
     }
+
+    #[tool(
+        description = "Get the current server runtime configuration: allow_destructive (gates flash erase/program and destructive scripts), tcp_port, gdb_port, and the source config_file.",
+        annotations(
+            title = "Get config",
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    pub async fn get_config(&self, Parameters(_): Parameters<GetConfigParams>) -> CallToolResult {
+        let cfg = self.runtime.config.read().unwrap().clone();
+        CallToolResult::structured(cfg.to_json())
+    }
+
+    #[tool(
+        description = "Update the server runtime configuration WITHOUT restarting. Omit a field to keep its current value. allow_destructive enables flash erase/program and destructive script commands. tcp_port/gdb_port start (or, for TCP, move) the remote/GDB servers. Invalid values are rejected and the config is left unchanged.",
+        annotations(
+            title = "Update config",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
+    )]
+    pub async fn update_config(
+        &self,
+        Parameters(params): Parameters<UpdateConfigParams>,
+    ) -> CallToolResult {
+        match self
+            .runtime
+            .update(params.allow_destructive, params.tcp_port, params.gdb_port)
+        {
+            Ok(cfg) => CallToolResult::structured(serde_json::json!({
+                "updated": true,
+                "config": cfg.to_json(),
+            })),
+            Err(e) => error_result(ErrorCode::ConfigError, e),
+        }
+    }
+
+    #[tool(
+        description = "Re-read the config file supplied at startup (--config-file) and apply it. Fails with a clear message if no config file was given, the file is missing, or its contents are invalid. Edits to the watched file also take effect automatically.",
+        annotations(
+            title = "Reload config",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
+    )]
+    pub async fn reload_config(
+        &self,
+        Parameters(_): Parameters<ReloadConfigParams>,
+    ) -> CallToolResult {
+        match self.runtime.apply_config_file() {
+            Ok(cfg) => CallToolResult::structured(serde_json::json!({
+                "reloaded": true,
+                "config": cfg.to_json(),
+            })),
+            Err(e) => error_result(ErrorCode::ConfigError, e),
+        }
+    }
+
+    #[tool(
+        description = "Define a custom/unknown chip at runtime from a Keil FLM flash algorithm so connect can attach to it by name. Supply the FLM path plus the Flash/SRAM address ranges, and optionally a core type (default armv6m) and chip name (default: FLM file stem). The generated probe-rs target YAML is registered in the running server; no standalone probe-rs CLI is used. SVD peripheral descriptions are loaded separately via load_svd.",
+        annotations(
+            title = "Define chip",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
+    )]
+    pub async fn define_chip(
+        &self,
+        Parameters(params): Parameters<DefineChipParams>,
+    ) -> CallToolResult {
+        let flm_path = std::path::Path::new(&params.flm);
+        let name = params.name.clone().unwrap_or_else(|| {
+            flm_path
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_else(|| "chip".to_string())
+        });
+        match cmsis_dap_core::backend::chip::generate_target_yaml(
+            flm_path,
+            params.flash_start,
+            params.flash_size,
+            params.sram_start,
+            params.sram_size,
+            &params.core,
+            &name,
+        ) {
+            Ok(yaml) => {
+                match self
+                    .runtime
+                    .session
+                    .lock()
+                    .unwrap()
+                    .backend()
+                    .define_target(&yaml)
+                {
+                    Ok(()) => CallToolResult::structured(serde_json::json!({
+                        "defined": true,
+                        "name": name,
+                        "note": "call connect with this name to attach; load an SVD separately via load_svd for peripheral access",
+                    })),
+                    Err(e) => error_result(e.code, e.message),
+                }
+            }
+            Err(e) => error_result(e.code, e.message),
+        }
+    }
 }
+
 #[rmcp::tool_handler(router = Self::tool_router())]
 impl ServerHandler for CmsisDapMcp {
     fn get_info(&self) -> ServerInfo {

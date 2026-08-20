@@ -14,6 +14,8 @@ pub enum ErrorCode {
     DestructiveDisabled,
     InvalidArgument,
     InternalError,
+    /// A runtime configuration value was missing, malformed, or rejected.
+    ConfigError,
 }
 
 #[derive(Debug, Clone, Error)]

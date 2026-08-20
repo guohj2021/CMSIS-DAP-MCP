@@ -1,7 +1,8 @@
 # 工具参考
 
 安全等级：**读**（始终可用）、**写**（由客户端审批）、**破坏性**（需
-`--allow-destructive`）。
+启动时 `--allow-destructive` **或** 运行时 `update_config` 设
+`allow_destructive: true`）。
 
 ## 探针与会话
 
@@ -118,6 +119,82 @@ program_flash { "address": 0x08004000, "path": "/path/to/fw.hex", "format": "hex
 支持的格式：`elf`、`axf`（与 ELF 同容器）、`bin`（必须给 `address`）、
 `hex`/`ihex`/`intelhex`，或 `auto`（默认，按扩展名
 `.elf`/`.axf`/`.bin`/`.hex`/`.ihx` 推断）。
+
+## 芯片定义
+
+| 工具 | 参数 | 等级 |
+| --- | --- | --- |
+| `define_chip` | `flm`、`flash_start`、`flash_size`、`sram_start`、`sram_size`、`core`（可选，默认 `armv6m`）、`name`（可选，默认 FLM 文件名） | 写 |
+
+`define_chip` 在运行时从 Keil FLM 闪存算法文件注册自定义/未知芯片——
+无需独立 probe-rs CLI 或预构建 target YAML。FLM 被解析以提取闪存算法
+（代码、入口点、页大小、扇区布局、擦除值、超时），生成 probe-rs target YAML
+并注册到运行中服务器的 backend registry。注册后，调用 `connect` 并将
+`target` 设为芯片名（仅定义一个变体时可省略）即可连接。
+
+参数：
+
+- `flm` — Keil FLM 文件路径（ARM ELF，含厂商闪存算法与 `FlashDevice` 描述符）。
+- `flash_start` / `flash_size` — Flash 内存地址范围（如 `0x08000000` /
+  `0x10000` 表示 64 KB）。FLM 描述符自身的值不可靠，必须显式提供。
+- `sram_start` / `sram_size` — SRAM 地址范围（如 `0x20000000` /
+  `0x2000` 表示 8 KB）。FLM 不包含此信息。
+- `core` — ARM 架构 profile：`armv6m`（Cortex-M0/M0+，默认）、`armv7m`
+  （Cortex-M3）、`armv7em`（Cortex-M4/M7）。
+- `name` — 用于 `connect` 的芯片/变体名。默认取 FLM 文件名（去掉扩展名）。
+
+示例：
+
+```text
+define_chip {
+  "flm": "C:/SDK/Libraries/Flash/MyChip_64.FLM",
+  "flash_start": 0x08000000, "flash_size": 0x10000,
+  "sram_start": 0x20000000, "sram_size": 0x2000,
+  "core": "armv6m", "name": "MyChip"
+}
+connect { "target": "MyChip", "protocol": "swd" }
+load_svd { "path": "C:/SDK/SVD/MyChip.svd" }
+erase_flash { "address": 0x0800FC00, "size": 0x400 }
+program_flash { "address": 0x0800FC00, "data": [0xDE, 0xAD, 0xBE, 0xEF], "verify": true }
+```
+
+## 运行时配置
+
+| 工具 | 参数 | 等级 |
+| --- | --- | --- |
+| `get_config` | - | 读 |
+| `update_config` | `allow_destructive`（可选）、`tcp_port`（可选）、`gdb_port`（可选） | 写 |
+| `reload_config` | - | 写 |
+
+这些工具管理服务器的运行时配置。服务器可以零参数启动（待配置态），然后
+完全在运行时配置——无需重启。
+
+`get_config` 返回当前配置的 JSON：`allow_destructive`、`tcp_port`、
+`gdb_port`、`config_file`。
+
+`update_config` 执行部分更新：省略任意字段即保持当前值。候选配置在写入前
+先校验，无效值将整体拒绝（原子性，不部分生效）。更新成功后，服务器自动
+收敛运行中的 TCP/GDB 任务以匹配新配置（幂等）。
+
+- `allow_destructive` — `true` 开启 `erase_flash` / `program_flash` 及
+  破坏性脚本命令；`false` 关闭。
+- `tcp_port` — 设为端口号（1–65535）启动或迁移 `127.0.0.1` 上的远程
+  JSON-RPC TCP 服务器；设为 `null` 停止。
+- `gdb_port` — 设为端口号启动 GDB 服务器。已运行的 GDB 服务器**无法**
+  运行时迁移端口；需重启服务器才能改端口。
+
+`reload_config` 重新读取启动时通过 `--config-file` 指定的配置文件并应用。
+未提供文件、文件缺失或内容无效时返回明确错误。
+
+示例：
+
+```text
+get_config
+  -> {"allow_destructive": false, "tcp_port": null, "gdb_port": null, "config_file": null}
+
+update_config { "allow_destructive": true, "tcp_port": 4000 }
+  -> {"allow_destructive": true, "tcp_port": 4000, "gdb_port": null, "config_file": null}
+```
 
 ## 脚本
 

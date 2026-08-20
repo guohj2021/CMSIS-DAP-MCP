@@ -941,6 +941,19 @@ impl Backend for ProbeRsBackend {
         Ok(size)
     }
 
+    fn define_target(&mut self, yaml: &str) -> Result<(), McpError> {
+        let mut registry = probe_rs::config::Registry::from_builtin_families();
+        let name = registry.add_target_family_from_yaml(yaml).map_err(|e| {
+            McpError::new(
+                ErrorCode::ConfigError,
+                format!("failed to parse target yaml: {e}"),
+            )
+        })?;
+        tracing::info!("registered target family {name} at runtime");
+        self.registry = Some(registry);
+        Ok(())
+    }
+
     fn attach_rtt(&mut self, address: Option<u64>) -> Result<Vec<RttChannelInfo>, McpError> {
         let mut core = self.core()?;
         let mut rtt = match address {
