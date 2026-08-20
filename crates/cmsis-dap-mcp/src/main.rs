@@ -29,9 +29,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .init();
         }
     }
-    let backend = match &cfg.target_yaml {
-        Some(path) => ProbeRsBackend::with_registry(registry_from_yaml(path)?),
-        None => ProbeRsBackend::new(),
+    let backend = match (&cfg.target_yaml, &cfg.flm) {
+        (Some(path), _) => ProbeRsBackend::with_registry(registry_from_yaml(path)?),
+        (None, Some(flm_path)) => {
+            let flash_start = cfg.flash_start.ok_or("flash-start required with flm")?;
+            let flash_size = cfg.flash_size.ok_or("flash-size required with flm")?;
+            let sram_start = cfg.sram_start.ok_or("sram-start required with flm")?;
+            let sram_size = cfg.sram_size.ok_or("sram-size required with flm")?;
+            let registry = cmsis_dap_core::flm::registry_from_flm(
+                flm_path,
+                cfg.target.as_deref(),
+                flash_start,
+                flash_size,
+                sram_start,
+                sram_size,
+                &cfg.core,
+            )?;
+            ProbeRsBackend::with_registry(registry)
+        }
+        (None, None) => ProbeRsBackend::new(),
     };
     tracing::info!(
         "starting cmsis-dap-mcp (destructive={})",

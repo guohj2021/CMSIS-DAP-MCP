@@ -39,6 +39,24 @@ pub struct AppConfig {
     /// same probe via a non-invasive attach).
     #[arg(long)]
     pub gdb_port: Option<u16>,
+    /// Keil FLM flash algorithm file (generates target on the fly).
+    #[arg(long)]
+    pub flm: Option<PathBuf>,
+    /// Flash start address (required with --flm).
+    #[arg(long)]
+    pub flash_start: Option<u64>,
+    /// Flash size in bytes (required with --flm).
+    #[arg(long)]
+    pub flash_size: Option<u64>,
+    /// SRAM start address (required with --flm).
+    #[arg(long)]
+    pub sram_start: Option<u64>,
+    /// SRAM size in bytes (required with --flm).
+    #[arg(long)]
+    pub sram_size: Option<u64>,
+    /// Core type (default: armv6m, used with --flm).
+    #[arg(long, default_value = "armv6m")]
+    pub core: String,
 }
 
 impl AppConfig {
