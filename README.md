@@ -59,6 +59,8 @@ flash from firmware files, and run J-Link / OpenOCD style debug scripts.
 | Files | `program_flash` (`axf`/`elf`/`bin`/`hex`), `read_memory` export |
 | Scripts | `run_script` (J-Link / OpenOCD style) |
 | Flash | `erase_flash`, `program_flash` |
+| Chip | `define_chip` (MCP), `chip generate`/`chip list`/`chip search` (CLI) |
+| Config | `get_config`, `update_config`, `reload_config` |
 
 The CLI mirrors these capabilities as subcommands (`read`, `write`, `reg`,
 `halt`, `flash program`, `svd read`, ...); see the [CLI section](#cli).
@@ -181,7 +183,7 @@ the client at `target/release/cmsis-dap-mcp` — no npm publish needed.
 Typical session (verified on hardware):
 
 ```text
-list_probes -> {"probes": [{"id": "0123456789AB", "product": "XV-Link CMSIS-DAP", ...}]}
+list_probes -> {"probes": [{"id": "0123456789AB", "product": "CMSIS-DAP", ...}]}
 connect {protocol: swd, speed_khz: 1000}
   -> {"target": {"core_type": "Armv6m", "core_count": 1, "ap_count": 1, ...}}
 read_memory {address: 0x20000000, width: u32, count: 4}
@@ -361,6 +363,8 @@ OpenOCD 风格调试脚本。
 | 文件 | `program_flash`（`axf`/`elf`/`bin`/`hex`）、`read_memory` 导出 |
 | 脚本 | `run_script`（J-Link / OpenOCD 风格） |
 | Flash | `erase_flash`、`program_flash` |
+| 芯片 | `define_chip`（MCP）、`chip generate`/`chip list`/`chip search`（CLI） |
+| 配置 | `get_config`、`update_config`、`reload_config` |
 
 CLI 以子命令形式提供相同能力（`read`、`write`、`reg`、`halt`、`flash program`、
 `svd read` 等），见[命令行工具](#命令行工具)。
@@ -477,7 +481,7 @@ opencode mcp add cmsis-dap -- npx -y cmsis-dap-mcp
 典型会话（已实测）：
 
 ```text
-list_probes -> {"probes": [{"id": "0123456789AB", "product": "XV-Link CMSIS-DAP", ...}]}
+list_probes -> {"probes": [{"id": "0123456789AB", "product": "CMSIS-DAP", ...}]}
 connect {protocol: swd, speed_khz: 1000}
   -> {"target": {"core_type": "Armv6m", "core_count": 1, "ap_count": 1, ...}}
 read_memory {address: 0x20000000, width: u32, count: 4}
