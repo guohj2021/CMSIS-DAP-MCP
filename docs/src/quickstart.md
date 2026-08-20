@@ -47,13 +47,22 @@ identically either way.
 
 ## First session
 
+The server can be started with zero arguments — it enters a
+to-be-configured state where all read/write tools work and destructive
+tools stay gated until enabled (see step 7).
+
 1. `list_probes` to find your probe id.
 2. `connect` with `{"protocol": "swd", "speed_khz": 1000}`.
 3. `read_memory` / `write_memory` for raw access.
 4. `halt`, then `read_core_register` (e.g. `pc`, `sp`, `lr`, `r0`).
 5. `resume` when done.
 6. `load_svd` with your own SVD path for named peripheral access.
-7. `program_flash` only after starting the server with `--allow-destructive`.
+7. `program_flash` / `erase_flash` require destructive mode: start the
+   server with `--allow-destructive`, **or** call
+   `update_config {"allow_destructive": true}` at runtime (no restart
+   needed).
+8. For a chip not built into probe-rs, call `define_chip` with a Keil FLM
+   file before `connect` (see [Tools](./tools.md)).
 
 Example (verified output on a CMSIS-DAP probe + Cortex-M0+ board):
 

@@ -57,6 +57,9 @@ pub struct AppConfig {
     /// Core type (default: armv6m, used with --flm).
     #[arg(long, default_value = "armv6m")]
     pub core: String,
+    /// Path to a JSON config file.
+    #[arg(long)]
+    pub config_file: Option<PathBuf>,
 }
 
 impl AppConfig {

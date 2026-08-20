@@ -25,6 +25,19 @@ All notable changes are documented per release. Version numbers match the
 - npm platform packages now cover win32/linux/darwin × x64/arm64 plus
   win32/linux × ia32 (32-bit), for both `cmsis-dap-mcp` and `cmsis-dap-cli`.
 - REPl: `dump` command added.
+- Runtime configuration: the server can be started with zero arguments
+  (to-be-configured state) and fully configured at runtime — no restart
+  needed. New MCP tools `get_config`, `update_config` (partial, validated,
+  atomic updates of `allow_destructive` / `tcp_port` / `gdb_port`) and
+  `reload_config` (re-apply `--config-file`). Optional `--config-file`
+  JSON startup config with hot-reload file watcher (`config-watch`
+  feature); CLI flags keep working and win over the file. TCP/GDB server
+  tasks reconcile idempotently on every config change.
+- `define_chip` MCP tool: register a custom/unknown chip at runtime from a
+  Keil FLM flash algorithm file (FLM parsing, target YAML generation and
+  registry injection all inside the MCP server — no standalone probe-rs
+  CLI or external YAML files). After `define_chip`, `connect` attaches by
+  chip name; SVD peripherals load separately via `load_svd`.
 
 ### Documentation
 
@@ -55,6 +68,18 @@ All notable changes are documented per release. Version numbers match the
   `v0.5.0`.
 - All new and modified documentation sections are mirrored between
   `docs/src/` and `docs/zh/src/`.
+- `docs/src/tools.md` (+ zh mirror): documented `define_chip` (runtime chip
+  registration from FLM) and the runtime configuration tools
+  (`get_config` / `update_config` / `reload_config`); destructive level now
+  notes the runtime enable path.
+- `docs/src/security.md` (+ zh mirror): destructive tools can be enabled at
+  runtime via `update_config`, not only via `--allow-destructive`.
+- `docs/src/quickstart.md` (+ zh mirror): zero-argument startup documented;
+  first-session steps updated for runtime destructive enable and
+  `define_chip`.
+- `docs/src/ai-clients.md` (+ zh mirror): new "Server command-line
+  options" table covering all `cmsis-dap-mcp` flags, startup-only options
+  and precedence rules.
 
 ## [v0.4.1] - 2026-08-16
 

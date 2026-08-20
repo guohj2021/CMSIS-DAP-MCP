@@ -43,13 +43,20 @@ MCP 客户端有三种等价的 stdio 配置写法。`npx` 是已发布包的标
 
 ## 第一次会话
 
+服务器可零参数启动——进入待配置态：所有读/写工具可用，破坏性工具保持
+门控，直到按第 7 步启用。
+
 1. `list_probes` 查找探针 id。
 2. `connect`，参数 `{"protocol": "swd", "speed_khz": 1000}`。
 3. `read_memory` / `write_memory` 原始内存访问。
 4. `halt`，然后 `read_core_register`（例如 `pc`、`sp`、`lr`、`r0`）。
 5. 完成后 `resume`。
 6. `load_svd` 加载你自己的 SVD 文件，进行命名外设访问。
-7. 只有以 `--allow-destructive` 启动服务器后才可 `program_flash`。
+7. `program_flash` / `erase_flash` 需要破坏性模式：启动时加
+   `--allow-destructive`，**或**运行时调用
+   `update_config {"allow_destructive": true}`（无需重启）。
+8. 对 probe-rs 未内置的芯片，先调用 `define_chip` 传入 Keil FLM 文件
+   再 `connect`（见[工具参考](./tools.md)）。
 
 示例（CMSIS-DAP 探针 + Cortex-M0+ 开发板实测输出）：
 
