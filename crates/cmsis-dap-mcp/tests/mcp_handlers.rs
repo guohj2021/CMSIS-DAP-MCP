@@ -1,13 +1,13 @@
 use cmsis_dap_core::backend::mock::MockBackend;
 use cmsis_dap_core::backend::{AccessWidth, ConnectOptions, Protocol};
-use cmsis_dap_core::security::SecurityPolicy;
 use cmsis_dap_core::session::SessionManager;
 use cmsis_dap_mcp::mcp::{
     ClearBreakpointsParams, CmsisDapMcp, ConnectParams, DisconnectParams, DumpCpuStateParams,
-    EraseFlashParams, GetProbeInfoParams, GetTargetInfoParams, HaltParams, ListBreakpointsParams,
-    ListProbesParams, ProgramFlashParams, ReadCoreRegisterParams, ReadDapParams, ReadMemoryParams,
-    ResetParams, ResumeParams, SetBreakpointParams, StepParams, WriteCoreRegisterParams,
-    WriteDapParams, WriteMemoryParams,
+    EraseFlashParams, GetConfigParams, GetProbeInfoParams, GetTargetInfoParams, HaltParams,
+    ListBreakpointsParams, ListProbesParams, ProgramFlashParams, ReadCoreRegisterParams,
+    ReadDapParams, ReadMemoryParams, ReloadConfigParams, ResetParams, ResumeParams,
+    SetBreakpointParams, StepParams, UpdateConfigParams, VerifyMemoryParams,
+    WriteCoreRegisterParams, WriteDapParams, WriteMemoryParams,
 };
 use rmcp::handler::server::wrapper::Parameters;
 
@@ -19,19 +19,15 @@ fn connect(mcp: &CmsisDapMcp) {
         target: None,
         under_reset: false,
     };
-    mcp.session.lock().unwrap().connect(&opts).unwrap();
+    mcp.runtime.session.lock().unwrap().connect(&opts).unwrap();
 }
 
 #[tokio::test]
 async fn dump_cpu_state_returns_structured_dump() {
-    let mcp = CmsisDapMcp::new(
-        SessionManager::new(Box::new(MockBackend::new())),
-        SecurityPolicy {
-            allow_destructive: false,
-        },
-    );
+    let mcp = CmsisDapMcp::new(SessionManager::new(Box::new(MockBackend::new())), false);
     connect(&mcp);
-    mcp.session
+    mcp.runtime
+        .session
         .lock()
         .unwrap()
         .backend()
@@ -49,7 +45,8 @@ async fn dump_cpu_state_returns_structured_dump() {
     assert!(!structured["registers"].as_array().unwrap().is_empty());
     assert_eq!(structured["memory"][0]["value"].as_u64(), Some(0x1234_5678));
     assert_eq!(
-        mcp.session
+        mcp.runtime
+            .session
             .lock()
             .unwrap()
             .backend()
@@ -62,12 +59,7 @@ async fn dump_cpu_state_returns_structured_dump() {
 
 #[tokio::test]
 async fn read_memory_returns_mock_values() {
-    let mcp = CmsisDapMcp::new(
-        SessionManager::new(Box::new(MockBackend::new())),
-        SecurityPolicy {
-            allow_destructive: false,
-        },
-    );
+    let mcp = CmsisDapMcp::new(SessionManager::new(Box::new(MockBackend::new())), false);
     connect(&mcp);
     let params = ReadMemoryParams {
         address: 0x2000_0000,
@@ -84,12 +76,7 @@ async fn read_memory_returns_mock_values() {
 
 #[tokio::test]
 async fn write_then_read_memory() {
-    let mcp = CmsisDapMcp::new(
-        SessionManager::new(Box::new(MockBackend::new())),
-        SecurityPolicy {
-            allow_destructive: false,
-        },
-    );
+    let mcp = CmsisDapMcp::new(SessionManager::new(Box::new(MockBackend::new())), false);
     connect(&mcp);
     let write = WriteMemoryParams {
         address: 0x2000_0000,
@@ -112,12 +99,7 @@ async fn write_then_read_memory() {
 
 #[tokio::test]
 async fn core_control_flow_with_mock() {
-    let mcp = CmsisDapMcp::new(
-        SessionManager::new(Box::new(MockBackend::new())),
-        SecurityPolicy {
-            allow_destructive: false,
-        },
-    );
+    let mcp = CmsisDapMcp::new(SessionManager::new(Box::new(MockBackend::new())), false);
     connect(&mcp);
     assert!(!mcp
         .halt(Parameters(HaltParams {}))
@@ -172,12 +154,7 @@ async fn core_control_flow_with_mock() {
 
 #[tokio::test]
 async fn core_register_roundtrip_with_mock() {
-    let mcp = CmsisDapMcp::new(
-        SessionManager::new(Box::new(MockBackend::new())),
-        SecurityPolicy {
-            allow_destructive: false,
-        },
-    );
+    let mcp = CmsisDapMcp::new(SessionManager::new(Box::new(MockBackend::new())), false);
     connect(&mcp);
     let write = WriteCoreRegisterParams {
         name: Some("r0".into()),
@@ -206,12 +183,7 @@ fn instructions_are_self_contained() {
 }
 #[tokio::test]
 async fn dap_read_write_with_mock() {
-    let mcp = CmsisDapMcp::new(
-        SessionManager::new(Box::new(MockBackend::new())),
-        SecurityPolicy {
-            allow_destructive: false,
-        },
-    );
+    let mcp = CmsisDapMcp::new(SessionManager::new(Box::new(MockBackend::new())), false);
     connect(&mcp);
     let res = mcp
         .write_dap(Parameters(WriteDapParams {
@@ -246,12 +218,7 @@ async fn peripheral_read_write_with_mock() {
 
     let mut f = tempfile::NamedTempFile::new().unwrap();
     f.write_all(MINI_SVD.as_bytes()).unwrap();
-    let mcp = CmsisDapMcp::new(
-        SessionManager::new(Box::new(MockBackend::new())),
-        SecurityPolicy {
-            allow_destructive: false,
-        },
-    );
+    let mcp = CmsisDapMcp::new(SessionManager::new(Box::new(MockBackend::new())), false);
     connect(&mcp);
     let path = f.path().to_string_lossy().to_string();
     let res = mcp.load_svd(Parameters(LoadSvdParams { path })).await;
@@ -276,12 +243,7 @@ async fn peripheral_read_write_with_mock() {
 }
 #[tokio::test]
 async fn flash_blocked_without_flag() {
-    let mcp = CmsisDapMcp::new(
-        SessionManager::new(Box::new(MockBackend::new())),
-        SecurityPolicy {
-            allow_destructive: false,
-        },
-    );
+    let mcp = CmsisDapMcp::new(SessionManager::new(Box::new(MockBackend::new())), false);
     connect(&mcp);
     let res = mcp
         .erase_flash(Parameters(EraseFlashParams {
@@ -297,9 +259,7 @@ async fn flash_blocked_without_flag() {
 async fn erase_flash_requires_flash_definition() {
     let mcp = CmsisDapMcp::new(
         SessionManager::new(Box::new(MockBackend::without_flash())),
-        SecurityPolicy {
-            allow_destructive: true,
-        },
+        true,
     );
     connect(&mcp);
     let res = mcp
@@ -315,12 +275,7 @@ async fn erase_flash_requires_flash_definition() {
 
 #[tokio::test]
 async fn flash_works_with_flag() {
-    let mcp = CmsisDapMcp::new(
-        SessionManager::new(Box::new(MockBackend::new())),
-        SecurityPolicy {
-            allow_destructive: true,
-        },
-    );
+    let mcp = CmsisDapMcp::new(SessionManager::new(Box::new(MockBackend::new())), true);
     connect(&mcp);
     let res = mcp
         .program_flash(Parameters(ProgramFlashParams {
@@ -347,12 +302,7 @@ async fn flash_works_with_flag() {
 }
 #[tokio::test]
 async fn connect_disconnect_flow() {
-    let mcp = CmsisDapMcp::new(
-        SessionManager::new(Box::new(MockBackend::new())),
-        SecurityPolicy {
-            allow_destructive: false,
-        },
-    );
+    let mcp = CmsisDapMcp::new(SessionManager::new(Box::new(MockBackend::new())), false);
     let res = mcp.list_probes(Parameters(ListProbesParams {})).await;
     assert!(!res.is_error.unwrap_or(true));
     assert_eq!(
@@ -382,12 +332,7 @@ async fn connect_disconnect_flow() {
 
 #[tokio::test]
 async fn get_probe_info_filters_by_id() {
-    let mcp = CmsisDapMcp::new(
-        SessionManager::new(Box::new(MockBackend::new())),
-        SecurityPolicy {
-            allow_destructive: false,
-        },
-    );
+    let mcp = CmsisDapMcp::new(SessionManager::new(Box::new(MockBackend::new())), false);
     let res = mcp
         .get_probe_info(Parameters(GetProbeInfoParams {
             probe_id: Some("mock".into()),
@@ -400,4 +345,207 @@ async fn get_probe_info_filters_by_id() {
         }))
         .await;
     assert!(res.is_error.unwrap_or(false));
+}
+
+/// A server started with no startup flags sits in a "to-be-configured" state:
+/// destructive tools are gated, but can be enabled at runtime via
+/// `update_config` and take effect immediately without a restart.
+#[tokio::test]
+async fn runtime_config_enables_destructive_tools() {
+    // No flags: allow_destructive = false, no config file wired in.
+    let mcp = CmsisDapMcp::new(SessionManager::new(Box::new(MockBackend::new())), false);
+    connect(&mcp);
+
+    // get_config reflects the to-be-configured state.
+    let cfg = mcp.get_config(Parameters(GetConfigParams {})).await;
+    assert!(!cfg.is_error.unwrap_or(true));
+    assert_eq!(
+        cfg.structured_content.clone().unwrap()["allow_destructive"],
+        serde_json::json!(false)
+    );
+
+    // Destructive tool is blocked while the gate is closed.
+    let rejected = mcp
+        .erase_flash(Parameters(EraseFlashParams {
+            address: 0x0800_0000,
+            size: 1024,
+        }))
+        .await;
+    assert!(rejected.is_error.unwrap_or(false));
+    assert_eq!(
+        rejected.structured_content.clone().unwrap()["code"],
+        serde_json::json!("DestructiveDisabled")
+    );
+
+    // Enable destructive tools at runtime; no restart needed.
+    let updated = mcp
+        .update_config(Parameters(UpdateConfigParams {
+            allow_destructive: Some(true),
+            tcp_port: None,
+            gdb_port: None,
+        }))
+        .await;
+    assert!(!updated.is_error.unwrap_or(true));
+    assert!(updated.structured_content.clone().unwrap()["updated"]
+        .as_bool()
+        .unwrap());
+
+    // get_config now reflects the live change.
+    let cfg = mcp.get_config(Parameters(GetConfigParams {})).await;
+    assert_eq!(
+        cfg.structured_content.clone().unwrap()["allow_destructive"],
+        serde_json::json!(true)
+    );
+
+    // The same destructive tool now runs successfully.
+    let ok = mcp
+        .erase_flash(Parameters(EraseFlashParams {
+            address: 0x0800_0000,
+            size: 1024,
+        }))
+        .await;
+    assert!(!ok.is_error.unwrap_or(true));
+
+    // reload_config fails clearly when no --config-file was supplied.
+    let missing = mcp.reload_config(Parameters(ReloadConfigParams {})).await;
+    assert!(missing.is_error.unwrap_or(false));
+    assert_eq!(
+        missing.structured_content.clone().unwrap()["code"],
+        serde_json::json!("ConfigError")
+    );
+}
+
+/// `update_config` must reject invalid values atomically: a bad port returns a
+/// clear ConfigError and leaves the previously-good config untouched.
+#[tokio::test]
+async fn update_config_rejects_invalid_port() {
+    let mcp = CmsisDapMcp::new(SessionManager::new(Box::new(MockBackend::new())), false);
+    connect(&mcp);
+
+    let bad = mcp
+        .update_config(Parameters(UpdateConfigParams {
+            allow_destructive: None,
+            tcp_port: Some(0),
+            gdb_port: None,
+        }))
+        .await;
+    assert!(bad.is_error.unwrap_or(false));
+    assert_eq!(
+        bad.structured_content.clone().unwrap()["code"],
+        serde_json::json!("ConfigError")
+    );
+
+    // Config is unchanged: still in the to-be-configured (non-destructive) state.
+    let cfg = mcp.get_config(Parameters(GetConfigParams {})).await;
+    let c = cfg.structured_content.clone().unwrap();
+    assert_eq!(c["allow_destructive"], serde_json::json!(false));
+    assert_eq!(c["tcp_port"], serde_json::Value::Null);
+}
+
+/// End-to-end flash lifecycle through the MCP layer: erase -> read (sees
+/// 0xFF) -> program -> read (sees written bytes) -> verify. Also confirms the
+/// destructive gate (runtime-config) blocks erase before it is enabled.
+#[tokio::test]
+async fn flash_erase_program_read_cycle() {
+    let mcp = CmsisDapMcp::new(
+        SessionManager::new(Box::new(MockBackend::new())),
+        false, // to-be-configured: destructive tools gated
+    );
+    connect(&mcp);
+    let addr = 0x0800_0000u64;
+
+    // 1) Erase is blocked while the destructive gate is closed.
+    let blocked = mcp
+        .erase_flash(Parameters(EraseFlashParams {
+            address: addr,
+            size: 256,
+        }))
+        .await;
+    assert!(blocked.is_error.unwrap_or(false));
+    assert_eq!(
+        blocked.structured_content.clone().unwrap()["code"],
+        serde_json::json!("DestructiveDisabled")
+    );
+
+    // 2) Enable destructive tools at runtime (no restart).
+    mcp.update_config(Parameters(UpdateConfigParams {
+        allow_destructive: Some(true),
+        tcp_port: None,
+        gdb_port: None,
+    }))
+    .await;
+
+    // 3) Erase the flash region.
+    let erased = mcp
+        .erase_flash(Parameters(EraseFlashParams {
+            address: addr,
+            size: 256,
+        }))
+        .await;
+    assert!(!erased.is_error.unwrap_or(true));
+
+    // 4) Read back: erased flash reads as 0xFF.
+    let read_after_erase = mcp
+        .read_memory(Parameters(ReadMemoryParams {
+            address: addr,
+            width: "u8".into(),
+            count: 4,
+            path: None,
+            format: None,
+        }))
+        .await;
+    assert!(!read_after_erase.is_error.unwrap_or(true));
+    let erased_bytes = read_after_erase.structured_content.clone().unwrap()["values"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_u64().unwrap() as u8)
+        .collect::<Vec<_>>();
+    assert_eq!(erased_bytes, vec![0xFF, 0xFF, 0xFF, 0xFF]);
+
+    // 5) Program four bytes.
+    let written = [0xDEu8, 0xAD, 0xBE, 0xEF];
+    let programmed = mcp
+        .program_flash(Parameters(ProgramFlashParams {
+            address: addr,
+            data: Some(written.to_vec()),
+            verify: Some(true),
+            path: None,
+            format: None,
+        }))
+        .await;
+    assert!(!programmed.is_error.unwrap_or(true));
+
+    // 6) Read back: programmed bytes are now visible through MCP read_memory.
+    let read_after_program = mcp
+        .read_memory(Parameters(ReadMemoryParams {
+            address: addr,
+            width: "u8".into(),
+            count: 4,
+            path: None,
+            format: None,
+        }))
+        .await;
+    assert!(!read_after_program.is_error.unwrap_or(true));
+    let programmed_bytes = read_after_program.structured_content.clone().unwrap()["values"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_u64().unwrap() as u8)
+        .collect::<Vec<_>>();
+    assert_eq!(programmed_bytes, written);
+
+    // 7) Verify the flash contents against the expected data.
+    let verified = mcp
+        .verify_memory(Parameters(VerifyMemoryParams {
+            address: addr,
+            width: "u8".into(),
+            data: written.iter().map(|b| *b as u64).collect(),
+        }))
+        .await;
+    assert!(!verified.is_error.unwrap_or(true));
+    assert_eq!(
+        verified.structured_content.clone().unwrap()["verified"],
+        serde_json::json!(true)
+    );
 }

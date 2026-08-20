@@ -46,13 +46,16 @@ CMSIS-DAP probe ---- SWD / JTAG ----> Cortex-M target
 | Module | Responsibility |
 | --- | --- |
 | `cli` | Parse startup arguments, configure logging, start the stdio server |
+| `config` | `ServerConfig` runtime-mutable fields (`allow_destructive`, `tcp_port`, `gdb_port`); JSON config-file loading |
+| `runtime` | `ServerRuntime`: owns the shared config, session and running TCP/GDB tasks; `reconcile()` is the single idempotent convergence point for every config change; optional config-file watcher |
 | `mcp` | Register tools with rmcp, MCP annotations, server instructions |
-| `mcp/tools_*` | Per-area parameters and handlers (probe, memory, core, dap, svd, flash, script) |
+| `mcp/tools_*` | Per-area parameters and handlers (probe, memory, core, dap, svd, flash, script, chip, config) |
 | `script` | Linear J-Link Commander / OpenOCD style script parser and executor |
 | `hex` | Intel HEX encoder used for memory export |
-| `security` | Three-tier policy; destructive tools require `--allow-destructive` |
+| `security` | Three-tier policy; destructive tools require `--allow-destructive` or a runtime `update_config` enable |
 | `session` | Single active session; owns probe/session and SVD state |
 | `backend` | `Backend` trait with `ProbeRsBackend` and `MockBackend` implementations, including RTT attach/read and Event Recorder attach/poll |
+| `backend/chip` | Keil FLM parsing (algorithm, entry points, FlashDevice descriptor) and probe-rs target YAML generation; powers the `define_chip` MCP tool and the CLI `chip generate` command |
 | `gdb` | GDB Remote Serial Protocol stub (ported from probe-rs-tools via gdbstub); non-invasive attach, registers/memory/run/step/hardware breakpoints |
 | `remote` | Remote TCP JSON-RPC server reusing one session; methods mirror MCP tool names (`read_memory`, `write_memory`, `halt`, `resume`, `step`, `reset`, `status`, `dump_cpu_state`, ...) |
 | `evr` | CMSIS-View Event Recorder decoding (official 16-byte record layout), used by the CLI's `evr` command |
