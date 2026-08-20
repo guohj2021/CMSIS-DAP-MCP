@@ -315,8 +315,10 @@ name = "cmsis-dap-core"
 version = "0.5.0"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "gdbstub",
  "itertools",
+ "object",
  "parking_lot",
  "probe-rs",
  "serde",

@@ -1,3 +1,4 @@
+pub mod tools_chip;
 pub mod tools_core;
 pub mod tools_dap;
 pub mod tools_flash;
@@ -1032,6 +1033,68 @@ impl CmsisDapMcp {
                 ErrorCode::ProbeNotFound,
                 format!("no probe with id {:?}", params.probe_id),
             ),
+        }
+    }
+
+    #[tool(
+        description = "Generate a probe-rs target from a Keil FLM flash algorithm file. Set load=true to make it available for subsequent connect calls.",
+        annotations(
+            title = "Chip generate",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
+    )]
+    pub async fn chip_generate(
+        &self,
+        Parameters(params): Parameters<tools_chip::ChipGenerateParams>,
+    ) -> CallToolResult {
+        let flm_path = std::path::Path::new(&params.flm);
+        let core = params.core.as_deref().unwrap_or("armv6m");
+        let name = params.name.as_deref();
+
+        match cmsis_dap_core::flm::registry_from_flm(
+            flm_path,
+            name,
+            params.flash_start,
+            params.flash_size,
+            params.sram_start,
+            params.sram_size,
+            core,
+        ) {
+            Ok(registry) => {
+                let chip_name_fallback;
+                let chip_name = match name {
+                    Some(n) => n.to_string(),
+                    None => {
+                        chip_name_fallback = flm_path
+                            .file_stem()
+                            .map(|s| s.to_string_lossy().to_string())
+                            .unwrap_or_else(|| "chip".to_string());
+                        chip_name_fallback
+                    }
+                };
+
+                if params.load.unwrap_or(false) {
+                    use cmsis_dap_core::backend::probe_rs::ProbeRsBackend;
+                    use cmsis_dap_core::session::SessionManager;
+                    let new_session =
+                        SessionManager::new(Box::new(ProbeRsBackend::with_registry(registry)));
+                    *self.session.lock().unwrap() = new_session;
+                }
+
+                CallToolResult::structured(serde_json::json!({
+                    "name": chip_name,
+                    "flash_start": params.flash_start,
+                    "flash_size": params.flash_size,
+                    "sram_start": params.sram_start,
+                    "sram_size": params.sram_size,
+                    "core": core,
+                    "loaded": params.load.unwrap_or(false),
+                }))
+            }
+            Err(e) => error_result(e.code, e.message),
         }
     }
 
