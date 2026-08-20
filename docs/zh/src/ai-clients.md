@@ -17,6 +17,34 @@
 用 `npx` 固定版本：`npx -y cmsis-dap-mcp@0.5.0`。开发本仓库时，把客户端
 指向 `target/release/cmsis-dap-mcp`，即可使用刚构建的二进制而无需发布。
 
+## 服务器命令行参数
+
+所有参数均可选——服务器零参数启动即可，进入待配置态。下表中除日志外的
+一切都可以在运行时通过 `update_config` / `reload_config` / `get_config`
+MCP 工具变更，无需重启。
+
+| 参数 | 说明 |
+| --- | --- |
+| `--allow-destructive` | 启动即开启 `erase_flash` / `program_flash` 及破坏性脚本命令 |
+| `--tcp PORT` | 同时在 `127.0.0.1:PORT` 提供远程 JSON-RPC TCP 服务 |
+| `--gdb-port PORT` | 同时在 `127.0.0.1:PORT` 启动 GDB 服务器 |
+| `--config-file FILE` | JSON 配置文件（键：`allow_destructive`、`tcp_port`、`gdb_port`）；启动时加载，可监听变更 |
+| `--probe-id ID` | connect 的默认探针 id |
+| `--protocol swd\|jtag` | 默认调试协议（默认 `swd`） |
+| `--speed-khz N` | 默认 SWD/JTAG 时钟速度 |
+| `--target NAME` | 默认目标芯片名 |
+| `--svd FILE` | 启动时加载的 SVD 文件 |
+| `--target-yaml FILE` | 预加载到芯片注册表的 target YAML |
+| `--log-level LEVEL` | tracing 过滤器；日志写 stderr（默认 `info`） |
+| `--log-file FILE` | 日志写入文件而非 stderr |
+
+仅启动时固定（运行时不可变更）：`--log-level`、`--log-file`、
+`--config-file` 路径本身（其**内容**可重载）、backend 注册表种子
+（`--target-yaml`；`define_chip` 在运行时往里追加）。GDB 服务器端口一旦
+启动即不可变更。
+
+优先级：CLI 参数 > 配置文件 > 默认值；运行时 `update_config` 覆盖两者。
+
 ## Codex
 
 ```bash

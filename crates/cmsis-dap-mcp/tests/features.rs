@@ -1,6 +1,5 @@
 use cmsis_dap_core::backend::mock::MockBackend;
 use cmsis_dap_core::backend::{ConnectOptions, Protocol};
-use cmsis_dap_core::security::SecurityPolicy;
 use cmsis_dap_core::session::SessionManager;
 use cmsis_dap_mcp::mcp::{
     ClearWatchpointsParams, CmsisDapMcp, ConnectParams, DisconnectParams, EraseFlashParams,
@@ -13,7 +12,7 @@ use rmcp::handler::server::wrapper::Parameters;
 fn mcp(allow_destructive: bool) -> CmsisDapMcp {
     CmsisDapMcp::new(
         SessionManager::new(Box::new(MockBackend::new())),
-        SecurityPolicy { allow_destructive },
+        allow_destructive,
     )
 }
 
@@ -25,7 +24,7 @@ fn connect(mcp: &CmsisDapMcp) {
         target: None,
         under_reset: false,
     };
-    mcp.session.lock().unwrap().connect(&opts).unwrap();
+    mcp.runtime.session.lock().unwrap().connect(&opts).unwrap();
 }
 
 fn structured_value(res: &rmcp::model::CallToolResult, key: &str) -> serde_json::Value {
