@@ -119,7 +119,7 @@ opencode mcp add cmsis-dap -- npx -y cmsis-dap-mcp
 实测结果：
 
 ```text
-探针 id : 0123456789AB（XV-Link CMSIS-DAP，vendor 0x0416）
+探针 id : 0123456789AB（CMSIS-DAP，vendor 0x0416）
 内存    : [64000000, 1, 3, 0]
 pc      : 134228884（0x08002B94）
 ```

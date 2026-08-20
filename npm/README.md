@@ -36,6 +36,8 @@ CMSIS-DAP debug probes and access Cortex-M chip resources over **SWD** or
 | Files | `program_flash` (`axf`/`elf`/`bin`/`hex`), `read_memory` export |
 | Scripts | `run_script` (J-Link / OpenOCD style) |
 | Flash | `erase_flash`, `program_flash` |
+| Chip | `define_chip` (MCP), `chip generate`/`chip list`/`chip search` (CLI) |
+| Config | `get_config`, `update_config`, `reload_config` |
 
 `reset` supports `mode: "run"` (reset and continue) or `mode: "halt"` (reset
 and halt). `connect` supports `under_reset` for locked or non-responsive
@@ -179,7 +181,7 @@ Cortex-M0+ board, driven through Claude Code, opencode and raw MCP stdio:
 Example session (actual output):
 
 ```text
-list_probes -> {"probes": [{"id": "0123456789AB", "product": "XV-Link CMSIS-DAP", ...}]}
+list_probes -> {"probes": [{"id": "0123456789AB", "product": "CMSIS-DAP", ...}]}
 connect {protocol: swd, speed_khz: 1000}
   -> {"target": {"core_type": "Armv6m", "core_count": 1, "ap_count": 1, "cpu_id": ..., "dp_id": ...}}
 read_memory {address: 0x20000000, width: u32, count: 4}
@@ -292,6 +294,8 @@ MIT OR Apache-2.0
 | 文件 | `program_flash`（`axf`/`elf`/`bin`/`hex`）、`read_memory` 导出 |
 | 脚本 | `run_script`（J-Link / OpenOCD 风格） |
 | Flash | `erase_flash`、`program_flash` |
+| 芯片 | `define_chip`（MCP）、`chip generate`/`chip list`/`chip search`（CLI） |
+| 配置 | `get_config`、`update_config`、`reload_config` |
 
 `reset` 支持 `mode: "run"`（复位后继续运行）或 `mode: "halt"`（复位后暂停）；
 `connect` 支持 `under_reset`（用于锁定或无响应的目标）；`program_flash` 支持
@@ -429,7 +433,7 @@ Claude Code、opencode 和原始 MCP stdio 驱动：
 示例会话（真实输出）：
 
 ```text
-list_probes -> {"probes": [{"id": "0123456789AB", "product": "XV-Link CMSIS-DAP", ...}]}
+list_probes -> {"probes": [{"id": "0123456789AB", "product": "CMSIS-DAP", ...}]}
 connect {protocol: swd, speed_khz: 1000}
   -> {"target": {"core_type": "Armv6m", "core_count": 1, "ap_count": 1, "cpu_id": ..., "dp_id": ...}}
 read_memory {address: 0x20000000, width: u32, count: 4}

@@ -61,7 +61,7 @@ MCP 客户端有三种等价的 stdio 配置写法。`npx` 是已发布包的标
 示例（CMSIS-DAP 探针 + Cortex-M0+ 开发板实测输出）：
 
 ```text
-list_probes -> {"probes": [{"id": "0123456789AB", "product": "XV-Link CMSIS-DAP", ...}]}
+list_probes -> {"probes": [{"id": "0123456789AB", "product": "CMSIS-DAP", ...}]}
 connect {protocol: swd, speed_khz: 1000}
   -> {"target": {"core_type": "Armv6m", "core_count": 1, "ap_count": 1, "cpu_id": ..., "dp_id": ...}}
 read_memory {address: 0x20000000, width: u32, count: 4}

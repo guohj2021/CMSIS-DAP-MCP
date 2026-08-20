@@ -126,7 +126,7 @@ against a real CMSIS-DAP probe:
 Observed results:
 
 ```text
-probe id : 0123456789AB (XV-Link CMSIS-DAP, vendor 0x0416)
+probe id : 0123456789AB (CMSIS-DAP, vendor 0x0416)
 memory   : [64000000, 1, 3, 0]
 pc       : 134228884 (0x08002B94)
 ```
