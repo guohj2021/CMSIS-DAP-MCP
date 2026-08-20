@@ -139,6 +139,31 @@ pub struct CliArgs {
     /// Target YAML file with chip/Flash algorithm definitions.
     #[arg(long, global = true, value_name = "FILE")]
     pub target_yaml: Option<PathBuf>,
+    /// Keil FLM flash algorithm file - generates target YAML on the fly.
+    /// Requires --flash-start, --flash-size, --sram-start, --sram-size.
+    /// Mutually exclusive with --target-yaml.
+    #[arg(
+        long,
+        global = true,
+        value_name = "FILE",
+        conflicts_with = "target_yaml"
+    )]
+    pub flm: Option<PathBuf>,
+    /// Flash start address (required with --flm).
+    #[arg(long, global = true, value_parser = parse_u64_arg)]
+    pub flash_start: Option<u64>,
+    /// Flash size in bytes (required with --flm).
+    #[arg(long, global = true, value_parser = parse_u64_arg)]
+    pub flash_size: Option<u64>,
+    /// SRAM start address (required with --flm).
+    #[arg(long, global = true, value_parser = parse_u64_arg)]
+    pub sram_start: Option<u64>,
+    /// SRAM size in bytes (required with --flm).
+    #[arg(long, global = true, value_parser = parse_u64_arg)]
+    pub sram_size: Option<u64>,
+    /// Core type (default: armv6m, used with --flm).
+    #[arg(long, global = true, default_value = "armv6m")]
+    pub core: String,
     /// SVD file for named peripheral access (svd subcommands).
     #[arg(long, global = true, value_name = "FILE")]
     pub svd: Option<PathBuf>,

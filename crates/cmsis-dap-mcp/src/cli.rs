@@ -39,10 +39,25 @@ pub struct AppConfig {
     /// same probe via a non-invasive attach).
     #[arg(long)]
     pub gdb_port: Option<u16>,
-    /// Path to a JSON config file (keys: allow_destructive, tcp_port,
-    /// gdb_port). Loaded at startup and, when present, watched for changes so
-    /// edits take effect without a restart. All of its values are overridable
-    /// by the CLI flags above and by the runtime update_config tool.
+    /// Keil FLM flash algorithm file (generates target on the fly).
+    #[arg(long)]
+    pub flm: Option<PathBuf>,
+    /// Flash start address (required with --flm).
+    #[arg(long)]
+    pub flash_start: Option<u64>,
+    /// Flash size in bytes (required with --flm).
+    #[arg(long)]
+    pub flash_size: Option<u64>,
+    /// SRAM start address (required with --flm).
+    #[arg(long)]
+    pub sram_start: Option<u64>,
+    /// SRAM size in bytes (required with --flm).
+    #[arg(long)]
+    pub sram_size: Option<u64>,
+    /// Core type (default: armv6m, used with --flm).
+    #[arg(long, default_value = "armv6m")]
+    pub core: String,
+    /// Path to a JSON config file.
     #[arg(long)]
     pub config_file: Option<PathBuf>,
 }
