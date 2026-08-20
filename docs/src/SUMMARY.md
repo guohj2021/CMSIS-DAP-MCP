@@ -3,6 +3,7 @@
 # User guide
 
 - [Introduction](./index.md)
+- [Getting Started](./getting-started.md)
 - [Quickstart](./quickstart.md)
 - [AI client configuration](./ai-clients.md)
 - [Tools](./tools.md)

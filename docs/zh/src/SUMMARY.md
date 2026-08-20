@@ -3,6 +3,7 @@
 # 用户使用文档
 
 - [简介](./index.md)
+- [从零开始](./getting-started.md)
 - [快速开始](./quickstart.md)
 - [AI 客户端配置](./ai-clients.md)
 - [工具参考](./tools.md)
