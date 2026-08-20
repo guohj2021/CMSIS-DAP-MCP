@@ -30,10 +30,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // Initial runtime config: merge an optional --config-file with CLI args
-    // (CLI wins). With no args and no file the server starts in the
-    // to-be-configured state: all read/write tools are usable and destructive
-    // tools stay gated until enabled via update_config / --allow-destructive.
     let file_cfg = match &cfg.config_file {
         Some(path) => match cmsis_dap_mcp::config::load_config_file(path) {
             Ok(f) => Some(f),
@@ -46,9 +42,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     let config = ServerConfig::from_cli(&cfg, file_cfg);
 
-    let backend = match &cfg.target_yaml {
-        Some(path) => ProbeRsBackend::with_registry(registry_from_yaml(path)?),
-        None => ProbeRsBackend::new(),
+    let backend = match (&cfg.target_yaml, &cfg.flm) {
+        (Some(path), _) => ProbeRsBackend::with_registry(registry_from_yaml(path)?),
+        (None, Some(flm_path)) => {
+            let flash_start = cfg.flash_start.ok_or("flash-start required with flm")?;
+            let flash_size = cfg.flash_size.ok_or("flash-size required with flm")?;
+            let sram_start = cfg.sram_start.ok_or("sram-start required with flm")?;
+            let sram_size = cfg.sram_size.ok_or("sram-size required with flm")?;
+            let registry = cmsis_dap_core::flm::registry_from_flm(
+                flm_path,
+                cfg.target.as_deref(),
+                flash_start,
+                flash_size,
+                sram_start,
+                sram_size,
+                &cfg.core,
+            )?;
+            ProbeRsBackend::with_registry(registry)
+        }
+        (None, None) => ProbeRsBackend::new(),
     };
     tracing::info!(
         "starting cmsis-dap-mcp (destructive={}, tcp={:?}, gdb={:?})",

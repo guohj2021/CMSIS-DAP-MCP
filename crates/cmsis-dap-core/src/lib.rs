@@ -1,6 +1,7 @@
 pub mod backend;
 pub mod error;
 pub mod evr;
+pub mod flm;
 pub mod gdb;
 pub mod hex;
 pub mod remote;

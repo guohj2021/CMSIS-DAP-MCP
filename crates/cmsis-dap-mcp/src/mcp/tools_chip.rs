@@ -7,7 +7,7 @@ fn default_core() -> String {
 
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct DefineChipParams {
-    /// Path to a Keil FLM flash algorithm file (ARM ELF).
+    /// Path to the Keil FLM flash algorithm file.
     pub flm: String,
     /// Flash start address.
     pub flash_start: u64,
@@ -22,4 +22,7 @@ pub struct DefineChipParams {
     pub core: String,
     /// Chip/variant name used with connect (default: FLM file stem).
     pub name: Option<String>,
+    /// When true, load the generated target into the session so
+    /// subsequent connect calls can use it.
+    pub load: Option<bool>,
 }
