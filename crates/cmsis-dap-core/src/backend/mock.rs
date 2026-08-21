@@ -1,7 +1,8 @@
 use crate::backend::{
-    AccessWidth, Backend, ConnectOptions, CoreRegister, CoreStatusInfo, EvrEvent, EvrStatus,
-    ExportFormat, ImageFileFormat, MemoryMismatch, MemoryRegionSummary, MemoryVerifyReport,
-    OptionByte, ProbeInfo, ResetMode, RttChannelInfo, RttRead, TargetInfo, WatchAccess, Watchpoint,
+    AccessWidth, Backend, ConnectOptions, CoreInfo, CoreRegister, CoreStatusInfo, EvrEvent,
+    EvrStatus, ExportFormat, ImageFileFormat, MemoryMismatch, MemoryRegionSummary,
+    MemoryVerifyReport, OptionByte, ProbeInfo, ResetMode, RttChannelInfo, RttRead, TargetInfo,
+    WatchAccess, Watchpoint,
 };
 use crate::error::{ErrorCode, McpError};
 use crate::evr;
@@ -26,6 +27,7 @@ pub struct MockBackend {
     evr_ts_overflow: u32,
     evr_last_index: u32,
     swo_active: bool,
+    flash_bps: super::flash_bp::FlashBpManager,
 }
 
 impl Default for MockBackend {
@@ -62,6 +64,7 @@ impl MockBackend {
             evr_ts_overflow: 0,
             evr_last_index: 0,
             swo_active: false,
+            flash_bps: super::flash_bp::FlashBpManager::new(),
         }
     }
 
@@ -150,6 +153,11 @@ impl Backend for MockBackend {
                 });
                 regions
             },
+            cores: vec![CoreInfo {
+                index: 0,
+                core_type: "Cortex-M0".into(),
+                name: "main".into(),
+            }],
         })
     }
 
@@ -359,6 +367,48 @@ impl Backend for MockBackend {
             self.memory.insert(address + i as u64, *b as u64);
         }
         Ok(())
+    }
+
+    fn set_flash_breakpoint(&mut self, address: u64) -> Result<(), McpError> {
+        if !self.connected {
+            return Err(not_connected());
+        }
+        if !address.is_multiple_of(2) {
+            return Err(McpError::new(
+                ErrorCode::InvalidArgument,
+                "flash breakpoint address must be halfword-aligned",
+            ));
+        }
+        if self.flash_bps.is_active(address) {
+            return Ok(());
+        }
+        // Read the original 16-bit instruction, then patch it with BKPT.
+        let original = self.read_memory(address, AccessWidth::U16, 1)?;
+        let original_bytes = (original[0] as u16).to_le_bytes().to_vec();
+        let patch = self.flash_bps.insert(address, original_bytes);
+        for (i, b) in patch.iter().enumerate() {
+            self.memory.insert(address + i as u64, *b as u64);
+        }
+        Ok(())
+    }
+
+    fn clear_flash_breakpoints(&mut self) -> Result<(), McpError> {
+        if !self.connected {
+            return Err(not_connected());
+        }
+        for (address, original) in self.flash_bps.remove_all() {
+            for (i, b) in original.iter().enumerate() {
+                self.memory.insert(address + i as u64, *b as u64);
+            }
+        }
+        Ok(())
+    }
+
+    fn list_flash_breakpoints(&mut self) -> Result<Vec<u64>, McpError> {
+        if !self.connected {
+            return Err(not_connected());
+        }
+        Ok(self.flash_bps.addresses())
     }
 
     fn list_core_registers(&mut self) -> Result<Vec<String>, McpError> {
