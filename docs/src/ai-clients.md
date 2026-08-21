@@ -15,7 +15,7 @@ There are three ways to point an MCP client at a server:
 | Local binary | `command = "/path/to/cmsis-dap-mcp"` | Unpublished or locally built servers, offline use, exact version pinning |
 | Remote URL | `url = "https://..."` | Streamable-HTTP MCP servers (not supported by this project yet) |
 
-To pin a version with `npx`: `npx -y cmsis-dap-mcp@0.5.0`. If you are
+To pin a version with `npx`: `npx -y cmsis-dap-mcp@0.6.0`. If you are
 developing this repository, point the client at `target/release/cmsis-dap-mcp`
 so the freshly built binary is used without publishing.
 

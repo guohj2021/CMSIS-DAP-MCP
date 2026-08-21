@@ -1,6 +1,6 @@
 use clap::Parser;
 use cmsis_dap_cli::cmd::{actions, SvdAction, SvdArgs, SvdReadArgs, SvdWriteArgs};
-use cmsis_dap_cli::cmd::{repl, run, CliArgs, CliError, ReplOptions};
+use cmsis_dap_cli::cmd::{repl, run, swo, CliArgs, CliError, ReplOptions};
 use cmsis_dap_core::backend::mock::MockBackend;
 use cmsis_dap_core::backend::{ConnectOptions, Protocol};
 use cmsis_dap_core::session::SessionManager;
@@ -485,4 +485,52 @@ variants:
     ])
     .unwrap_err();
     assert!(matches!(err, CliError::InvalidArgument(_)));
+}
+
+#[test]
+fn swo_start_stop_via_cli() {
+    let out = execute(&["cmsis-dap-cli", "swo", "start"]).unwrap();
+    assert_eq!(out["started"].as_bool(), Some(true));
+    let out = execute(&["cmsis-dap-cli", "swo", "stop"]).unwrap();
+    assert_eq!(out["stopped"].as_bool(), Some(true));
+}
+
+#[test]
+fn option_read_write_via_cli() {
+    let out = execute(&["cmsis-dap-cli", "option", "read"]).unwrap();
+    assert_eq!(out["option_bytes"][0]["name"].as_str(), Some("RDP"));
+    let out = execute(&["cmsis-dap-cli", "option", "write", "DATA0", "0x55"]).unwrap();
+    assert_eq!(out["written"].as_bool(), Some(true));
+}
+
+#[test]
+fn swo_monitor_polls_with_count() {
+    let mut session = SessionManager::new(Box::new(MockBackend::new()));
+    session
+        .backend()
+        .connect(&ConnectOptions {
+            probe_id: None,
+            protocol: Protocol::Swd,
+            speed_khz: None,
+            target: None,
+            under_reset: false,
+        })
+        .unwrap();
+    session.backend().start_swo(2_000_000, 8_000_000).unwrap();
+    let args = swo::SwoMonitorArgs {
+        interval_ms: 1,
+        count: 1,
+        log_dir: None,
+        log_file: None,
+    };
+    let mut buf: Vec<u8> = Vec::new();
+    swo::swo_monitor(&mut session, &args, true, &mut buf).unwrap();
+    let text = String::from_utf8(buf).unwrap();
+    let mut lines = text.lines();
+    let line = lines.next().expect("expected one NDJSON line");
+    assert!(lines.next().is_none(), "expected exactly one NDJSON line");
+    let value: serde_json::Value = serde_json::from_str(line).unwrap();
+    assert!(value["host_ts"].as_str().is_some_and(|s| !s.is_empty()));
+    assert_eq!(value["bytes"].as_u64(), Some(3));
+    assert_eq!(value["data_hex"].as_str(), Some("010203"));
 }

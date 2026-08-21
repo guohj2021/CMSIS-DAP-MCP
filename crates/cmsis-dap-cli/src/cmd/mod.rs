@@ -1,9 +1,11 @@
 pub mod actions;
 pub mod chip;
 pub mod live;
+pub mod option;
 pub mod output;
 pub mod repl;
 pub mod signal;
+pub mod swo;
 pub mod symbols;
 
 use clap::{Args, Parser, Subcommand};
@@ -243,6 +245,10 @@ pub enum Command {
     GdbServer(GdbServerArgs),
     /// Serve the remote JSON-RPC TCP protocol.
     TcpServer(TcpServerArgs),
+    /// SWO/SWV trace control.
+    Swo(swo::SwoArgs),
+    /// Read/write chip option bytes.
+    Option(option::OptionArgs),
     /// Interactive shell (J-Link Commander style commands).
     Repl,
 }
@@ -1050,6 +1056,24 @@ pub fn run(
                 &format!("127.0.0.1:{}", a.port),
             ))?;
             Ok(None)
+        }
+        Command::Swo(a) => {
+            connect(&globals, &mut session)?;
+            match a.action {
+                swo::SwoAction::Start(s) => Ok(Some(swo::swo_start(&mut session, &s)?)),
+                swo::SwoAction::Stop => Ok(Some(swo::swo_stop(&mut session)?)),
+                swo::SwoAction::Monitor(m) => {
+                    swo::swo_monitor(&mut session, &m, globals.json, &mut std::io::stdout())?;
+                    Ok(None)
+                }
+            }
+        }
+        Command::Option(a) => {
+            connect(&globals, &mut session)?;
+            match a.action {
+                option::OptionAction::Read => Ok(Some(option::option_read(&mut session)?)),
+                option::OptionAction::Write(w) => Ok(Some(option::option_write(&mut session, &w)?)),
+            }
         }
         Command::Repl => {
             let stdin = std::io::stdin();

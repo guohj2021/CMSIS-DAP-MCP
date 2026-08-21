@@ -1,5 +1,5 @@
 use clap::Parser;
-use cmsis_dap_cli::cmd::{run, CliArgs, CliError, Command};
+use cmsis_dap_cli::cmd::{option, run, swo, CliArgs, CliError, Command};
 use cmsis_dap_core::backend::mock::MockBackend;
 
 fn parse(args: &[&str]) -> CliArgs {
@@ -195,4 +195,70 @@ fn parses_chip_list() {
 fn chip_search_requires_keyword() {
     let err = parse_err(&["cmsis-dap-cli", "chip", "search"]);
     assert_eq!(err.exit_code(), 2);
+}
+
+#[test]
+fn parses_swo_start() {
+    let args = parse(&[
+        "cmsis-dap-cli",
+        "swo",
+        "start",
+        "--baud",
+        "2000000",
+        "--tpiu-clock",
+        "8000000",
+    ]);
+    match args.command {
+        Command::Swo(a) => match a.action {
+            swo::SwoAction::Start(s) => {
+                assert_eq!(s.baud, 2_000_000);
+                assert_eq!(s.tpiu_clock, 8_000_000);
+            }
+            _ => panic!("expected swo start"),
+        },
+        _ => panic!("expected swo command"),
+    }
+}
+
+#[test]
+fn parses_swo_monitor() {
+    let args = parse(&[
+        "cmsis-dap-cli",
+        "swo",
+        "monitor",
+        "--count",
+        "5",
+        "--interval-ms",
+        "50",
+    ]);
+    match args.command {
+        Command::Swo(a) => match a.action {
+            swo::SwoAction::Monitor(m) => {
+                assert_eq!(m.count, 5);
+                assert_eq!(m.interval_ms, 50);
+            }
+            _ => panic!("expected swo monitor"),
+        },
+        _ => panic!("expected swo command"),
+    }
+}
+
+#[test]
+fn parses_option_read_write() {
+    let read = parse(&["cmsis-dap-cli", "option", "read"]);
+    match read.command {
+        Command::Option(a) => assert!(matches!(a.action, option::OptionAction::Read)),
+        _ => panic!("expected option command"),
+    }
+    let write = parse(&["cmsis-dap-cli", "option", "write", "DATA0", "0x55"]);
+    match write.command {
+        Command::Option(a) => match a.action {
+            option::OptionAction::Write(w) => {
+                assert_eq!(w.name, "DATA0");
+                assert_eq!(w.value, 0x55);
+            }
+            _ => panic!("expected option write"),
+        },
+        _ => panic!("expected option command"),
+    }
 }

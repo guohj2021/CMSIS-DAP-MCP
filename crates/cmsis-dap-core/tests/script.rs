@@ -272,6 +272,124 @@ fn sleep_and_echo_are_supported() {
 }
 
 #[test]
+fn w32_to_flash_address_uses_flash_algorithm() {
+    let mut sm = session();
+    connect(&mut sm);
+    // 0x08000000 falls inside the mock NVM region (0x08000000..0x08010000).
+    let report = script::run(&mut sm, &policy(true), "w32 0x08000000 0x12345678").unwrap();
+    assert!(report.ok, "{report:?}");
+    let last = report.results.last().unwrap();
+    assert_eq!(last.output["written"], serde_json::json!(true));
+    assert_eq!(last.output["flash_programmed"], serde_json::json!(true));
+    // Read back as U8 bytes — mock program_flash stores individual bytes.
+    let vals = sm
+        .backend()
+        .read_memory(0x08000000, AccessWidth::U8, 4)
+        .unwrap();
+    assert_eq!(vals, vec![0x78, 0x56, 0x34, 0x12]);
+}
+
+#[test]
+fn w8_to_flash_address_uses_flash_algorithm() {
+    let mut sm = session();
+    connect(&mut sm);
+    let report = script::run(&mut sm, &policy(true), "w8 0x08000004 0xAB").unwrap();
+    assert!(report.ok, "{report:?}");
+    let last = report.results.last().unwrap();
+    assert_eq!(last.output["written"], serde_json::json!(true));
+    assert_eq!(last.output["flash_programmed"], serde_json::json!(true));
+    let vals = sm
+        .backend()
+        .read_memory(0x08000004, AccessWidth::U8, 1)
+        .unwrap();
+    assert_eq!(vals, vec![0xAB]);
+}
+
+#[test]
+fn w16_to_flash_address_uses_flash_algorithm() {
+    let mut sm = session();
+    connect(&mut sm);
+    let report = script::run(&mut sm, &policy(true), "w16 0x08000008 0xBEEF").unwrap();
+    assert!(report.ok, "{report:?}");
+    let last = report.results.last().unwrap();
+    assert_eq!(last.output["written"], serde_json::json!(true));
+    assert_eq!(last.output["flash_programmed"], serde_json::json!(true));
+    let vals = sm
+        .backend()
+        .read_memory(0x08000008, AccessWidth::U8, 2)
+        .unwrap();
+    assert_eq!(vals, vec![0xEF, 0xBE]);
+}
+
+#[test]
+fn w32_to_flash_address_blocked_without_destructive_policy() {
+    let mut sm = session();
+    connect(&mut sm);
+    // Flash writes run the flash algorithm (destructive), so they must be
+    // blocked under a non-destructive policy instead of erasing a sector.
+    let report = script::run(&mut sm, &policy(false), "w32 0x08000000 0x12345678").unwrap();
+    assert!(!report.ok, "{report:?}");
+    assert_eq!(report.results[0].status, "error");
+    assert_eq!(
+        report.results[0].output["code"],
+        serde_json::json!("DestructiveDisabled")
+    );
+}
+
+#[test]
+fn w32_to_ram_address_still_uses_write_memory() {
+    let mut sm = session();
+    connect(&mut sm);
+    // 0x20000000 is RAM, should still go through write_memory and stay
+    // non-destructive. A program_flash byte-store would read back 0xEF for
+    // a U32 read, so the full word roundtrip proves the write_memory path.
+    let report = script::run(&mut sm, &policy(false), "w32 0x20000000 0xDEADBEEF").unwrap();
+    assert!(report.ok, "{report:?}");
+    let last = report.results.last().unwrap();
+    assert_eq!(last.output["written"], serde_json::json!(true));
+    assert_eq!(last.output["flash_programmed"], serde_json::json!(false));
+    let vals = sm
+        .backend()
+        .read_memory(0x20000000, AccessWidth::U32, 1)
+        .unwrap();
+    assert_eq!(vals, vec![0xDEAD_BEEF]);
+}
+
+#[test]
+fn w32_to_flash_boundary_addresses() {
+    let mut sm = session();
+    connect(&mut sm);
+    // Last aligned word inside the NVM region (end == r.end) routes to flash.
+    let report = script::run(&mut sm, &policy(true), "w32 0x0800FFFC 0x11223344").unwrap();
+    assert!(report.ok, "{report:?}");
+    assert_eq!(
+        report.results.last().unwrap().output["flash_programmed"],
+        serde_json::json!(true)
+    );
+    // One byte past the region end falls back to a raw write_memory.
+    let report = script::run(&mut sm, &policy(false), "w32 0x08010000 0x55667788").unwrap();
+    assert!(report.ok, "{report:?}");
+    assert_eq!(
+        report.results.last().unwrap().output["flash_programmed"],
+        serde_json::json!(false)
+    );
+}
+
+#[test]
+fn w32_to_flash_without_connection_fails() {
+    let mut sm = session();
+    // No connect: target_info() is None, so the write falls back to
+    // write_memory which reports NotConnected (same as before the feature).
+    let report = script::run(&mut sm, &policy(true), "w32 0x08000000 0x12345678").unwrap();
+    assert!(!report.ok, "{report:?}");
+    assert_eq!(report.results[0].status, "error");
+    assert_eq!(
+        report.results[0].output["code"],
+        serde_json::json!("NotConnected")
+    );
+}
+
+#[test]
 fn comments_and_blank_lines_are_ignored() {
     let mut sm = session();
     connect(&mut sm);

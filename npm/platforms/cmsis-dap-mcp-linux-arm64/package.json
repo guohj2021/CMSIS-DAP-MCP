@@ -1,6 +1,6 @@
 {
   "name": "@guohj2021/cmsis-dap-mcp-linux-arm64",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "os": ["linux"],
   "cpu": ["arm64"],
   "license": "MIT OR Apache-2.0",
