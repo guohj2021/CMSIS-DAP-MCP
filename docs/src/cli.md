@@ -175,6 +175,42 @@ cmsis-dap-cli flash erase --address 0x08000000 --size 0x1000
 cmsis-dap-cli flash program --address 0x08000000 --file fw.hex --verify
 ```
 
+### SWO / SWV trace
+
+```text
+swo start [--baud N] [--tpiu-clock N]
+swo stop
+swo monitor [--interval-ms N] [--count N] [--log-dir DIR | --log-file FILE]
+```
+
+`swo start` configures the TPIU/SWO output (`--tpiu-clock` defaults to
+8000000, `--baud` to 2000000) and enables tracing. `swo monitor` polls the
+SWO data in a loop and prints timestamped hex bytes; `--count 0` (default)
+runs until Ctrl-C and `--json` emits NDJSON lines with `host_ts`. SWO needs
+the target to route trace to the SWO pin and the probe to support capture.
+
+```bash
+cmsis-dap-cli swo start --baud 2000000 --tpiu-clock 8000000
+cmsis-dap-cli swo monitor --count 0 --log-dir logs
+cmsis-dap-cli swo stop
+```
+
+### Option bytes
+
+```text
+option read
+option write NAME VALUE
+```
+
+`option read` lists the chip option bytes (STM32: RDP, USER, DATA0, DATA1).
+`option write` sets one byte and is destructive (it can change read
+protection or lock the device); use with care.
+
+```bash
+cmsis-dap-cli option read
+cmsis-dap-cli option write DATA0 0x55
+```
+
 ### Scripts
 
 ```text

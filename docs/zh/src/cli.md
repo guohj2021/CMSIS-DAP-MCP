@@ -169,6 +169,40 @@ cmsis-dap-cli flash erase --address 0x08000000 --size 0x1000
 cmsis-dap-cli flash program --address 0x08000000 --file fw.hex --verify
 ```
 
+### SWO / SWV 追踪
+
+```text
+swo start [--baud N] [--tpiu-clock N]
+swo stop
+swo monitor [--interval-ms N] [--count N] [--log-dir DIR | --log-file FILE]
+```
+
+`swo start` 配置 TPIU/SWO 输出（`--tpiu-clock` 默认 8000000，`--baud` 默认
+2000000）并开启追踪。`swo monitor` 循环轮询 SWO 数据并打印带时间戳的 hex
+字节；`--count 0`（默认）一直运行到 Ctrl-C，`--json` 输出带 `host_ts` 的
+NDJSON 行。SWO 需要目标把 trace 路由到 SWO 引脚，且探针支持采集。
+
+```bash
+cmsis-dap-cli swo start --baud 2000000 --tpiu-clock 8000000
+cmsis-dap-cli swo monitor --count 0 --log-dir logs
+cmsis-dap-cli swo stop
+```
+
+### 选项字节（Option bytes）
+
+```text
+option read
+option write NAME VALUE
+```
+
+`option read` 列出芯片选项字节（STM32：RDP、USER、DATA0、DATA1）。`option
+write` 设置单个字节，具有破坏性（可能改变读保护或锁死设备），请谨慎使用。
+
+```bash
+cmsis-dap-cli option read
+cmsis-dap-cli option write DATA0 0x55
+```
+
 ### 脚本
 
 ```text

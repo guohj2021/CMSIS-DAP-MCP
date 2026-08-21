@@ -46,7 +46,7 @@ CMSIS-DAP 探针 ---- SWD / JTAG ----> Cortex-M 目标
 | --- | --- |
 | `cli` | 解析启动参数、配置日志、启动 stdio 服务器 |
 | `mcp` | 用 rmcp 注册工具、MCP 注解、server instructions |
-| `mcp/tools_*` | 各领域参数与处理器（probe、memory、core、dap、svd、flash、script） |
+| `mcp/tools_*` | 各领域参数与处理器（probe、memory、core、dap、svd、flash、script、chip、config、swo、option） |
 | `script` | 线性 J-Link Commander / OpenOCD 风格脚本解析与执行 |
 | `hex` | 内存导出用的 Intel HEX 编码器 |
 | `security` | 三级策略；破坏性工具需要 `--allow-destructive` |
