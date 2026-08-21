@@ -5,7 +5,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest]
+        # Fast iteration on every push/PR: Windows + Linux. Tag pushes
+        # (release) additionally run macOS so each OS family is verified
+        # before the release workflow packages the platform binaries.
+        os: ${{ fromJSON(github.ref_type == 'tag' && '["windows-latest", "ubuntu-latest", "macos-latest"]' || '["windows-latest", "ubuntu-latest"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
