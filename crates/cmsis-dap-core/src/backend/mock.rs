@@ -710,7 +710,9 @@ impl Backend for MockBackend {
                 "SWO is not active; call start_swo first",
             ));
         }
-        Ok(Vec::new())
+        // Predictable non-empty trace bytes so monitors and handlers can be
+        // exercised end to end.
+        Ok(vec![0x01, 0x02, 0x03])
     }
 
     fn read_option_bytes(&mut self) -> Result<Vec<OptionByte>, McpError> {

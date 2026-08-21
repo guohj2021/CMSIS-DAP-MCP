@@ -1,13 +1,15 @@
 use cmsis_dap_core::backend::mock::MockBackend;
 use cmsis_dap_core::backend::{AccessWidth, ConnectOptions, Protocol};
 use cmsis_dap_core::session::SessionManager;
+use cmsis_dap_mcp::mcp::tools_option;
 use cmsis_dap_mcp::mcp::{
     ClearBreakpointsParams, CmsisDapMcp, ConnectParams, DisconnectParams, DumpCpuStateParams,
     EraseFlashParams, GetConfigParams, GetProbeInfoParams, GetTargetInfoParams, HaltParams,
     ListBreakpointsParams, ListProbesParams, ProgramFlashParams, ReadCoreRegisterParams,
-    ReadDapParams, ReadMemoryParams, ReloadConfigParams, ResetParams, ResumeParams,
-    SetBreakpointParams, StepParams, UpdateConfigParams, VerifyMemoryParams,
-    WriteCoreRegisterParams, WriteDapParams, WriteMemoryParams,
+    ReadDapParams, ReadMemoryParams, ReadOptionBytesParams, ReadSwoParams, ReloadConfigParams,
+    ResetParams, ResumeParams, SetBreakpointParams, StartSwoParams, StepParams, StopSwoParams,
+    UpdateConfigParams, VerifyMemoryParams, WriteCoreRegisterParams, WriteDapParams,
+    WriteMemoryParams, WriteOptionBytesParams,
 };
 use rmcp::handler::server::wrapper::Parameters;
 
@@ -546,6 +548,105 @@ async fn flash_erase_program_read_cycle() {
     assert!(!verified.is_error.unwrap_or(true));
     assert_eq!(
         verified.structured_content.clone().unwrap()["verified"],
+        serde_json::json!(true)
+    );
+}
+
+#[tokio::test]
+async fn swo_start_stop_read_flow() {
+    let mcp = CmsisDapMcp::new(SessionManager::new(Box::new(MockBackend::new())), false);
+    connect(&mcp);
+    let res = mcp
+        .start_swo(Parameters(StartSwoParams {
+            baud: 2_000_000,
+            tpiu_clk: 8_000_000,
+        }))
+        .await;
+    assert!(!res.is_error.unwrap_or(true));
+    assert_eq!(
+        res.structured_content.unwrap()["started"],
+        serde_json::json!(true)
+    );
+    // max_bytes is currently accepted but not enforced by the backend; pass
+    // Some(4) to document that the handler still returns all available bytes.
+    let res = mcp
+        .read_swo(Parameters(ReadSwoParams { max_bytes: Some(4) }))
+        .await;
+    let structured = res.structured_content.unwrap();
+    assert_eq!(structured["bytes"].as_u64(), Some(3));
+    assert_eq!(structured["data_hex"].as_str(), Some("010203"));
+    let res = mcp.stop_swo(Parameters(StopSwoParams {})).await;
+    assert!(!res.is_error.unwrap_or(true));
+}
+
+#[tokio::test]
+async fn read_swo_requires_active_trace() {
+    let mcp = CmsisDapMcp::new(SessionManager::new(Box::new(MockBackend::new())), false);
+    connect(&mcp);
+    let res = mcp
+        .read_swo(Parameters(ReadSwoParams { max_bytes: None }))
+        .await;
+    assert!(res.is_error.unwrap_or(false));
+}
+
+#[tokio::test]
+async fn read_swo_without_connection_errors() {
+    let mcp = CmsisDapMcp::new(SessionManager::new(Box::new(MockBackend::new())), false);
+    let res = mcp
+        .read_swo(Parameters(ReadSwoParams { max_bytes: None }))
+        .await;
+    assert!(res.is_error.unwrap_or(false));
+}
+
+#[tokio::test]
+async fn read_option_bytes_returns_mock_rdp() {
+    let mcp = CmsisDapMcp::new(SessionManager::new(Box::new(MockBackend::new())), false);
+    connect(&mcp);
+    let res = mcp
+        .read_option_bytes(Parameters(ReadOptionBytesParams {}))
+        .await;
+    assert!(!res.is_error.unwrap_or(true));
+    let structured = res.structured_content.unwrap();
+    assert_eq!(
+        structured["option_bytes"][0]["name"],
+        serde_json::json!("RDP")
+    );
+    assert_eq!(structured["option_bytes"][0]["value"].as_u64(), Some(0xAA));
+}
+
+#[tokio::test]
+async fn write_option_bytes_blocked_without_flag() {
+    let mcp = CmsisDapMcp::new(SessionManager::new(Box::new(MockBackend::new())), false);
+    connect(&mcp);
+    let res = mcp
+        .write_option_bytes(Parameters(WriteOptionBytesParams {
+            bytes: vec![tools_option::OptionByteParam {
+                name: "DATA0".into(),
+                address: 0x4002_3C14,
+                value: 0x55,
+            }],
+        }))
+        .await;
+    let structured = res.structured_content.unwrap_or_default();
+    assert_eq!(structured["code"], "DestructiveDisabled");
+}
+
+#[tokio::test]
+async fn write_option_bytes_works_with_flag() {
+    let mcp = CmsisDapMcp::new(SessionManager::new(Box::new(MockBackend::new())), true);
+    connect(&mcp);
+    let res = mcp
+        .write_option_bytes(Parameters(WriteOptionBytesParams {
+            bytes: vec![tools_option::OptionByteParam {
+                name: "DATA0".into(),
+                address: 0x4002_3C14,
+                value: 0x55,
+            }],
+        }))
+        .await;
+    assert!(!res.is_error.unwrap_or(true));
+    assert_eq!(
+        res.structured_content.unwrap()["written"],
         serde_json::json!(true)
     );
 }
