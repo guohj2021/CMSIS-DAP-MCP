@@ -718,3 +718,14 @@ async fn connect_accepts_core_index() {
     assert_eq!(target["core_count"].as_u64(), Some(1));
     assert_eq!(target["cores"][0]["index"].as_u64(), Some(0));
 }
+
+#[tokio::test]
+async fn clear_flash_breakpoints_blocked_without_flag() {
+    let mcp = CmsisDapMcp::new(SessionManager::new(Box::new(MockBackend::new())), false);
+    connect(&mcp);
+    let res = mcp
+        .clear_flash_breakpoints(Parameters(ClearFlashBreakpointsParams {}))
+        .await;
+    let structured = res.structured_content.unwrap_or_default();
+    assert_eq!(structured["code"], "DestructiveDisabled");
+}

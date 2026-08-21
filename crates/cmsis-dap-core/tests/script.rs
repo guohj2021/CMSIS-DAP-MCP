@@ -105,6 +105,7 @@ fn engine_with_connection_seeds_connect_options() {
         Some(1000),
         Some("STM32F030C8".into()),
         false,
+        None,
     );
     engine
         .execute_line(&mut sm, "connect")

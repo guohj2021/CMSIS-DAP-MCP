@@ -36,6 +36,7 @@ struct Context {
     target: Option<String>,
     probe_id: Option<String>,
     under_reset: bool,
+    core_index: Option<usize>,
 }
 
 impl Default for Context {
@@ -46,6 +47,7 @@ impl Default for Context {
             target: None,
             probe_id: None,
             under_reset: false,
+            core_index: None,
         }
     }
 }
@@ -77,6 +79,7 @@ impl ScriptEngine {
         speed_khz: Option<u32>,
         target: Option<String>,
         under_reset: bool,
+        core_index: Option<usize>,
     ) -> Self {
         Self {
             ctx: Context {
@@ -85,6 +88,7 @@ impl ScriptEngine {
                 target,
                 probe_id,
                 under_reset,
+                core_index,
             },
             policy,
         }
@@ -379,7 +383,7 @@ fn dispatch(
                 speed_khz: ctx.speed_khz,
                 target: ctx.target.clone(),
                 under_reset: ctx.under_reset,
-                core_index: None,
+                core_index: ctx.core_index,
             };
             let info = session.connect(&opts)?;
             Ok(serde_json::json!({ "target": info }))

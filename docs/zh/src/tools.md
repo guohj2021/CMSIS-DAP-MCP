@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | `list_probes` | - | 读 |
 | `get_probe_info` | `probe_id`（可选） | 读 |
-| `connect` | `probe_id`、`protocol`（`swd`/`jtag`，默认 `swd`）、`speed_khz`、`target`、`under_reset` | 写 |
+| `connect` | `probe_id`、`protocol`（`swd`/`jtag`，默认 `swd`）、`speed_khz`、`target`、`under_reset`、`core`（可选，默认 0） | 写 |
 | `disconnect` | - | 写 |
 | `get_target_info` | - | 读 |
 
