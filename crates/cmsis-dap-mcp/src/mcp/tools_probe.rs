@@ -17,6 +17,8 @@ pub struct ConnectParams {
     pub target: Option<String>,
     /// Connect while holding the target reset line (for locked or non-responsive targets).
     pub under_reset: Option<bool>,
+    /// Core index to attach to on multi-core targets (defaults to 0).
+    pub core: Option<usize>,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema)]

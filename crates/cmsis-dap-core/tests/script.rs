@@ -20,6 +20,7 @@ fn connect(sm: &mut SessionManager) {
         speed_khz: None,
         target: None,
         under_reset: false,
+        core_index: None,
     })
     .unwrap();
 }
