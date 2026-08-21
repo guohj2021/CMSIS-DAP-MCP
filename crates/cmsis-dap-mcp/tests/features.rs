@@ -23,6 +23,7 @@ fn connect(mcp: &CmsisDapMcp) {
         speed_khz: None,
         target: None,
         under_reset: false,
+        core_index: None,
     };
     mcp.runtime.session.lock().unwrap().connect(&opts).unwrap();
 }
@@ -226,6 +227,7 @@ async fn connect_accepts_under_reset() {
             speed_khz: None,
             target: None,
             under_reset: Some(true),
+            core: None,
         }))
         .await;
     assert!(!res.is_error.unwrap_or(true));

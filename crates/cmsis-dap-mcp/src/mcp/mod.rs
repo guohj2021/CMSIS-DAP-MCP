@@ -31,7 +31,10 @@ pub use tools_core::{
     StepParams, WriteCoreRegisterParams,
 };
 pub use tools_dap::{ReadDapParams, WriteDapParams};
-pub use tools_flash::{EraseFlashParams, ProgramFlashParams};
+pub use tools_flash::{
+    ClearFlashBreakpointsParams, EraseFlashParams, ListFlashBreakpointsParams, ProgramFlashParams,
+    SetFlashBreakpointParams,
+};
 pub use tools_memory::{ReadMemoryParams, VerifyMemoryParams, WriteMemoryParams};
 pub use tools_option::{ReadOptionBytesParams, WriteOptionBytesParams};
 pub use tools_probe::{
@@ -1156,6 +1159,7 @@ impl CmsisDapMcp {
             speed_khz: params.speed_khz,
             target: params.target,
             under_reset: params.under_reset.unwrap_or(false),
+            core_index: params.core,
         };
         match self.runtime.session.lock().unwrap().connect(&opts) {
             Ok(info) => CallToolResult::structured(serde_json::json!({ "target": info })),
@@ -1460,6 +1464,98 @@ impl CmsisDapMcp {
             .write_option_bytes(&option_bytes)
         {
             Ok(()) => CallToolResult::structured(serde_json::json!({ "written": true })),
+            Err(e) => error_result(e.code, e.message),
+        }
+    }
+
+    #[tool(
+        description = "Set a software breakpoint in flash by patching the instruction with a Thumb BKPT. DESTRUCTIVE: modifies flash contents.",
+        annotations(
+            title = "Set flash breakpoint",
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
+    )]
+    pub async fn set_flash_breakpoint(
+        &self,
+        Parameters(params): Parameters<SetFlashBreakpointParams>,
+    ) -> CallToolResult {
+        if let Err(e) = self.require_destructive() {
+            return e;
+        }
+        match self
+            .runtime
+            .session
+            .lock()
+            .unwrap()
+            .backend()
+            .set_flash_breakpoint(params.address)
+        {
+            Ok(()) => CallToolResult::structured(serde_json::json!({
+                "breakpoint": params.address,
+                "set": true,
+            })),
+            Err(e) => error_result(e.code, e.message),
+        }
+    }
+
+    #[tool(
+        description = "Restore all flash instructions patched by flash software breakpoints. DESTRUCTIVE: modifies flash contents.",
+        annotations(
+            title = "Clear flash breakpoints",
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
+    )]
+    pub async fn clear_flash_breakpoints(
+        &self,
+        Parameters(_): Parameters<ClearFlashBreakpointsParams>,
+    ) -> CallToolResult {
+        if let Err(e) = self.require_destructive() {
+            return e;
+        }
+        match self
+            .runtime
+            .session
+            .lock()
+            .unwrap()
+            .backend()
+            .clear_flash_breakpoints()
+        {
+            Ok(()) => CallToolResult::structured(serde_json::json!({ "cleared": true })),
+            Err(e) => error_result(e.code, e.message),
+        }
+    }
+
+    #[tool(
+        description = "List the addresses of active flash software breakpoints.",
+        annotations(
+            title = "List flash breakpoints",
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    pub async fn list_flash_breakpoints(
+        &self,
+        Parameters(_): Parameters<ListFlashBreakpointsParams>,
+    ) -> CallToolResult {
+        match self
+            .runtime
+            .session
+            .lock()
+            .unwrap()
+            .backend()
+            .list_flash_breakpoints()
+        {
+            Ok(list) => {
+                CallToolResult::structured(serde_json::json!({ "flash_breakpoints": list }))
+            }
             Err(e) => error_result(e.code, e.message),
         }
     }

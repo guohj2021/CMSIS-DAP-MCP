@@ -3,11 +3,12 @@ use cmsis_dap_core::backend::{AccessWidth, ConnectOptions, Protocol};
 use cmsis_dap_core::session::SessionManager;
 use cmsis_dap_mcp::mcp::tools_option;
 use cmsis_dap_mcp::mcp::{
-    ClearBreakpointsParams, CmsisDapMcp, ConnectParams, DisconnectParams, DumpCpuStateParams,
-    EraseFlashParams, GetConfigParams, GetProbeInfoParams, GetTargetInfoParams, HaltParams,
-    ListBreakpointsParams, ListProbesParams, ProgramFlashParams, ReadCoreRegisterParams,
-    ReadDapParams, ReadMemoryParams, ReadOptionBytesParams, ReadSwoParams, ReloadConfigParams,
-    ResetParams, ResumeParams, SetBreakpointParams, StartSwoParams, StepParams, StopSwoParams,
+    ClearBreakpointsParams, ClearFlashBreakpointsParams, CmsisDapMcp, ConnectParams,
+    DisconnectParams, DumpCpuStateParams, EraseFlashParams, GetConfigParams, GetProbeInfoParams,
+    GetTargetInfoParams, HaltParams, ListBreakpointsParams, ListFlashBreakpointsParams,
+    ListProbesParams, ProgramFlashParams, ReadCoreRegisterParams, ReadDapParams, ReadMemoryParams,
+    ReadOptionBytesParams, ReadSwoParams, ReloadConfigParams, ResetParams, ResumeParams,
+    SetBreakpointParams, SetFlashBreakpointParams, StartSwoParams, StepParams, StopSwoParams,
     UpdateConfigParams, VerifyMemoryParams, WriteCoreRegisterParams, WriteDapParams,
     WriteMemoryParams, WriteOptionBytesParams,
 };
@@ -20,6 +21,7 @@ fn connect(mcp: &CmsisDapMcp) {
         speed_khz: None,
         target: None,
         under_reset: false,
+        core_index: None,
     };
     mcp.runtime.session.lock().unwrap().connect(&opts).unwrap();
 }
@@ -321,6 +323,7 @@ async fn connect_disconnect_flow() {
             speed_khz: None,
             target: None,
             under_reset: None,
+            core: None,
         }))
         .await;
     assert!(!res.is_error.unwrap_or(true));
@@ -649,4 +652,69 @@ async fn write_option_bytes_works_with_flag() {
         res.structured_content.unwrap()["written"],
         serde_json::json!(true)
     );
+}
+
+#[tokio::test]
+async fn set_flash_breakpoint_blocked_without_flag() {
+    let mcp = CmsisDapMcp::new(SessionManager::new(Box::new(MockBackend::new())), false);
+    connect(&mcp);
+    let res = mcp
+        .set_flash_breakpoint(Parameters(SetFlashBreakpointParams {
+            address: 0x0800_0000,
+        }))
+        .await;
+    let structured = res.structured_content.unwrap_or_default();
+    assert_eq!(structured["code"], "DestructiveDisabled");
+}
+
+#[tokio::test]
+async fn flash_breakpoint_flow_with_flag() {
+    let mcp = CmsisDapMcp::new(SessionManager::new(Box::new(MockBackend::new())), true);
+    connect(&mcp);
+    let res = mcp
+        .set_flash_breakpoint(Parameters(SetFlashBreakpointParams {
+            address: 0x0800_0000,
+        }))
+        .await;
+    assert!(!res.is_error.unwrap_or(true));
+    let res = mcp
+        .list_flash_breakpoints(Parameters(ListFlashBreakpointsParams {}))
+        .await;
+    let structured = res.structured_content.unwrap();
+    assert_eq!(
+        structured["flash_breakpoints"][0].as_u64(),
+        Some(0x0800_0000)
+    );
+    let res = mcp
+        .clear_flash_breakpoints(Parameters(ClearFlashBreakpointsParams {}))
+        .await;
+    assert!(!res.is_error.unwrap_or(true));
+    let res = mcp
+        .list_flash_breakpoints(Parameters(ListFlashBreakpointsParams {}))
+        .await;
+    assert_eq!(
+        res.structured_content.unwrap()["flash_breakpoints"]
+            .as_array()
+            .map(|a| a.len()),
+        Some(0)
+    );
+}
+
+#[tokio::test]
+async fn connect_accepts_core_index() {
+    let mcp = CmsisDapMcp::new(SessionManager::new(Box::new(MockBackend::new())), false);
+    let res = mcp
+        .connect(Parameters(ConnectParams {
+            probe_id: None,
+            protocol: Some("swd".into()),
+            speed_khz: None,
+            target: None,
+            under_reset: None,
+            core: Some(0),
+        }))
+        .await;
+    assert!(!res.is_error.unwrap_or(true));
+    let target = res.structured_content.unwrap()["target"].clone();
+    assert_eq!(target["core_count"].as_u64(), Some(1));
+    assert_eq!(target["cores"][0]["index"].as_u64(), Some(0));
 }
