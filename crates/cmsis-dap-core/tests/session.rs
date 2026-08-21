@@ -12,6 +12,7 @@ fn connect_sets_state_and_auto_disconnects() {
         speed_khz: None,
         target: None,
         under_reset: false,
+        core_index: None,
     };
     sm.connect(&opts).unwrap();
     sm.connect(&opts).unwrap();

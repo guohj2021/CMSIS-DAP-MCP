@@ -19,3 +19,14 @@ pub struct ProgramFlashParams {
     /// Read back and verify the programmed data after writing.
     pub verify: Option<bool>,
 }
+
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+pub struct SetFlashBreakpointParams {
+    pub address: u64,
+}
+
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+pub struct ClearFlashBreakpointsParams {}
+
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+pub struct ListFlashBreakpointsParams {}

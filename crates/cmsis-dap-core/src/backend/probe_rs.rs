@@ -1,8 +1,8 @@
 use crate::backend::{
-    register_hint, AccessWidth, Backend, ConnectOptions, CoreRegister, CoreStatusInfo, EvrStatus,
-    ExportFormat, ImageFileFormat, MemoryMismatch, MemoryRegionSummary, MemoryVerifyReport,
-    OptionByte, ProbeInfo, Protocol, RegisterHint, ResetMode, RttChannelInfo, RttRead, TargetInfo,
-    WatchAccess, Watchpoint,
+    register_hint, AccessWidth, Backend, ConnectOptions, CoreInfo, CoreRegister, CoreStatusInfo,
+    EvrStatus, ExportFormat, ImageFileFormat, MemoryMismatch, MemoryRegionSummary,
+    MemoryVerifyReport, OptionByte, ProbeInfo, Protocol, RegisterHint, ResetMode, RttChannelInfo,
+    RttRead, TargetInfo, WatchAccess, Watchpoint,
 };
 use crate::error::{ErrorCode, McpError};
 use crate::evr;
@@ -30,6 +30,7 @@ pub struct ProbeRsBackend {
     registry: Option<probe_rs::config::Registry>,
     rtt: Option<Rtt>,
     evr: Option<evr::EvrReader>,
+    flash_bps: super::flash_bp::FlashBpManager,
     swo_active: bool,
 }
 
@@ -150,6 +151,7 @@ impl ProbeRsBackend {
             registry: None,
             rtt: None,
             evr: None,
+            flash_bps: super::flash_bp::FlashBpManager::new(),
             swo_active: false,
         }
     }
@@ -163,6 +165,7 @@ impl ProbeRsBackend {
             registry: Some(registry),
             rtt: None,
             evr: None,
+            flash_bps: super::flash_bp::FlashBpManager::new(),
             swo_active: false,
         }
     }
@@ -377,13 +380,32 @@ impl Backend for ProbeRsBackend {
                 attach(probe, "Cortex-M0", &registry)?
             }
         };
+        let core_count = session.target().cores.len();
+        let core_index = opts.core_index.unwrap_or(0);
         let core_type = session
             .target()
             .cores
-            .first()
+            .get(core_index)
             .map(|c| format!("{:?}", c.core_type))
             .unwrap_or_else(|| "unknown".into());
-        let core_count = session.target().cores.len();
+        if core_index >= core_count {
+            return Err(McpError::new(
+                ErrorCode::InvalidArgument,
+                format!("core index {core_index} out of range (target has {core_count} cores)"),
+            ));
+        }
+        self.core_index = core_index;
+        let cores = session
+            .target()
+            .cores
+            .iter()
+            .enumerate()
+            .map(|(index, c)| CoreInfo {
+                index,
+                core_type: format!("{:?}", c.core_type),
+                name: c.name.clone(),
+            })
+            .collect();
         let ap_count = match session.get_arm_interface() {
             Ok(iface) => iface
                 .access_ports(probe_rs::architecture::arm::dp::DpAddress::Default)
@@ -391,7 +413,7 @@ impl Backend for ProbeRsBackend {
                 .unwrap_or(0),
             Err(_) => 0,
         };
-        let cpu_id = match session.core(0) {
+        let cpu_id = match session.core(core_index) {
             Ok(mut core) => {
                 let mut v = [0u32];
                 core.read_32(0xE000_ED00, &mut v).ok().map(|_| v[0])
@@ -442,6 +464,7 @@ impl Backend for ProbeRsBackend {
             cpu_id,
             dp_id,
             memory_regions,
+            cores,
         })
     }
 
@@ -732,6 +755,78 @@ impl Backend for ProbeRsBackend {
         verify: bool,
     ) -> Result<(), McpError> {
         self.program_flash_impl(address, data, verify, true)
+    }
+
+    fn set_flash_breakpoint(&mut self, address: u64) -> Result<(), McpError> {
+        if self.session.is_none() {
+            return Err(McpError::new(ErrorCode::NotConnected, "no active session"));
+        }
+        if !address.is_multiple_of(2) {
+            return Err(McpError::new(
+                ErrorCode::InvalidArgument,
+                "flash breakpoint address must be halfword-aligned",
+            ));
+        }
+        let end = address.checked_add(2).ok_or_else(|| {
+            McpError::new(
+                ErrorCode::InvalidArgument,
+                "flash breakpoint address overflows",
+            )
+        })?;
+        let session = self
+            .session
+            .as_mut()
+            .ok_or_else(|| McpError::new(ErrorCode::NotConnected, "no active session"))?;
+        let in_nvm = session.target().memory_map.iter().any(|r| {
+            r.as_nvm_region()
+                .is_some_and(|nvm| address >= nvm.range.start && end <= nvm.range.end)
+        });
+        if !in_nvm {
+            return Err(McpError::new(
+                ErrorCode::InvalidArgument,
+                "flash breakpoint address is not inside a flash (NVM) region",
+            ));
+        }
+        let patch = super::flash_bp::THUMB_BKPT.to_vec();
+        if self.flash_bps.is_active(address) {
+            // Re-patch if the flash no longer holds the BKPT (for example after
+            // an erase or reprogram), keeping the original instruction bytes.
+            let current = self.read_memory(address, AccessWidth::U16, 1)?;
+            if (current[0] as u16) == 0xBE00 {
+                return Ok(());
+            }
+            return self.program_flash_keep_unwritten(address, &patch, false);
+        }
+        // Read the original 16-bit Thumb instruction first, then patch it and
+        // only record the breakpoint after the flash write succeeds.
+        let original = self.read_memory(address, AccessWidth::U16, 1)?;
+        let original_bytes = (original[0] as u16).to_le_bytes().to_vec();
+        self.program_flash_keep_unwritten(address, &patch, false)?;
+        self.flash_bps.insert(address, original_bytes);
+        Ok(())
+    }
+
+    fn clear_flash_breakpoints(&mut self) -> Result<(), McpError> {
+        if self.session.is_none() {
+            return Err(McpError::new(ErrorCode::NotConnected, "no active session"));
+        }
+        // Restore each instruction and only drop the entry after a successful
+        // write, so a failure keeps the original bytes recoverable for retry.
+        for address in self.flash_bps.addresses() {
+            let Some(original) = self.flash_bps.get(address) else {
+                continue;
+            };
+            self.program_flash_keep_unwritten(address, &original, false)?;
+            self.flash_bps.remove(address);
+        }
+        Ok(())
+    }
+
+    fn list_flash_breakpoints(&mut self) -> Result<Vec<u64>, McpError> {
+        if self.session.is_none() {
+            return Err(McpError::new(ErrorCode::NotConnected, "no active session"));
+        }
+        Ok(self.flash_bps.addresses())
     }
 
     fn list_core_registers(&mut self) -> Result<Vec<String>, McpError> {

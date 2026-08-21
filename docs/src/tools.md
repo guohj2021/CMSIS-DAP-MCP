@@ -10,7 +10,7 @@ Levels: **Read** (always available), **Write** (governed by client approval),
 | --- | --- | --- |
 | `list_probes` | - | Read |
 | `get_probe_info` | `probe_id` (optional) | Read |
-| `connect` | `probe_id`, `protocol` (`swd`/`jtag`, default `swd`), `speed_khz`, `target`, `under_reset` | Write |
+| `connect` | `probe_id`, `protocol` (`swd`/`jtag`, default `swd`), `speed_khz`, `target`, `under_reset`, `core` (optional, default 0) | Write |
 | `disconnect` | - | Write |
 | `get_target_info` | - | Read |
 
@@ -90,6 +90,21 @@ the server is started with an `--elf` file).
 Watchpoints use the core's DWT comparators. They trigger on core load/store
 accesses, not on debugger writes. If the target has no DWT comparators, the
 server returns `UnsupportedFeature`.
+
+## Flash software breakpoints
+
+| Tool | Params | Level |
+| --- | --- | --- |
+| `set_flash_breakpoint` | `address` | Destructive |
+| `clear_flash_breakpoints` | - | Destructive |
+| `list_flash_breakpoints` | - | Read |
+
+Flash software breakpoints patch a Thumb `BKPT` (0xBE00) into flash, so they
+are not limited by the number of hardware comparators. They are destructive
+(modify flash contents) and require `--allow-destructive`. `set_flash_breakpoint`
+requires a halfword-aligned address inside a flash (NVM) region and preserves
+the rest of the erased sector; `clear_flash_breakpoints` restores the original
+instructions. ARM-mode (32-bit) breakpoints are not supported yet.
 
 ## DAP
 

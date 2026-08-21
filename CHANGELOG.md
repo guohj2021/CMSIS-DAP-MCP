@@ -3,7 +3,21 @@
 All notable changes are documented per release. Version numbers match the
 `v*` tags; npm packages and platform binaries follow the same version.
 
-## [v0.6.0] - unreleased
+## [v0.7.0] - unreleased
+
+### Features
+
+- Flash software breakpoints: `set_flash_breakpoint` /
+  `clear_flash_breakpoints` / `list_flash_breakpoints` MCP tools and
+  `bp set-flash` / `bp clear-flash` / `bp list-flash` CLI commands patch a
+  Thumb `BKPT` (0xBE00) into flash and restore the original instruction on
+  clear. Destructive (modifies flash) and gated behind
+  `--allow-destructive`.
+- Multi-core preparation: `connect` accepts an optional `core` index and
+  the CLI a global `--core-index N`; `TargetInfo` now reports per-core
+  descriptors (`cores`). All operations default to core 0.
+
+## [v0.6.0] - 2026-08-22
 
 ### Features
 

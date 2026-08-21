@@ -22,6 +22,7 @@ fn hardware_connect_halt_read_resume() {
         speed_khz: Some(100),
         target: None,
         under_reset: false,
+        core_index: None,
     };
     let info = sm.connect(&opts).expect("connect to first probe");
     assert!(!info.core_type.is_empty());
