@@ -3,7 +3,30 @@
 All notable changes are documented per release. Version numbers match the
 `v*` tags; npm packages and platform binaries follow the same version.
 
-## [v0.5.0] - unreleased
+## [v0.6.0] - unreleased
+
+### Features
+
+- SWO/SWV trace: `start_swo` / `stop_swo` / `read_swo` MCP tools and
+  `swo start` / `swo stop` / `swo monitor` CLI commands stream raw SWO
+  bytes over the debug probe (no UART), with timestamped hex output and
+  NDJSON (`host_ts`) in `--json` mode; `swo monitor` supports `--count`,
+  `--interval-ms`, `--log-dir` / `--log-file`.
+- Option bytes: `read_option_bytes` / `write_option_bytes` MCP tools and
+  `option read` / `option write` CLI commands for chip option bytes
+  (STM32: RDP, USER, DATA0, DATA1 from FLASH_OPTCR via raw DAP access).
+  `write_option_bytes` is destructive (can lock the device) and requires
+  `--allow-destructive`.
+- Script memory writes (`w8` / `w16` / `w32`) that target a flash (NVM)
+  region now route through the flash algorithm instead of a raw memory
+  write, which is ignored by the flash controller. Flash writes are gated
+  behind the destructive policy, preserve unwritten bytes in the erased
+  sector, and report `flash_programmed` in the response.
+
+- `swo monitor --json` emits `host_ts`, aligning its NDJSON output with
+  the `watch` / `rtt` / `evr` monitors.
+
+## [v0.5.0] - 2026-08-17
 
 ### Features
 
