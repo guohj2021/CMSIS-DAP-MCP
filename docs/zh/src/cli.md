@@ -66,6 +66,7 @@ target: {"ap_count":1,"core_count":1,"core_type":"Armv6m",...,
 | `--speed-khz N` | SWD/JTAG 时钟（kHz） |
 | `--target NAME` | 目标芯片名（内置库或 `--target-yaml` 中的变体） |
 | `--under-reset` | 按住复位连接（锁定/无响应目标） |
+| `--core-index N` | 多核目标上要附加的内核索引（默认 0） |
 | `--target-yaml FILE` | 加载 target YAML（芯片 + Flash 算法定义） |
 | `--svd FILE` | SVD 文件（`svd` 子命令用） |
 | `--elf FILE` | 固件 ELF（`symbols`/`watch`/`rtt`/`evr` 符号解析用） |
@@ -125,7 +126,19 @@ cmsis-dap-cli script --text "connect\nhalt\nreg pc\nresume"
 
 ```text
 bp set ADDR | bp list | bp clear
+bp set-flash ADDR | bp list-flash | bp clear-flash
 wp set ADDR --access read|write|rw | wp list | wp clear
+```
+
+`bp set` 使用硬件断点（DWT 比较器）。`bp set-flash` 改为把 Thumb `BKPT`
+写入 flash——不受硬件比较器数量限制，但属于破坏性操作（修改 flash）。
+`bp clear-flash` 恢复原始指令。
+
+```bash
+cmsis-dap-cli bp set 0x08000300
+cmsis-dap-cli bp set-flash 0x08000300
+cmsis-dap-cli bp list-flash
+cmsis-dap-cli bp clear-flash
 ```
 
 ### DAP

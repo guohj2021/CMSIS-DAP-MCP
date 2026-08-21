@@ -9,7 +9,7 @@
 ![CI](https://img.shields.io/github/actions/workflow/status/guohj2021/CMSIS-DAP-MCP/ci.yml?branch=main&label=CI)
 <!-- Keep the Release badge ?branch= in sync with the latest release tag; the
      tag-triggered Release workflow never runs on main. -->
-![Release](https://img.shields.io/github/actions/workflow/status/guohj2021/CMSIS-DAP-MCP/release.yml?branch=v0.6.0&label=Release)
+![Release](https://img.shields.io/github/actions/workflow/status/guohj2021/CMSIS-DAP-MCP/release.yml?branch=v0.7.0&label=Release)
 ![Pages](https://img.shields.io/github/actions/workflow/status/guohj2021/CMSIS-DAP-MCP/pages.yml?branch=main&label=Pages)
 ![Version](https://img.shields.io/github/v/tag/guohj2021/CMSIS-DAP-MCP)
 ![Rust](https://img.shields.io/badge/rust-1.97.1-orange)
@@ -52,7 +52,7 @@ flash from firmware files, and run J-Link / OpenOCD style debug scripts.
 | Probe | `list_probes`, `get_probe_info`, `connect`, `disconnect`, `get_target_info` |
 | Memory | `read_memory`, `write_memory`, `verify_memory`, memory export (`bin`/`hex`) |
 | Core | `read_core_register`, `write_core_register`, `list_core_registers`, `get_core_status`, `halt`, `resume`, `step`, `reset` |
-| Breakpoints | `set_breakpoint`, `clear_breakpoints`, `list_breakpoints` |
+| Breakpoints | `set_breakpoint`, `clear_breakpoints`, `list_breakpoints`, flash SW breakpoints (`set_flash_breakpoint`, `clear_flash_breakpoints`, `list_flash_breakpoints`) |
 | Watchpoints | `set_watchpoint`, `clear_watchpoints`, `list_watchpoints` |
 | DAP | `read_dap`, `write_dap` |
 | SWO | `start_swo`, `stop_swo`, `read_swo` |
@@ -176,7 +176,7 @@ standard; pick the one that fits your situation.
 | Remote URL | `url = "https://..."` | Streamable-HTTP MCP servers (not supported by this project yet) |
 
 `npx` fetches the published package on first launch and caches it afterwards.
-To pin a version, use `npx -y cmsis-dap-mcp@0.6.0`. To run the freshly built
+To pin a version, use `npx -y cmsis-dap-mcp@0.7.0`. To run the freshly built
 local binary instead (for example while developing this repository), point
 the client at `target/release/cmsis-dap-mcp` — no npm publish needed.
 
@@ -358,7 +358,7 @@ OpenOCD 风格调试脚本。
 | 探针 | `list_probes`、`get_probe_info`、`connect`、`disconnect`、`get_target_info` |
 | 内存 | `read_memory`、`write_memory`、`verify_memory`、内存导出（`bin`/`hex`） |
 | 内核 | `read_core_register`、`write_core_register`、`list_core_registers`、`get_core_status`、`halt`、`resume`、`step`、`reset` |
-| 断点 | `set_breakpoint`、`clear_breakpoints`、`list_breakpoints` |
+| 断点 | `set_breakpoint`、`clear_breakpoints`、`list_breakpoints`，Flash 软件断点（`set_flash_breakpoint`、`clear_flash_breakpoints`、`list_flash_breakpoints`） |
 | 数据观察点 | `set_watchpoint`、`clear_watchpoints`、`list_watchpoints` |
 | DAP | `read_dap`、`write_dap` |
 | SWO | `start_swo`、`stop_swo`、`read_swo` |
@@ -477,7 +477,7 @@ opencode mcp add cmsis-dap -- npx -y cmsis-dap-mcp
 | 远程 URL | `url = "https://..."` | Streamable-HTTP MCP 服务器（本项目暂不支持） |
 
 `npx` 首次启动时下载已发布包并缓存。要固定版本，用
-`npx -y cmsis-dap-mcp@0.6.0`。要运行刚构建的本地二进制（例如开发本仓库时），
+`npx -y cmsis-dap-mcp@0.7.0`。要运行刚构建的本地二进制（例如开发本仓库时），
 把客户端指向 `target/release/cmsis-dap-mcp` 即可，无需发布 npm。
 
 ## 使用示例
