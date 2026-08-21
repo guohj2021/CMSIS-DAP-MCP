@@ -143,6 +143,18 @@ pub fn bp(session: &mut SessionManager, a: &BpArgs) -> Result<Value, CliError> {
             session.backend().clear_breakpoints()?;
             Ok(json!({ "cleared": true }))
         }
+        BpAction::SetFlash(s) => {
+            session.backend().set_flash_breakpoint(s.address)?;
+            Ok(json!({ "breakpoint": s.address, "set": true, "flash": true }))
+        }
+        BpAction::ListFlash => {
+            let list = session.backend().list_flash_breakpoints()?;
+            Ok(json!({ "flash_breakpoints": list }))
+        }
+        BpAction::ClearFlash => {
+            session.backend().clear_flash_breakpoints()?;
+            Ok(json!({ "cleared": true, "flash": true }))
+        }
     }
 }
 

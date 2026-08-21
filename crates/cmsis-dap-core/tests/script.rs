@@ -20,6 +20,7 @@ fn connect(sm: &mut SessionManager) {
         speed_khz: None,
         target: None,
         under_reset: false,
+        core_index: None,
     })
     .unwrap();
 }
@@ -104,6 +105,7 @@ fn engine_with_connection_seeds_connect_options() {
         Some(1000),
         Some("STM32F030C8".into()),
         false,
+        None,
     );
     engine
         .execute_line(&mut sm, "connect")

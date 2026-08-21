@@ -183,6 +183,10 @@ fn connect(
             .get("under_reset")
             .and_then(|v| v.as_bool())
             .unwrap_or(false),
+        core_index: params
+            .get("core")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize),
     };
     session.connect(&opts)
 }

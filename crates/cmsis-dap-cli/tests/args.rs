@@ -262,3 +262,31 @@ fn parses_option_read_write() {
         _ => panic!("expected option command"),
     }
 }
+
+#[test]
+fn parses_bp_flash_actions() {
+    let set = parse(&["cmsis-dap-cli", "bp", "set-flash", "0x08000000"]);
+    match set.command {
+        Command::Bp(a) => match a.action {
+            cmsis_dap_cli::cmd::BpAction::SetFlash(s) => assert_eq!(s.address, 0x0800_0000),
+            _ => panic!("expected bp set-flash"),
+        },
+        _ => panic!("expected bp command"),
+    }
+    let list = parse(&["cmsis-dap-cli", "bp", "list-flash"]);
+    match list.command {
+        Command::Bp(a) => assert!(matches!(a.action, cmsis_dap_cli::cmd::BpAction::ListFlash)),
+        _ => panic!("expected bp command"),
+    }
+    let clear = parse(&["cmsis-dap-cli", "bp", "clear-flash"]);
+    match clear.command {
+        Command::Bp(a) => assert!(matches!(a.action, cmsis_dap_cli::cmd::BpAction::ClearFlash)),
+        _ => panic!("expected bp command"),
+    }
+}
+
+#[test]
+fn parses_core_index_global() {
+    let args = parse(&["cmsis-dap-cli", "--core-index", "1", "connect"]);
+    assert_eq!(args.core_index, Some(1));
+}
