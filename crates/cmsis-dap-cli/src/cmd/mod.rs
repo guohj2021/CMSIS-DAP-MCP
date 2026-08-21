@@ -926,6 +926,7 @@ pub fn run(
                 globals.speed_khz,
                 globals.target.clone(),
                 globals.under_reset,
+                globals.core_index,
             );
             let report = engine.run_script(&mut session, &text)?;
             if !report.ok {

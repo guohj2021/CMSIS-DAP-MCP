@@ -30,35 +30,25 @@ impl FlashBpManager {
         self.active.contains_key(&address)
     }
 
-    pub fn len(&self) -> usize {
-        self.active.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.active.is_empty()
-    }
-
     pub fn addresses(&self) -> Vec<u64> {
         self.active.keys().copied().collect()
     }
 
+    /// Return the original instruction bytes remembered for `address`, if
+    /// the breakpoint is active.
+    pub fn get(&self, address: u64) -> Option<Vec<u8>> {
+        self.active.get(&address).cloned()
+    }
+
     /// Register a breakpoint at `address`, remembering the `original`
-    /// instruction bytes it replaces, and return the `BKPT` patch bytes to
-    /// program into flash.
-    pub fn insert(&mut self, address: u64, original: Vec<u8>) -> Vec<u8> {
+    /// instruction bytes it replaces.
+    pub fn insert(&mut self, address: u64, original: Vec<u8>) {
         self.active.entry(address).or_insert(original);
-        THUMB_BKPT.to_vec()
     }
 
     /// Remove the breakpoint at `address`, returning the original bytes to
     /// restore, if it was active.
     pub fn remove(&mut self, address: u64) -> Option<Vec<u8>> {
         self.active.remove(&address)
-    }
-
-    /// Remove all breakpoints, returning `(address, original_bytes)` pairs
-    /// so the caller can restore flash contents.
-    pub fn remove_all(&mut self) -> Vec<(u64, Vec<u8>)> {
-        std::mem::take(&mut self.active).into_iter().collect()
     }
 }

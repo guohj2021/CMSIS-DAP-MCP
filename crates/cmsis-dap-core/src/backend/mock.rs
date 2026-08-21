@@ -127,7 +127,15 @@ impl Backend for MockBackend {
         }])
     }
 
-    fn connect(&mut self, _opts: &ConnectOptions) -> Result<TargetInfo, McpError> {
+    fn connect(&mut self, opts: &ConnectOptions) -> Result<TargetInfo, McpError> {
+        if let Some(core) = opts.core_index {
+            if core != 0 {
+                return Err(McpError::new(
+                    ErrorCode::InvalidArgument,
+                    format!("core index {core} out of range (target has 1 core)"),
+                ));
+            }
+        }
         self.connected = true;
         Ok(TargetInfo {
             core_type: "Cortex-M0".into(),
@@ -379,16 +387,35 @@ impl Backend for MockBackend {
                 "flash breakpoint address must be halfword-aligned",
             ));
         }
-        if self.flash_bps.is_active(address) {
-            return Ok(());
+        let end = address.checked_add(2).ok_or_else(|| {
+            McpError::new(
+                ErrorCode::InvalidArgument,
+                "flash breakpoint address overflows",
+            )
+        })?;
+        // The mock exposes a fixed FLASH region when with_flash is set.
+        let in_nvm = self.with_flash && address >= 0x0800_0000 && end <= 0x0801_0000;
+        if !in_nvm {
+            return Err(McpError::new(
+                ErrorCode::InvalidArgument,
+                "flash breakpoint address is not inside a flash (NVM) region",
+            ));
         }
-        // Read the original 16-bit instruction, then patch it with BKPT.
+        if self.flash_bps.is_active(address) {
+            // Re-patch if the flash no longer holds the BKPT.
+            let current = self.read_memory(address, AccessWidth::U16, 1)?;
+            if (current[0] as u16) == 0xBE00 {
+                return Ok(());
+            }
+        }
+        // Read the original 16-bit instruction first, then patch it and only
+        // record the breakpoint after the flash write succeeds.
         let original = self.read_memory(address, AccessWidth::U16, 1)?;
         let original_bytes = (original[0] as u16).to_le_bytes().to_vec();
-        let patch = self.flash_bps.insert(address, original_bytes);
-        for (i, b) in patch.iter().enumerate() {
+        for (i, b) in super::flash_bp::THUMB_BKPT.iter().enumerate() {
             self.memory.insert(address + i as u64, *b as u64);
         }
+        self.flash_bps.insert(address, original_bytes);
         Ok(())
     }
 
@@ -396,10 +423,14 @@ impl Backend for MockBackend {
         if !self.connected {
             return Err(not_connected());
         }
-        for (address, original) in self.flash_bps.remove_all() {
+        for address in self.flash_bps.addresses() {
+            let Some(original) = self.flash_bps.get(address) else {
+                continue;
+            };
             for (i, b) in original.iter().enumerate() {
                 self.memory.insert(address + i as u64, *b as u64);
             }
+            self.flash_bps.remove(address);
         }
         Ok(())
     }

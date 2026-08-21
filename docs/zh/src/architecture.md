@@ -52,7 +52,7 @@ CMSIS-DAP 探针 ---- SWD / JTAG ----> Cortex-M 目标
 | `security` | 三级策略；破坏性工具需要 `--allow-destructive` |
 | `session` | 单个活动会话；持有探针/会话与 SVD 状态 |
 | `backend` | `Backend` trait 及 `ProbeRsBackend`、`MockBackend` 实现，含 RTT 附着/读取与 Event Recorder 附着/轮询 |
-| ackend/flash_bp | Flash 软件断点：在 flash 中写入/恢复 Thumb BKPT 指令（供 flash 断点工具/命令使用） |
+| backend/flash_bp | Flash 软件断点：在 flash 中写入/恢复 Thumb BKPT 指令（供 flash 断点工具/命令使用） |
 | `gdb` | GDB Remote Serial Protocol stub（移植自 probe-rs-tools，基于 gdbstub）；非侵入附着，支持寄存器/内存/运行/单步/硬件断点 |
 | `remote` | 远程 TCP JSON-RPC 服务器，复用同一会话；方法名与 MCP 工具一致（`read_memory`、`write_memory`、`halt`、`resume`、`step`、`reset`、`status`、`dump_cpu_state` 等） |
 | `evr` | CMSIS-View Event Recorder 解码（官方 16 字节记录布局），供 CLI 的 `evr` 命令使用 |
