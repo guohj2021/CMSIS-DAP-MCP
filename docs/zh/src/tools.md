@@ -80,6 +80,20 @@ read_memory { "address": 0x08000000, "width": "u8", "count": 0x1000, "path": "fi
 数据观察点使用内核的 DWT 比较器，只对内核的读写访问触发，不会因调试器写入
 触发。目标没有 DWT 比较器时返回 `UnsupportedFeature`。
 
+## Flash 软件断点
+
+| 工具 | 参数 | 等级 |
+| --- | --- | --- |
+| `set_flash_breakpoint` | `address` | 破坏性 |
+| `clear_flash_breakpoints` | - | 破坏性 |
+| `list_flash_breakpoints` | - | 读 |
+
+Flash 软件断点把 Thumb `BKPT`（0xBE00）写入 flash，因此不受硬件比较器数量
+限制。它属于破坏性操作（修改 flash 内容），需要 `--allow-destructive`。
+`set_flash_breakpoint` 要求半字对齐且位于 flash（NVM）区域内，并保留被擦除
+扇区的其余字节；`clear_flash_breakpoints` 恢复原始指令。暂不支持 ARM 模式
+（32 位）断点。
+
 ## DAP
 
 | 工具 | 参数 | 等级 |
