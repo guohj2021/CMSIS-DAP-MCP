@@ -505,9 +505,9 @@ fn dispatch(
         "mem8" | "mdb" => memory_read(session, name, AccessWidth::U8, args),
         "mem16" | "mdh" => memory_read(session, name, AccessWidth::U16, args),
         "mem32" | "mdw" => memory_read(session, name, AccessWidth::U32, args),
-        "w8" | "mwb" => memory_write(session, AccessWidth::U8, args),
-        "w16" | "mwh" => memory_write(session, AccessWidth::U16, args),
-        "w32" | "mww" => memory_write(session, AccessWidth::U32, args),
+        "w8" | "mwb" => memory_write(session, policy, AccessWidth::U8, args),
+        "w16" | "mwh" => memory_write(session, policy, AccessWidth::U16, args),
+        "w32" | "mww" => memory_write(session, policy, AccessWidth::U32, args),
 
         // ---- files / flash ----
         "savebin" | "dump_image" => {
@@ -642,8 +642,19 @@ fn memory_read(
     }))
 }
 
+/// Convert a u64 value to a little-endian byte vector matching the access width.
+fn value_to_bytes(value: u64, width: AccessWidth) -> Vec<u8> {
+    match width {
+        AccessWidth::U8 => vec![value as u8],
+        AccessWidth::U16 => (value as u16).to_le_bytes().to_vec(),
+        AccessWidth::U32 => (value as u32).to_le_bytes().to_vec(),
+        AccessWidth::U64 => value.to_le_bytes().to_vec(),
+    }
+}
+
 fn memory_write(
     session: &mut SessionManager,
+    policy: &SecurityPolicy,
     width: AccessWidth,
     args: &[String],
 ) -> Result<serde_json::Value, McpError> {
@@ -658,10 +669,33 @@ fn memory_write(
         .map(|v| parse_u64(v))
         .transpose()?
         .ok_or_else(|| invalid("write requires a value"))?;
-    session.backend().write_memory(address, width, &[value])?;
+    // When the target address falls inside a flash (NVM) region, route
+    // through the flash algorithm instead of a raw memory write, because
+    // direct writes to flash are ignored by the flash controller. Writing
+    // flash is destructive (it runs the flash algorithm, which erases the
+    // affected sector and resets/halts the core), so it is gated behind
+    // the destructive policy like `erase` and `loadbin`.
+    let in_flash = session.target_info().is_some_and(|info| {
+        let end = address.saturating_add(width.byte_size());
+        info.memory_regions
+            .iter()
+            .any(|r| r.kind == "nvm" && address >= r.start && end <= r.end)
+    });
+    if in_flash {
+        require_destructive(policy)?;
+        let bytes = value_to_bytes(value, width);
+        // Preserve unwritten bytes in the erased sector so a word/byte
+        // write only changes the target bytes instead of wiping siblings.
+        session
+            .backend()
+            .program_flash_keep_unwritten(address, &bytes, false)?;
+    } else {
+        session.backend().write_memory(address, width, &[value])?;
+    }
     Ok(serde_json::json!({
         "address": address,
         "value": value,
         "written": true,
+        "flash_programmed": in_flash,
     }))
 }
