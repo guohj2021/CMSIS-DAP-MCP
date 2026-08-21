@@ -806,7 +806,7 @@ impl CmsisDapMcp {
     }
 
     #[tool(
-        description = "Run a debug script using a J-Link Commander / OpenOCD style command subset. Provide exactly one of path or script. Destructive commands (erase, loadbin, loadfile, flash write_image) require --allow-destructive.",
+        description = "Run a debug script using a J-Link Commander / OpenOCD style command subset. Provide exactly one of path or script. Destructive commands (erase, loadbin, loadfile, flash write_image, and w8/w16/w32 writes to NVM) require --allow-destructive.",
         annotations(
             title = "Run script",
             read_only_hint = false,

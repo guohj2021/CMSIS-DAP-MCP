@@ -12,6 +12,18 @@ pub enum AccessWidth {
     U64,
 }
 
+impl AccessWidth {
+    /// Number of bytes covered by one element of this access width.
+    pub fn byte_size(self) -> u64 {
+        match self {
+            AccessWidth::U8 => 1,
+            AccessWidth::U16 => 2,
+            AccessWidth::U32 => 4,
+            AccessWidth::U64 => 8,
+        }
+    }
+}
+
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ProbeInfo {
     pub id: String,
@@ -342,6 +354,18 @@ pub trait Backend: Send {
     fn write_dap(&mut self, address: u32, value: u32) -> Result<(), McpError>;
     fn erase_flash(&mut self, address: u64, size: u64) -> Result<(), McpError>;
     fn program_flash(&mut self, address: u64, data: &[u8], verify: bool) -> Result<(), McpError>;
+
+    /// Program flash while preserving unwritten bytes in the affected
+    /// sector(s), so a word/byte-sized write does not erase sibling data.
+    /// Defaults to [`Backend::program_flash`].
+    fn program_flash_keep_unwritten(
+        &mut self,
+        address: u64,
+        data: &[u8],
+        verify: bool,
+    ) -> Result<(), McpError> {
+        self.program_flash(address, data, verify)
+    }
     fn list_core_registers(&mut self) -> Result<Vec<String>, McpError>;
     fn get_core_status(&mut self) -> Result<CoreStatusInfo, McpError>;
     fn set_watchpoint(&mut self, address: u64, access: WatchAccess) -> Result<(), McpError>;
