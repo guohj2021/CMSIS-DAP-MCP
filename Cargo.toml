@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/cmsis-dap-core", "crates/cmsis-dap-mcp", "crates/cmsis-dap-cli"]
 
 [workspace.package]
-version = "0.5.0"
+version = "0.6.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 

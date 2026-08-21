@@ -1,7 +1,7 @@
 use crate::backend::{
     AccessWidth, Backend, ConnectOptions, CoreRegister, CoreStatusInfo, EvrEvent, EvrStatus,
     ExportFormat, ImageFileFormat, MemoryMismatch, MemoryRegionSummary, MemoryVerifyReport,
-    ProbeInfo, ResetMode, RttChannelInfo, RttRead, TargetInfo, WatchAccess, Watchpoint,
+    OptionByte, ProbeInfo, ResetMode, RttChannelInfo, RttRead, TargetInfo, WatchAccess, Watchpoint,
 };
 use crate::error::{ErrorCode, McpError};
 use crate::evr;
@@ -25,6 +25,7 @@ pub struct MockBackend {
     evr_ts_freq: u32,
     evr_ts_overflow: u32,
     evr_last_index: u32,
+    swo_active: bool,
 }
 
 impl Default for MockBackend {
@@ -60,6 +61,7 @@ impl MockBackend {
             evr_ts_freq: 1_000_000,
             evr_ts_overflow: 0,
             evr_last_index: 0,
+            swo_active: false,
         }
     }
 
@@ -680,5 +682,55 @@ impl Backend for MockBackend {
             stack_psp,
             memory,
         })
+    }
+
+    fn start_swo(&mut self, _baud: u32, _tpiu_clk: u32) -> Result<(), McpError> {
+        if !self.connected {
+            return Err(not_connected());
+        }
+        self.swo_active = true;
+        Ok(())
+    }
+
+    fn stop_swo(&mut self) -> Result<(), McpError> {
+        if !self.connected {
+            return Err(not_connected());
+        }
+        self.swo_active = false;
+        Ok(())
+    }
+
+    fn read_swo_data(&mut self) -> Result<Vec<u8>, McpError> {
+        if !self.connected {
+            return Err(not_connected());
+        }
+        if !self.swo_active {
+            return Err(McpError::new(
+                ErrorCode::NotConnected,
+                "SWO is not active; call start_swo first",
+            ));
+        }
+        // Predictable non-empty trace bytes so monitors and handlers can be
+        // exercised end to end.
+        Ok(vec![0x01, 0x02, 0x03])
+    }
+
+    fn read_option_bytes(&mut self) -> Result<Vec<OptionByte>, McpError> {
+        if !self.connected {
+            return Err(not_connected());
+        }
+        Ok(vec![OptionByte {
+            name: "RDP".into(),
+            address: 0x4002_3C14,
+            value: 0xAA,
+            description: Some("Read protection level 0".into()),
+        }])
+    }
+
+    fn write_option_bytes(&mut self, _bytes: &[OptionByte]) -> Result<(), McpError> {
+        if !self.connected {
+            return Err(not_connected());
+        }
+        Ok(())
     }
 }

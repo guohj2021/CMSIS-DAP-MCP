@@ -49,7 +49,7 @@ CMSIS-DAP probe ---- SWD / JTAG ----> Cortex-M target
 | `config` | `ServerConfig` runtime-mutable fields (`allow_destructive`, `tcp_port`, `gdb_port`); JSON config-file loading |
 | `runtime` | `ServerRuntime`: owns the shared config, session and running TCP/GDB tasks; `reconcile()` is the single idempotent convergence point for every config change; optional config-file watcher |
 | `mcp` | Register tools with rmcp, MCP annotations, server instructions |
-| `mcp/tools_*` | Per-area parameters and handlers (probe, memory, core, dap, svd, flash, script, chip, config) |
+| `mcp/tools_*` | Per-area parameters and handlers (probe, memory, core, dap, svd, flash, script, chip, config, swo, option) |
 | `script` | Linear J-Link Commander / OpenOCD style script parser and executor |
 | `hex` | Intel HEX encoder used for memory export |
 | `security` | Three-tier policy; destructive tools require `--allow-destructive` or a runtime `update_config` enable |

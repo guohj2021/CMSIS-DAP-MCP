@@ -101,6 +101,20 @@ server returns `UnsupportedFeature`.
 DAP addresses use APSEL in bits 24-31 for AP access (e.g. `0x010000FC`);
 otherwise bits 0-7 are the DP register address (bits 4-7 select the DP bank).
 
+## SWO / SWV trace
+
+| Tool | Params | Level |
+| --- | --- | --- |
+| `start_swo` | `baud`, `tpiu_clk` | Write |
+| `stop_swo` | - | Write |
+| `read_swo` | `max_bytes` (optional) | Read |
+
+`start_swo` configures the TPIU/SWO output (`tpiu_clk` is the TPIU clock in
+Hz, `baud` the SWO baud rate) and enables tracing; `read_swo` returns the
+available raw bytes hex-encoded (`bytes` + `data_hex`); `stop_swo` disables
+tracing. SWO requires the target to route trace data to the SWO pin and the
+probe to support SWO capture.
+
 ## SVD
 
 | Tool | Params | Level |
@@ -131,6 +145,19 @@ program_flash { "address": 0x08004000, "path": "/path/to/fw.hex", "format": "hex
 Supported formats: `elf`, `axf` (same container as ELF), `bin` (requires
 `address`), `hex`/`ihex`/`intelhex`, or `auto` (default, inferred from the
 file extension `.elf`/`.axf`/`.bin`/`.hex`/`.ihx`).
+
+## Option bytes
+
+| Tool | Params | Level |
+| --- | --- | --- |
+| `read_option_bytes` | - | Read |
+| `write_option_bytes` | `bytes` (array of `{name, address, value}`) | Destructive |
+
+Option bytes are chip configuration fields (STM32: RDP, USER, DATA0, DATA1
+from FLASH_OPTCR) accessed through raw DAP registers. The layout is
+chip-family specific; the STM32 layout is used as the reference
+implementation. `write_option_bytes` is destructive (it can change read
+protection or lock the device) and requires `--allow-destructive`.
 
 ## Chip definition
 

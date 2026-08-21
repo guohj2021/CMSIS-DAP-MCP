@@ -12,6 +12,18 @@ pub enum AccessWidth {
     U64,
 }
 
+impl AccessWidth {
+    /// Number of bytes covered by one element of this access width.
+    pub fn byte_size(self) -> u64 {
+        match self {
+            AccessWidth::U8 => 1,
+            AccessWidth::U16 => 2,
+            AccessWidth::U32 => 4,
+            AccessWidth::U64 => 8,
+        }
+    }
+}
+
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ProbeInfo {
     pub id: String,
@@ -270,6 +282,15 @@ pub struct CpuStateDump {
 /// Special roles (pc/sp/fp/lr/psr/msp/psp/fpsr) and general registers
 /// (r0-r15) are resolved through role/index-based APIs; everything else
 /// falls back to a by-name scan of the architecture register file.
+/// Option byte description for chip configuration.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct OptionByte {
+    pub name: String,
+    pub address: u32,
+    pub value: u32,
+    pub description: Option<String>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RegisterHint {
     ProgramCounter,
@@ -333,6 +354,18 @@ pub trait Backend: Send {
     fn write_dap(&mut self, address: u32, value: u32) -> Result<(), McpError>;
     fn erase_flash(&mut self, address: u64, size: u64) -> Result<(), McpError>;
     fn program_flash(&mut self, address: u64, data: &[u8], verify: bool) -> Result<(), McpError>;
+
+    /// Program flash while preserving unwritten bytes in the affected
+    /// sector(s), so a word/byte-sized write does not erase sibling data.
+    /// Defaults to [`Backend::program_flash`].
+    fn program_flash_keep_unwritten(
+        &mut self,
+        address: u64,
+        data: &[u8],
+        verify: bool,
+    ) -> Result<(), McpError> {
+        self.program_flash(address, data, verify)
+    }
     fn list_core_registers(&mut self) -> Result<Vec<String>, McpError>;
     fn get_core_status(&mut self) -> Result<CoreStatusInfo, McpError>;
     fn set_watchpoint(&mut self, address: u64, access: WatchAccess) -> Result<(), McpError>;
@@ -436,6 +469,41 @@ pub trait Backend: Send {
         Err(McpError::new(
             ErrorCode::UnsupportedFeature,
             "CPU state dump is not supported by this backend",
+        ))
+    }
+
+    fn start_swo(&mut self, _baud: u32, _tpiu_clk: u32) -> Result<(), McpError> {
+        Err(McpError::new(
+            ErrorCode::UnsupportedFeature,
+            "SWO is not supported by this backend",
+        ))
+    }
+
+    fn stop_swo(&mut self) -> Result<(), McpError> {
+        Err(McpError::new(
+            ErrorCode::UnsupportedFeature,
+            "SWO is not supported by this backend",
+        ))
+    }
+
+    fn read_swo_data(&mut self) -> Result<Vec<u8>, McpError> {
+        Err(McpError::new(
+            ErrorCode::UnsupportedFeature,
+            "SWO is not supported by this backend",
+        ))
+    }
+
+    fn read_option_bytes(&mut self) -> Result<Vec<OptionByte>, McpError> {
+        Err(McpError::new(
+            ErrorCode::UnsupportedFeature,
+            "option bytes are not supported by this backend",
+        ))
+    }
+
+    fn write_option_bytes(&mut self, _bytes: &[OptionByte]) -> Result<(), McpError> {
+        Err(McpError::new(
+            ErrorCode::UnsupportedFeature,
+            "option bytes are not supported by this backend",
         ))
     }
 }

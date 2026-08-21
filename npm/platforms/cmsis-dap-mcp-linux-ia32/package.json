@@ -1,6 +1,6 @@
 {
   "name": "@guohj2021/cmsis-dap-mcp-linux-ia32",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "os": ["linux"],
   "cpu": ["ia32"],
   "license": "MIT OR Apache-2.0",
