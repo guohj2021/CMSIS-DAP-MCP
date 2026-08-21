@@ -90,6 +90,19 @@ read_memory { "address": 0x08000000, "width": "u8", "count": 0x1000, "path": "fi
 DAP 地址在 bit 24-31 放 APSEL 表示 AP 访问（例如 `0x010000FC`）；否则 bit 0-7
 是 DP 寄存器地址（bit 4-7 选择 DP bank）。
 
+## SWO / SWV 追踪
+
+| 工具 | 参数 | 等级 |
+| --- | --- | --- |
+| `start_swo` | `baud`、`tpiu_clk` | 写 |
+| `stop_swo` | - | 写 |
+| `read_swo` | `max_bytes`（可选） | 读 |
+
+`start_swo` 配置 TPIU/SWO 输出（`tpiu_clk` 为 TPIU 时钟频率，`baud` 为 SWO
+波特率）并开启追踪；`read_swo` 返回可用的原始字节（hex 编码，`bytes` +
+`data_hex`）；`stop_swo` 关闭追踪。SWO 需要目标把 trace 数据路由到 SWO 引脚，
+且探针支持 SWO 采集。
+
 ## SVD
 
 | 工具 | 参数 | 等级 |
@@ -119,6 +132,18 @@ program_flash { "address": 0x08004000, "path": "/path/to/fw.hex", "format": "hex
 支持的格式：`elf`、`axf`（与 ELF 同容器）、`bin`（必须给 `address`）、
 `hex`/`ihex`/`intelhex`，或 `auto`（默认，按扩展名
 `.elf`/`.axf`/`.bin`/`.hex`/`.ihx` 推断）。
+
+## 选项字节（Option bytes）
+
+| 工具 | 参数 | 等级 |
+| --- | --- | --- |
+| `read_option_bytes` | - | 读 |
+| `write_option_bytes` | `bytes`（`{name, address, value}` 数组） | 破坏性 |
+
+选项字节是芯片配置字段（STM32：RDP、USER、DATA0、DATA1，位于 FLASH_OPTCR），
+通过原始 DAP 寄存器访问。布局因芯片系列而异，以 STM32 布局为参考实现。
+`write_option_bytes` 具有破坏性（可能改变读保护或锁死设备），需要
+`--allow-destructive`。
 
 ## 芯片定义
 
