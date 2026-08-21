@@ -69,6 +69,7 @@ All options are global and can appear before or after the subcommand.
 | `--speed-khz N` | SWD/JTAG clock speed in kHz |
 | `--target NAME` | target chip name (probe-rs built-in or a variant from `--target-yaml`) |
 | `--under-reset` | connect while holding reset (locked / unresponsive targets) |
+| `--core-index N` | core index to attach to on multi-core targets (default 0) |
 | `--target-yaml FILE` | load a target YAML (chip + flash algorithm definitions) |
 | `--svd FILE` | SVD file for named peripheral access (`svd` subcommands) |
 | `--elf FILE` | firmware ELF for symbol resolution (`symbols`, `watch`, `rtt`, `evr`) |
@@ -128,7 +129,20 @@ cmsis-dap-cli script --text "connect\nhalt\nreg pc\nresume"
 
 ```text
 bp set ADDR | bp list | bp clear
+bp set-flash ADDR | bp list-flash | bp clear-flash
 wp set ADDR --access read|write|rw | wp list | wp clear
+```
+
+`bp set` uses a hardware breakpoint (DWT comparators). `bp set-flash` patches
+a Thumb `BKPT` into flash instead — not limited by hardware comparators, but
+destructive (modifies flash). `bp clear-flash` restores the original
+instructions.
+
+```bash
+cmsis-dap-cli bp set 0x08000300
+cmsis-dap-cli bp set-flash 0x08000300
+cmsis-dap-cli bp list-flash
+cmsis-dap-cli bp clear-flash
 ```
 
 ### DAP

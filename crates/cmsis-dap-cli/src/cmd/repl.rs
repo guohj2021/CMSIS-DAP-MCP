@@ -56,6 +56,7 @@ pub fn run(
         opts.speed_khz,
         opts.target.clone(),
         opts.under_reset,
+        opts.core_index,
     );
     let mut watch_state = live::WatchState::default();
     loop {

@@ -1,5 +1,6 @@
 use crate::error::{ErrorCode, McpError};
 pub mod chip;
+pub mod flash_bp;
 pub mod mock;
 pub mod probe_rs;
 use std::path::Path;
@@ -51,6 +52,8 @@ pub struct ConnectOptions {
     pub speed_khz: Option<u32>,
     pub target: Option<String>,
     pub under_reset: bool,
+    /// Core index to attach to on multi-core targets (defaults to core 0).
+    pub core_index: Option<usize>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -61,6 +64,15 @@ pub struct TargetInfo {
     pub cpu_id: Option<u32>,
     pub dp_id: Option<u32>,
     pub memory_regions: Vec<MemoryRegionSummary>,
+    /// Per-core descriptors (index, type, name) for multi-core targets.
+    pub cores: Vec<CoreInfo>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CoreInfo {
+    pub index: usize,
+    pub core_type: String,
+    pub name: String,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -354,6 +366,32 @@ pub trait Backend: Send {
     fn write_dap(&mut self, address: u32, value: u32) -> Result<(), McpError>;
     fn erase_flash(&mut self, address: u64, size: u64) -> Result<(), McpError>;
     fn program_flash(&mut self, address: u64, data: &[u8], verify: bool) -> Result<(), McpError>;
+
+    /// Set a software breakpoint in flash by patching the instruction with a
+    /// Thumb `BKPT`. Destructive: modifies flash contents, so callers must
+    /// gate it behind the destructive policy.
+    fn set_flash_breakpoint(&mut self, _address: u64) -> Result<(), McpError> {
+        Err(McpError::new(
+            ErrorCode::UnsupportedFeature,
+            "flash software breakpoints are not supported by this backend",
+        ))
+    }
+
+    /// Restore all flash instructions patched by flash software breakpoints.
+    fn clear_flash_breakpoints(&mut self) -> Result<(), McpError> {
+        Err(McpError::new(
+            ErrorCode::UnsupportedFeature,
+            "flash software breakpoints are not supported by this backend",
+        ))
+    }
+
+    /// List the addresses of active flash software breakpoints.
+    fn list_flash_breakpoints(&mut self) -> Result<Vec<u64>, McpError> {
+        Err(McpError::new(
+            ErrorCode::UnsupportedFeature,
+            "flash software breakpoints are not supported by this backend",
+        ))
+    }
 
     /// Program flash while preserving unwritten bytes in the affected
     /// sector(s), so a word/byte-sized write does not erase sibling data.
