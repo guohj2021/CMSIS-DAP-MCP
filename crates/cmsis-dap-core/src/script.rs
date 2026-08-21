@@ -379,6 +379,7 @@ fn dispatch(
                 speed_khz: ctx.speed_khz,
                 target: ctx.target.clone(),
                 under_reset: ctx.under_reset,
+                core_index: None,
             };
             let info = session.connect(&opts)?;
             Ok(serde_json::json!({ "target": info }))
