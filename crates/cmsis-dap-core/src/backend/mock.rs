@@ -1,7 +1,8 @@
 use crate::backend::{
-    AccessWidth, Backend, ConnectOptions, CoreRegister, CoreStatusInfo, EvrEvent, EvrStatus,
-    ExportFormat, ImageFileFormat, MemoryMismatch, MemoryRegionSummary, MemoryVerifyReport,
-    OptionByte, ProbeInfo, ResetMode, RttChannelInfo, RttRead, TargetInfo, WatchAccess, Watchpoint,
+    AccessWidth, Backend, ConnectOptions, CoreInfo, CoreRegister, CoreStatusInfo, EvrEvent,
+    EvrStatus, ExportFormat, ImageFileFormat, MemoryMismatch, MemoryRegionSummary,
+    MemoryVerifyReport, OptionByte, ProbeInfo, ResetMode, RttChannelInfo, RttRead, TargetInfo,
+    WatchAccess, Watchpoint,
 };
 use crate::error::{ErrorCode, McpError};
 use crate::evr;
@@ -26,6 +27,7 @@ pub struct MockBackend {
     evr_ts_overflow: u32,
     evr_last_index: u32,
     swo_active: bool,
+    flash_bps: super::flash_bp::FlashBpManager,
 }
 
 impl Default for MockBackend {
@@ -62,6 +64,7 @@ impl MockBackend {
             evr_ts_overflow: 0,
             evr_last_index: 0,
             swo_active: false,
+            flash_bps: super::flash_bp::FlashBpManager::new(),
         }
     }
 
@@ -124,7 +127,15 @@ impl Backend for MockBackend {
         }])
     }
 
-    fn connect(&mut self, _opts: &ConnectOptions) -> Result<TargetInfo, McpError> {
+    fn connect(&mut self, opts: &ConnectOptions) -> Result<TargetInfo, McpError> {
+        if let Some(core) = opts.core_index {
+            if core != 0 {
+                return Err(McpError::new(
+                    ErrorCode::InvalidArgument,
+                    format!("core index {core} out of range (target has 1 core)"),
+                ));
+            }
+        }
         self.connected = true;
         Ok(TargetInfo {
             core_type: "Cortex-M0".into(),
@@ -150,6 +161,11 @@ impl Backend for MockBackend {
                 });
                 regions
             },
+            cores: vec![CoreInfo {
+                index: 0,
+                core_type: "Cortex-M0".into(),
+                name: "main".into(),
+            }],
         })
     }
 
@@ -359,6 +375,71 @@ impl Backend for MockBackend {
             self.memory.insert(address + i as u64, *b as u64);
         }
         Ok(())
+    }
+
+    fn set_flash_breakpoint(&mut self, address: u64) -> Result<(), McpError> {
+        if !self.connected {
+            return Err(not_connected());
+        }
+        if !address.is_multiple_of(2) {
+            return Err(McpError::new(
+                ErrorCode::InvalidArgument,
+                "flash breakpoint address must be halfword-aligned",
+            ));
+        }
+        let end = address.checked_add(2).ok_or_else(|| {
+            McpError::new(
+                ErrorCode::InvalidArgument,
+                "flash breakpoint address overflows",
+            )
+        })?;
+        // The mock exposes a fixed FLASH region when with_flash is set.
+        let in_nvm = self.with_flash && address >= 0x0800_0000 && end <= 0x0801_0000;
+        if !in_nvm {
+            return Err(McpError::new(
+                ErrorCode::InvalidArgument,
+                "flash breakpoint address is not inside a flash (NVM) region",
+            ));
+        }
+        if self.flash_bps.is_active(address) {
+            // Re-patch if the flash no longer holds the BKPT.
+            let current = self.read_memory(address, AccessWidth::U16, 1)?;
+            if (current[0] as u16) == 0xBE00 {
+                return Ok(());
+            }
+        }
+        // Read the original 16-bit instruction first, then patch it and only
+        // record the breakpoint after the flash write succeeds.
+        let original = self.read_memory(address, AccessWidth::U16, 1)?;
+        let original_bytes = (original[0] as u16).to_le_bytes().to_vec();
+        for (i, b) in super::flash_bp::THUMB_BKPT.iter().enumerate() {
+            self.memory.insert(address + i as u64, *b as u64);
+        }
+        self.flash_bps.insert(address, original_bytes);
+        Ok(())
+    }
+
+    fn clear_flash_breakpoints(&mut self) -> Result<(), McpError> {
+        if !self.connected {
+            return Err(not_connected());
+        }
+        for address in self.flash_bps.addresses() {
+            let Some(original) = self.flash_bps.get(address) else {
+                continue;
+            };
+            for (i, b) in original.iter().enumerate() {
+                self.memory.insert(address + i as u64, *b as u64);
+            }
+            self.flash_bps.remove(address);
+        }
+        Ok(())
+    }
+
+    fn list_flash_breakpoints(&mut self) -> Result<Vec<u64>, McpError> {
+        if !self.connected {
+            return Err(not_connected());
+        }
+        Ok(self.flash_bps.addresses())
     }
 
     fn list_core_registers(&mut self) -> Result<Vec<String>, McpError> {

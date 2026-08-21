@@ -1,6 +1,8 @@
 use clap::Parser;
 use cmsis_dap_cli::cmd::{actions, SvdAction, SvdArgs, SvdReadArgs, SvdWriteArgs};
-use cmsis_dap_cli::cmd::{repl, run, swo, CliArgs, CliError, ReplOptions};
+use cmsis_dap_cli::cmd::{
+    repl, run, swo, BpAction, BpArgs, BpSetArgs, CliArgs, CliError, ReplOptions,
+};
 use cmsis_dap_core::backend::mock::MockBackend;
 use cmsis_dap_core::backend::{ConnectOptions, Protocol};
 use cmsis_dap_core::session::SessionManager;
@@ -186,6 +188,7 @@ fn svd_field_write() {
             speed_khz: None,
             target: None,
             under_reset: false,
+            core_index: None,
         })
         .unwrap();
     session.load_svd(f.path()).unwrap();
@@ -294,6 +297,7 @@ fn repl_erase_runs_without_prompt() {
             speed_khz: None,
             target: None,
             under_reset: false,
+            core_index: None,
         })
         .unwrap();
     session
@@ -514,6 +518,7 @@ fn swo_monitor_polls_with_count() {
             speed_khz: None,
             target: None,
             under_reset: false,
+            core_index: None,
         })
         .unwrap();
     session.backend().start_swo(2_000_000, 8_000_000).unwrap();
@@ -533,4 +538,65 @@ fn swo_monitor_polls_with_count() {
     assert!(value["host_ts"].as_str().is_some_and(|s| !s.is_empty()));
     assert_eq!(value["bytes"].as_u64(), Some(3));
     assert_eq!(value["data_hex"].as_str(), Some("010203"));
+}
+
+#[test]
+fn bp_flash_actions_via_cli() {
+    let mut session = SessionManager::new(Box::new(MockBackend::new()));
+    session
+        .backend()
+        .connect(&ConnectOptions {
+            probe_id: None,
+            protocol: Protocol::Swd,
+            speed_khz: None,
+            target: None,
+            under_reset: false,
+            core_index: None,
+        })
+        .unwrap();
+    let set = actions::bp(
+        &mut session,
+        &BpArgs {
+            action: BpAction::SetFlash(BpSetArgs {
+                address: 0x0800_0000,
+            }),
+        },
+    )
+    .unwrap();
+    assert_eq!(set["set"].as_bool(), Some(true));
+    assert_eq!(set["flash"].as_bool(), Some(true));
+    let list = actions::bp(
+        &mut session,
+        &BpArgs {
+            action: BpAction::ListFlash,
+        },
+    )
+    .unwrap();
+    assert_eq!(list["flash_breakpoints"][0].as_u64(), Some(0x0800_0000));
+    let clear = actions::bp(
+        &mut session,
+        &BpArgs {
+            action: BpAction::ClearFlash,
+        },
+    )
+    .unwrap();
+    assert_eq!(clear["cleared"].as_bool(), Some(true));
+    let list = actions::bp(
+        &mut session,
+        &BpArgs {
+            action: BpAction::ListFlash,
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        list["flash_breakpoints"].as_array().map(|a| a.len()),
+        Some(0)
+    );
+}
+
+#[test]
+fn connect_with_core_index_reports_cores() {
+    let out = execute(&["cmsis-dap-cli", "--core-index", "0", "connect"]).unwrap();
+    assert_eq!(out["target"]["core_count"].as_u64(), Some(1));
+    assert_eq!(out["target"]["cores"][0]["index"].as_u64(), Some(0));
 }

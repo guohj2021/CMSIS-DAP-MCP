@@ -138,6 +138,9 @@ pub struct CliArgs {
     /// Connect while holding the target reset line (locked/unresponsive targets).
     #[arg(long, global = true)]
     pub under_reset: bool,
+    /// Core index to attach to on multi-core targets (default 0).
+    #[arg(long, global = true, value_name = "N")]
+    pub core_index: Option<usize>,
     /// Target YAML file with chip/Flash algorithm definitions.
     #[arg(long, global = true, value_name = "FILE")]
     pub target_yaml: Option<PathBuf>,
@@ -330,9 +333,16 @@ pub struct BpArgs {
 
 #[derive(Debug, Subcommand)]
 pub enum BpAction {
+    /// Hardware breakpoint.
     Set(BpSetArgs),
+    /// Flash software breakpoint (destructive: patches flash).
+    SetFlash(BpSetArgs),
     List,
+    /// List flash software breakpoints.
+    ListFlash,
     Clear,
+    /// Clear all flash software breakpoints (restores flash).
+    ClearFlash,
 }
 
 #[derive(Debug, Args)]
@@ -671,6 +681,7 @@ pub struct ReplOptions {
     pub speed_khz: Option<u32>,
     pub target: Option<String>,
     pub under_reset: bool,
+    pub core_index: Option<usize>,
     pub elf: Option<PathBuf>,
 }
 
@@ -683,6 +694,7 @@ impl Default for ReplOptions {
             speed_khz: None,
             target: None,
             under_reset: false,
+            core_index: None,
             elf: None,
         }
     }
@@ -706,6 +718,7 @@ pub(crate) struct Globals {
     speed_khz: Option<u32>,
     target: Option<String>,
     under_reset: bool,
+    core_index: Option<usize>,
     target_yaml: Option<PathBuf>,
     svd: Option<PathBuf>,
     elf: Option<PathBuf>,
@@ -723,6 +736,7 @@ fn connect(
         speed_khz: globals.speed_khz,
         target,
         under_reset: globals.under_reset,
+        core_index: globals.core_index,
     };
     Ok(session.connect(&opts)?)
 }
@@ -778,6 +792,7 @@ pub fn run(
         speed_khz: args.speed_khz,
         target: args.target.clone(),
         under_reset: args.under_reset,
+        core_index: args.core_index,
         target_yaml: args.target_yaml.clone(),
         svd: args.svd.clone(),
         elf: args.elf.clone(),
@@ -911,6 +926,7 @@ pub fn run(
                 globals.speed_khz,
                 globals.target.clone(),
                 globals.under_reset,
+                globals.core_index,
             );
             let report = engine.run_script(&mut session, &text)?;
             if !report.ok {
@@ -1086,6 +1102,7 @@ pub fn run(
                 speed_khz: globals.speed_khz,
                 target: globals.target.clone(),
                 under_reset: globals.under_reset,
+                core_index: globals.core_index,
                 elf: globals.elf.clone(),
             };
             repl::run(&opts, &mut session, &mut reader, interactive)?;
