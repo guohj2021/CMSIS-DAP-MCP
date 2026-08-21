@@ -1063,7 +1063,7 @@ pub fn run(
                 swo::SwoAction::Start(s) => Ok(Some(swo::swo_start(&mut session, &s)?)),
                 swo::SwoAction::Stop => Ok(Some(swo::swo_stop(&mut session)?)),
                 swo::SwoAction::Monitor(m) => {
-                    swo::swo_monitor(&mut session, &m, globals.json)?;
+                    swo::swo_monitor(&mut session, &m, globals.json, &mut std::io::stdout())?;
                     Ok(None)
                 }
             }

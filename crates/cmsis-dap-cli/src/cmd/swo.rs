@@ -69,9 +69,8 @@ pub fn swo_monitor(
     session: &mut SessionManager,
     args: &SwoMonitorArgs,
     json: bool,
+    out: &mut dyn Write,
 ) -> Result<(), CliError> {
-    let stdout = std::io::stdout();
-    let mut out = stdout.lock();
     let mut poll_count: u32 = 0;
 
     loop {
@@ -83,8 +82,10 @@ pub fn swo_monitor(
             Ok(data) => {
                 if !data.is_empty() {
                     if json {
+                        let (_, host_rfc) = super::live::host_now();
                         let hex: String = data.iter().map(|b| format!("{b:02x}")).collect();
                         let line = serde_json::json!({
+                            "host_ts": host_rfc,
                             "bytes": data.len(),
                             "data_hex": hex,
                         });
