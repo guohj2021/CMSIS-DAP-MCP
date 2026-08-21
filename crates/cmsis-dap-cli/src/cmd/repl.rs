@@ -17,7 +17,7 @@ J-Link Commander / OpenOCD style commands:
   reg <name> [<value>]       read or write a core register
   regs                       list core registers
   mem8/16/32 <addr> [<n>]    read memory
-  w8/16/32 <addr> <value>    write memory
+  w8/16/32 <addr> <value>    write memory (NVM: flash-program word, resets core; destructive)
   savebin <file> <addr> <size>   export memory to a binary file
   loadbin <file> <addr>      program a binary file (erases/writes flash)
   loadfile <file> [<addr>]   program axf/elf/bin/hex (erases/writes flash)
