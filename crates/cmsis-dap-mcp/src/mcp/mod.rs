@@ -4,13 +4,15 @@ pub mod tools_core;
 pub mod tools_dap;
 pub mod tools_flash;
 pub mod tools_memory;
+pub mod tools_option;
 pub mod tools_probe;
 pub mod tools_script;
 pub mod tools_svd;
+pub mod tools_swo;
 
 use crate::runtime::ServerRuntime;
 use cmsis_dap_core::backend::{
-    CoreRegister, ExportFormat, ImageFileFormat, Protocol, ResetMode, WatchAccess,
+    CoreRegister, ExportFormat, ImageFileFormat, OptionByte, Protocol, ResetMode, WatchAccess,
 };
 use cmsis_dap_core::error::ErrorCode;
 use cmsis_dap_core::security::SecurityPolicy;
@@ -31,6 +33,7 @@ pub use tools_core::{
 pub use tools_dap::{ReadDapParams, WriteDapParams};
 pub use tools_flash::{EraseFlashParams, ProgramFlashParams};
 pub use tools_memory::{ReadMemoryParams, VerifyMemoryParams, WriteMemoryParams};
+pub use tools_option::{ReadOptionBytesParams, WriteOptionBytesParams};
 pub use tools_probe::{
     ConnectParams, DisconnectParams, GetProbeInfoParams, GetTargetInfoParams, ListProbesParams,
 };
@@ -38,6 +41,7 @@ pub use tools_script::RunScriptParams;
 pub use tools_svd::{
     ListPeripheralsParams, LoadSvdParams, ReadPeripheralParams, WritePeripheralParams,
 };
+pub use tools_swo::{ReadSwoParams, StartSwoParams, StopSwoParams};
 
 pub const SERVER_INSTRUCTIONS: &str = "CMSIS-DAP MCP server for Cortex-M targets. \
 Security tiers: ReadOnly tools (list_probes, get_probe_info, get_target_info, read_memory, \
@@ -1311,6 +1315,151 @@ impl CmsisDapMcp {
                     Err(e) => error_result(e.code, e.message),
                 }
             }
+            Err(e) => error_result(e.code, e.message),
+        }
+    }
+
+    #[tool(
+        description = "Start SWO/SWV trace with the given baud rate and TPIU clock frequency.",
+        annotations(
+            title = "Start SWO",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
+    )]
+    pub async fn start_swo(
+        &self,
+        Parameters(params): Parameters<StartSwoParams>,
+    ) -> CallToolResult {
+        match self
+            .runtime
+            .session
+            .lock()
+            .unwrap()
+            .backend()
+            .start_swo(params.baud, params.tpiu_clk)
+        {
+            Ok(()) => CallToolResult::structured(serde_json::json!({
+                "started": true,
+                "baud": params.baud,
+                "tpiu_clk": params.tpiu_clk,
+            })),
+            Err(e) => error_result(e.code, e.message),
+        }
+    }
+
+    #[tool(
+        description = "Stop SWO/SWV trace.",
+        annotations(
+            title = "Stop SWO",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
+    )]
+    pub async fn stop_swo(&self, Parameters(_): Parameters<StopSwoParams>) -> CallToolResult {
+        match self.runtime.session.lock().unwrap().backend().stop_swo() {
+            Ok(()) => CallToolResult::structured(serde_json::json!({ "stopped": true })),
+            Err(e) => error_result(e.code, e.message),
+        }
+    }
+
+    #[tool(
+        description = "Read available SWO/SWV trace bytes. Returns hex-encoded data.",
+        annotations(
+            title = "Read SWO data",
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
+    )]
+    pub async fn read_swo(&self, Parameters(_): Parameters<ReadSwoParams>) -> CallToolResult {
+        match self
+            .runtime
+            .session
+            .lock()
+            .unwrap()
+            .backend()
+            .read_swo_data()
+        {
+            Ok(data) => {
+                let hex: String = data.iter().map(|b| format!("{b:02x}")).collect();
+                CallToolResult::structured(serde_json::json!({
+                    "bytes": data.len(),
+                    "data_hex": hex,
+                }))
+            }
+            Err(e) => error_result(e.code, e.message),
+        }
+    }
+
+    #[tool(
+        description = "Read chip option bytes (STM32: RDP, USER, DATA0, DATA1 from FLASH_OPTCR). Chip-family specific.",
+        annotations(
+            title = "Read option bytes",
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    pub async fn read_option_bytes(
+        &self,
+        Parameters(_): Parameters<ReadOptionBytesParams>,
+    ) -> CallToolResult {
+        match self
+            .runtime
+            .session
+            .lock()
+            .unwrap()
+            .backend()
+            .read_option_bytes()
+        {
+            Ok(bytes) => CallToolResult::structured(serde_json::json!({ "option_bytes": bytes })),
+            Err(e) => error_result(e.code, e.message),
+        }
+    }
+
+    #[tool(
+        description = "Write chip option bytes (STM32: RDP, USER, DATA0, DATA1). DESTRUCTIVE: can lock the device.",
+        annotations(
+            title = "Write option bytes",
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
+    )]
+    pub async fn write_option_bytes(
+        &self,
+        Parameters(params): Parameters<WriteOptionBytesParams>,
+    ) -> CallToolResult {
+        if let Err(e) = self.require_destructive() {
+            return e;
+        }
+        let option_bytes: Vec<OptionByte> = params
+            .bytes
+            .into_iter()
+            .map(|b| OptionByte {
+                name: b.name,
+                address: b.address,
+                value: b.value,
+                description: None,
+            })
+            .collect();
+        match self
+            .runtime
+            .session
+            .lock()
+            .unwrap()
+            .backend()
+            .write_option_bytes(&option_bytes)
+        {
+            Ok(()) => CallToolResult::structured(serde_json::json!({ "written": true })),
             Err(e) => error_result(e.code, e.message),
         }
     }

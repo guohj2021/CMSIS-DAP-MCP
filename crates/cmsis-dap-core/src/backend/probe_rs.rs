@@ -1,11 +1,13 @@
 use crate::backend::{
     register_hint, AccessWidth, Backend, ConnectOptions, CoreRegister, CoreStatusInfo, EvrStatus,
     ExportFormat, ImageFileFormat, MemoryMismatch, MemoryRegionSummary, MemoryVerifyReport,
-    ProbeInfo, Protocol, RegisterHint, ResetMode, RttChannelInfo, RttRead, TargetInfo, WatchAccess,
-    Watchpoint,
+    OptionByte, ProbeInfo, Protocol, RegisterHint, ResetMode, RttChannelInfo, RttRead, TargetInfo,
+    WatchAccess, Watchpoint,
 };
 use crate::error::{ErrorCode, McpError};
 use crate::evr;
+use probe_rs::architecture::arm::component::TraceSink;
+use probe_rs::architecture::arm::swo::SwoConfig;
 use probe_rs::config::MemoryRegion;
 use probe_rs::flashing::{
     build_loader, erase, erase_all, image_format, DownloadOptions, FlashProgress,
@@ -28,6 +30,7 @@ pub struct ProbeRsBackend {
     registry: Option<probe_rs::config::Registry>,
     rtt: Option<Rtt>,
     evr: Option<evr::EvrReader>,
+    swo_active: bool,
 }
 
 impl Default for ProbeRsBackend {
@@ -147,6 +150,7 @@ impl ProbeRsBackend {
             registry: None,
             rtt: None,
             evr: None,
+            swo_active: false,
         }
     }
 
@@ -159,6 +163,7 @@ impl ProbeRsBackend {
             registry: Some(registry),
             rtt: None,
             evr: None,
+            swo_active: false,
         }
     }
 
@@ -416,6 +421,7 @@ impl Backend for ProbeRsBackend {
         self.watchpoints.clear();
         self.rtt = None;
         self.evr = None;
+        self.swo_active = false;
         Ok(())
     }
 
@@ -1225,5 +1231,117 @@ impl Backend for ProbeRsBackend {
             stack_psp,
             memory,
         })
+    }
+
+    fn start_swo(&mut self, baud: u32, tpiu_clk: u32) -> Result<(), McpError> {
+        let session = self
+            .session
+            .as_mut()
+            .ok_or_else(|| McpError::new(ErrorCode::NotConnected, "no active session"))?;
+        let config = SwoConfig::new(tpiu_clk).set_baud(baud);
+        session
+            .setup_tracing(self.core_index, TraceSink::Swo(config))
+            .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))?;
+        self.swo_active = true;
+        tracing::info!("SWO started: baud={baud}, tpiu_clk={tpiu_clk}");
+        Ok(())
+    }
+
+    fn stop_swo(&mut self) -> Result<(), McpError> {
+        let session = self
+            .session
+            .as_mut()
+            .ok_or_else(|| McpError::new(ErrorCode::NotConnected, "no active session"))?;
+        session
+            .disable_swv(self.core_index)
+            .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))?;
+        self.swo_active = false;
+        tracing::info!("SWO stopped");
+        Ok(())
+    }
+
+    fn read_swo_data(&mut self) -> Result<Vec<u8>, McpError> {
+        if !self.swo_active {
+            return Err(McpError::new(
+                ErrorCode::NotConnected,
+                "SWO is not active; call start_swo first",
+            ));
+        }
+        let session = self
+            .session
+            .as_mut()
+            .ok_or_else(|| McpError::new(ErrorCode::NotConnected, "no active session"))?;
+        let mut reader = session
+            .swo_reader()
+            .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))?;
+        let mut buf = vec![0u8; 4096];
+        use std::io::Read;
+        let n = reader
+            .read(&mut buf)
+            .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))?;
+        buf.truncate(n);
+        Ok(buf)
+    }
+
+    fn read_option_bytes(&mut self) -> Result<Vec<OptionByte>, McpError> {
+        let value = self.read_dap(0x4002_3C14)?;
+        let bytes = vec![
+            OptionByte {
+                name: "RDP".into(),
+                address: 0x4002_3C14,
+                value: value & 0xFF,
+                description: Some(
+                    "Read protection level (0xAA=level0, 0xBB=level1, 0xCC=level2)".into(),
+                ),
+            },
+            OptionByte {
+                name: "USER".into(),
+                address: 0x4002_3C14,
+                value: (value >> 8) & 0xFF,
+                description: Some("User option bytes".into()),
+            },
+            OptionByte {
+                name: "DATA0".into(),
+                address: 0x4002_3C14,
+                value: (value >> 16) & 0xFF,
+                description: Some("Data byte 0".into()),
+            },
+            OptionByte {
+                name: "DATA1".into(),
+                address: 0x4002_3C14,
+                value: (value >> 24) & 0xFF,
+                description: Some("Data byte 1".into()),
+            },
+        ];
+        Ok(bytes)
+    }
+
+    fn write_option_bytes(&mut self, bytes: &[OptionByte]) -> Result<(), McpError> {
+        let mut current = self.read_dap(0x4002_3C14)?;
+        for byte in bytes {
+            match byte.name.as_str() {
+                "RDP" => {
+                    current = (current & !0xFF) | (byte.value & 0xFF);
+                }
+                "USER" => {
+                    current = (current & !0xFF00) | ((byte.value & 0xFF) << 8);
+                }
+                "DATA0" => {
+                    current = (current & !0xFF_0000) | ((byte.value & 0xFF) << 16);
+                }
+                "DATA1" => {
+                    current = (current & !0xFF00_0000) | ((byte.value & 0xFF) << 24);
+                }
+                other => {
+                    return Err(McpError::new(
+                        ErrorCode::InvalidArgument,
+                        format!("unknown option byte: {other}"),
+                    ));
+                }
+            }
+        }
+        self.write_dap(0x4002_3C14, current)?;
+        tracing::info!("option bytes written: 0x{current:08X}");
+        Ok(())
     }
 }
