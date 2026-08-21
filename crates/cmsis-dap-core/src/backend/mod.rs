@@ -270,6 +270,15 @@ pub struct CpuStateDump {
 /// Special roles (pc/sp/fp/lr/psr/msp/psp/fpsr) and general registers
 /// (r0-r15) are resolved through role/index-based APIs; everything else
 /// falls back to a by-name scan of the architecture register file.
+/// Option byte description for chip configuration.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct OptionByte {
+    pub name: String,
+    pub address: u32,
+    pub value: u32,
+    pub description: Option<String>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RegisterHint {
     ProgramCounter,
@@ -436,6 +445,41 @@ pub trait Backend: Send {
         Err(McpError::new(
             ErrorCode::UnsupportedFeature,
             "CPU state dump is not supported by this backend",
+        ))
+    }
+
+    fn start_swo(&mut self, _baud: u32, _tpiu_clk: u32) -> Result<(), McpError> {
+        Err(McpError::new(
+            ErrorCode::UnsupportedFeature,
+            "SWO is not supported by this backend",
+        ))
+    }
+
+    fn stop_swo(&mut self) -> Result<(), McpError> {
+        Err(McpError::new(
+            ErrorCode::UnsupportedFeature,
+            "SWO is not supported by this backend",
+        ))
+    }
+
+    fn read_swo_data(&mut self) -> Result<Vec<u8>, McpError> {
+        Err(McpError::new(
+            ErrorCode::UnsupportedFeature,
+            "SWO is not supported by this backend",
+        ))
+    }
+
+    fn read_option_bytes(&mut self) -> Result<Vec<OptionByte>, McpError> {
+        Err(McpError::new(
+            ErrorCode::UnsupportedFeature,
+            "option bytes are not supported by this backend",
+        ))
+    }
+
+    fn write_option_bytes(&mut self, _bytes: &[OptionByte]) -> Result<(), McpError> {
+        Err(McpError::new(
+            ErrorCode::UnsupportedFeature,
+            "option bytes are not supported by this backend",
         ))
     }
 }
