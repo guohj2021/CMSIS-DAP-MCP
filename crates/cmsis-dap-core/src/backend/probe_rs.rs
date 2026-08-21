@@ -255,6 +255,36 @@ impl ProbeRsBackend {
         }
         names.into_iter().collect()
     }
+
+    fn program_flash_impl(
+        &mut self,
+        address: u64,
+        data: &[u8],
+        verify: bool,
+        keep_unwritten_bytes: bool,
+    ) -> Result<(), McpError> {
+        let session = self
+            .session
+            .as_mut()
+            .ok_or_else(|| McpError::new(ErrorCode::NotConnected, "no active session"))?;
+        let mut loader = probe_rs::flashing::FlashLoader::new(
+            session.target().memory_map.clone(),
+            session.target().source().clone(),
+        );
+        loader.add_data(address, data).map_err(|e| {
+            McpError::new(ErrorCode::ProtocolError, format!("flash data invalid: {e}"))
+        })?;
+        let mut options = DownloadOptions::default();
+        options.verify = verify;
+        options.keep_unwritten_bytes = keep_unwritten_bytes;
+        loader.commit(session, options).map_err(|e| {
+            McpError::new(
+                ErrorCode::ProtocolError,
+                format!("flash programming failed: {e}"),
+            )
+        })?;
+        Ok(())
+    }
 }
 
 impl Backend for ProbeRsBackend {
@@ -692,26 +722,16 @@ impl Backend for ProbeRsBackend {
     }
 
     fn program_flash(&mut self, address: u64, data: &[u8], verify: bool) -> Result<(), McpError> {
-        let session = self
-            .session
-            .as_mut()
-            .ok_or_else(|| McpError::new(ErrorCode::NotConnected, "no active session"))?;
-        let mut loader = probe_rs::flashing::FlashLoader::new(
-            session.target().memory_map.clone(),
-            session.target().source().clone(),
-        );
-        loader.add_data(address, data).map_err(|e| {
-            McpError::new(ErrorCode::ProtocolError, format!("flash data invalid: {e}"))
-        })?;
-        let mut options = DownloadOptions::default();
-        options.verify = verify;
-        loader.commit(session, options).map_err(|e| {
-            McpError::new(
-                ErrorCode::ProtocolError,
-                format!("flash programming failed: {e}"),
-            )
-        })?;
-        Ok(())
+        self.program_flash_impl(address, data, verify, false)
+    }
+
+    fn program_flash_keep_unwritten(
+        &mut self,
+        address: u64,
+        data: &[u8],
+        verify: bool,
+    ) -> Result<(), McpError> {
+        self.program_flash_impl(address, data, verify, true)
     }
 
     fn list_core_registers(&mut self) -> Result<Vec<String>, McpError> {

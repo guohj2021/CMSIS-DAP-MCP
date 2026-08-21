@@ -12,3 +12,6 @@ node_modules/
 docs/book/
 docs/zh/book/
 npm/bin/*.exe
+.trae/
+.workbuddy/
+test_flash_write.script
