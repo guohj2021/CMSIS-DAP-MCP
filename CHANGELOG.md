@@ -3,7 +3,7 @@
 All notable changes are documented per release. Version numbers match the
 `v*` tags; npm packages and platform binaries follow the same version.
 
-## [v0.7.0] - unreleased
+## [v0.7.0] - 2026-08-22
 
 ### Features
 
