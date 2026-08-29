@@ -7,10 +7,12 @@
 pub mod cfi;
 mod dwarf;
 mod elf;
+mod locals;
 mod unwind;
 
 pub use dwarf::DebugInfo;
 pub use elf::load_elf;
+pub use locals::{DwarfLocals, LocalValue};
 pub use unwind::{CfiUnwinder, UnwindFrame};
 
 use crate::error::{ErrorCode, McpError};

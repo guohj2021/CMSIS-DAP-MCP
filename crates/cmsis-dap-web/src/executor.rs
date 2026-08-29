@@ -34,6 +34,7 @@ pub struct ExecutorHandle {
     allow_destructive: bool,
     shutdown: Arc<AtomicBool>,
     unwinder: Arc<std::sync::Mutex<Option<cmsis_dap_core::symbols::CfiUnwinder>>>,
+    locals: Arc<std::sync::Mutex<Option<cmsis_dap_core::symbols::DwarfLocals>>>,
 }
 
 impl ExecutorHandle {
@@ -100,6 +101,11 @@ impl ExecutorHandle {
     pub fn set_unwinder(&self, unwinder: Option<cmsis_dap_core::symbols::CfiUnwinder>) {
         *self.unwinder.lock().unwrap() = unwinder;
     }
+
+    /// Install the DWARF locals reader for the loaded firmware (None clears it).
+    pub fn set_locals(&self, locals: Option<cmsis_dap_core::symbols::DwarfLocals>) {
+        *self.locals.lock().unwrap() = locals;
+    }
 }
 
 /// Run state of the executor loop.
@@ -125,6 +131,7 @@ pub fn spawn(session: SessionManager, config: ExecutorConfig) -> ExecutorHandle 
         allow_destructive: config.allow_destructive,
         shutdown: Arc::new(AtomicBool::new(false)),
         unwinder: Arc::new(std::sync::Mutex::new(None)),
+        locals: Arc::new(std::sync::Mutex::new(None)),
     };
     let runner = ExecutorRunner {
         session: std::sync::Mutex::new(session),
@@ -134,6 +141,7 @@ pub fn spawn(session: SessionManager, config: ExecutorConfig) -> ExecutorHandle 
         flash_timeout: config.flash_timeout,
         shutdown: handle.shutdown.clone(),
         unwinder: handle.unwinder.clone(),
+        locals: handle.locals.clone(),
     };
     std::thread::Builder::new()
         .name("cmsis-dap-web-executor".into())
@@ -151,6 +159,7 @@ struct ExecutorRunner {
     flash_timeout: Duration,
     shutdown: Arc<AtomicBool>,
     unwinder: Arc<std::sync::Mutex<Option<cmsis_dap_core::symbols::CfiUnwinder>>>,
+    locals: Arc<std::sync::Mutex<Option<cmsis_dap_core::symbols::DwarfLocals>>>,
 }
 
 impl ExecutorRunner {
@@ -596,10 +605,14 @@ impl ExecutorRunner {
                 Ok(serde_json::to_value(dump).map_err(|e| WebError::Internal(e.to_string()))?)
             }
             OperationKind::CallStack => {
-                if self.status.read().unwrap().target != TargetState::Halted {
-                    return Err(WebError::InvalidArgument(
-                        "call stack requires a halted target".into(),
-                    ));
+                {
+                    let backend = session.backend();
+                    let status = backend.get_core_status()?;
+                    if status.state != "halted" {
+                        return Err(WebError::InvalidArgument(
+                            "call stack requires a halted target".into(),
+                        ));
+                    }
                 }
                 let unw = self.unwinder.lock().unwrap();
                 let Some(unwinder) = unw.as_ref() else {
@@ -646,6 +659,66 @@ impl ExecutorRunner {
                 };
                 let frames = unwinder.unwind(&regs, &mut read32, 64);
                 Ok(json!({ "available": true, "frames": frames }))
+            }
+            OperationKind::Locals => {
+                {
+                    let backend = session.backend();
+                    let status = backend.get_core_status()?;
+                    if status.state != "halted" {
+                        return Err(WebError::InvalidArgument(
+                            "locals require a halted target".into(),
+                        ));
+                    }
+                }
+                let locals_guard = self.locals.lock().unwrap();
+                let Some(locals) = locals_guard.as_ref() else {
+                    return Ok(json!({ "available": false, "locals": [] }));
+                };
+                let unw = self.unwinder.lock().unwrap();
+                let backend = session.backend();
+                let mut regs: std::collections::HashMap<u16, u64> =
+                    std::collections::HashMap::new();
+                let names = [
+                    ("r0", 0u16),
+                    ("r1", 1),
+                    ("r2", 2),
+                    ("r3", 3),
+                    ("r4", 4),
+                    ("r5", 5),
+                    ("r6", 6),
+                    ("r7", 7),
+                    ("r8", 8),
+                    ("r9", 9),
+                    ("r10", 10),
+                    ("r11", 11),
+                    ("r12", 12),
+                    ("sp", 13),
+                    ("lr", 14),
+                    ("pc", 15),
+                ];
+                for (name, num) in names {
+                    if let Ok(v) = backend.read_core_register(&CoreRegister::Name(name.into())) {
+                        regs.insert(num, v);
+                    }
+                }
+                let pc = regs.get(&15).copied().unwrap_or(0);
+                let cfa = unw.as_ref().and_then(|u| u.cfa_for(pc, &regs));
+                let mut read = |addr: u64, buf: &mut [u8]| -> Result<(), String> {
+                    let values = backend
+                        .read_memory(addr, AccessWidth::U8, buf.len() as u32)
+                        .map_err(|e| e.to_string())?;
+                    for (i, v) in values.iter().enumerate() {
+                        if i < buf.len() {
+                            buf[i] = *v as u8;
+                        }
+                    }
+                    if values.len() < buf.len() {
+                        return Err("short memory read".into());
+                    }
+                    Ok(())
+                };
+                let local_values = locals.locals_at(pc & !1, &regs, cfa, &mut read);
+                Ok(json!({ "available": true, "cfa": cfa, "locals": local_values }))
             }
             OperationKind::DumpFault => {
                 let backend = session.backend();

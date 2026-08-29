@@ -126,7 +126,18 @@ export const api = {
     request<{ address: { region?: string | null; symbol?: unknown; peripheral?: string | null } }>("GET", `/address/${address}`),
   callstack: () =>
     request<{ available: boolean; frames: UnwindFrame[] }>("GET", "/callstack"),
+  locals: () =>
+    request<{ available: boolean; cfa?: number | null; locals: LocalValue[] }>("GET", "/locals"),
 };
+
+export interface LocalValue {
+  name: string;
+  type_name: string;
+  kind: string;
+  value: string;
+  address?: number | null;
+  children: LocalValue[];
+}
 
 export interface UnwindFrame {
   pc: number;

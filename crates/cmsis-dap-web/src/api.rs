@@ -61,6 +61,7 @@ pub fn router() -> Router<SharedState> {
         .route("/api/disassembly", get(disassembly))
         .route("/api/address/{address}", get(address_describe))
         .route("/api/callstack", get(callstack))
+        .route("/api/locals", get(locals_endpoint))
         .route("/api/svd", post(svd_upload))
         .route("/api/peripherals", get(peripherals))
         .route("/api/peripherals/{name}", get(peripheral_get))
@@ -584,6 +585,10 @@ async fn elf_upload(State(state): State<SharedState>, mut multipart: Multipart) 
         .ok()
         .flatten();
     state.executor.set_unwinder(unwinder);
+    let locals = cmsis_dap_core::symbols::DwarfLocals::load(&path)
+        .ok()
+        .flatten();
+    state.executor.set_locals(locals);
     api_result(Ok(json!({
         "file_id": id,
         "symbols": state.symbols.read().unwrap().as_ref().map(|d| d.len()).unwrap_or(0),
@@ -1237,6 +1242,16 @@ async fn disassembly(
     api_result(Ok(
         json!({ "address": q.address, "instructions": instructions }),
     ))
+}
+
+async fn locals_endpoint(State(state): State<SharedState>) -> Response {
+    api_result(
+        state
+            .executor
+            .clone()
+            .call_async(OperationKind::Locals, json!({}))
+            .await,
+    )
 }
 
 async fn callstack(State(state): State<SharedState>) -> Response {

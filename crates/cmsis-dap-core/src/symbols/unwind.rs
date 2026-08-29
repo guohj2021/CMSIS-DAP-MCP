@@ -138,6 +138,15 @@ impl CfiUnwinder {
         frames
     }
 
+    /// Compute the canonical frame address (CFA) for `pc` from the current
+    /// registers, used by DWARF locals evaluation (`DW_OP_call_frame_cfa`).
+    pub fn cfa_for(&self, pc: u64, regs: &HashMap<u16, u64>) -> Option<u64> {
+        let row = self.cfi.row_for_address(pc & !1)?;
+        let (reg, off) = row.cfa?;
+        let base = regs.get(&reg).copied().unwrap_or(0);
+        Some(base.wrapping_add_signed(off))
+    }
+
     fn make_frame(&self, pc: u64, sp: u64) -> UnwindFrame {
         let (function, source) = match self.debug_info.as_ref().and_then(|di| di.find_location(pc))
         {

@@ -110,6 +110,7 @@ pub enum OperationKind {
     Flash,
     Snapshot,
     CallStack,
+    Locals,
     Status,
     DumpFault,
 }
