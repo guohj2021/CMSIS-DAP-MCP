@@ -1,12 +1,13 @@
 //! REST API (v5 §11): Query / Command over the executor.
 
 use crate::executor::ExecutorHandle;
-use crate::op::{OperationKind, WebError};
+use crate::op::{OperationKind, ServerEvent, WebError};
 use crate::state::SharedState;
 use axum::extract::{Multipart, Path, Query, State};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
+use capstone::prelude::*;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
@@ -35,6 +36,15 @@ pub fn router() -> Router<SharedState> {
         .route("/api/watch", get(watch_list).post(watch_add))
         .route("/api/watch/{id}", axum::routing::delete(watch_delete).patch(watch_patch))
         .route("/api/watch/refresh", post(watch_refresh))
+        .route("/api/peripherals/monitor", get(monitor_list).post(monitor_add))
+        .route("/api/peripherals/monitor/{id}", axum::routing::delete(monitor_delete))
+        .route("/api/rtt/start", post(rtt_start))
+        .route("/api/rtt/stop", post(rtt_stop))
+        .route("/api/rtt/channels", get(rtt_channels))
+        .route("/api/evr/start", post(evr_start))
+        .route("/api/evr/stop", post(evr_stop))
+        .route("/api/disassembly", get(disassembly))
+        .route("/api/address/{address}", get(address_describe))
         .route("/api/svd", post(svd_upload))
         .route("/api/peripherals", get(peripherals))
         .route("/api/peripherals/{name}", get(peripheral_get))
@@ -777,6 +787,268 @@ async fn peripheral_decode(State(state): State<SharedState>, Path(name): Path<St
         Ok(decoded) => api_result(Ok(json!({ "decoded": decoded }))),
         Err(e) => api_result(Err(WebError::InvalidArgument(e.to_string()))),
     }
+}
+// ---------------------------------------------------------------------------
+// Peripheral monitor + RTT / EVR (P5)
+// ---------------------------------------------------------------------------
+
+async fn monitor_list(State(state): State<SharedState>) -> Response {
+    let items = state.monitors.lock().unwrap().clone();
+    api_result(Ok(json!({ "items": items })))
+}
+
+#[derive(Deserialize)]
+struct MonitorAddBody {
+    peripheral: String,
+    register: String,
+    rate_ms: Option<u32>,
+    safety: Option<String>,
+}
+async fn monitor_add(State(state): State<SharedState>, Json(body): Json<MonitorAddBody>) -> Response {
+    let svd = state.svd.read().unwrap().clone();
+    let Some(svd) = svd else {
+        return api_result(Err(WebError::InvalidArgument("no SVD loaded".into())));
+    };
+    let reg = match svd.get_register(&body.peripheral, &body.register) {
+        Some(r) => r,
+        None => {
+            return api_result(Err(WebError::InvalidArgument(format!(
+                "register {}.{} not found",
+                body.peripheral, body.register
+            ))))
+        }
+    };
+    // Safety: write-only registers are NotRecommended; everything else starts Unknown.
+    let safety = match body.safety.as_deref() {
+        Some("safe") => crate::monitor::MonitorSafety::Safe,
+        Some("user_confirmed") => crate::monitor::MonitorSafety::UserConfirmed,
+        Some("not_recommended") => crate::monitor::MonitorSafety::NotRecommended,
+        _ => {
+            if reg.access.as_deref() == Some("write-only") {
+                crate::monitor::MonitorSafety::NotRecommended
+            } else {
+                crate::monitor::MonitorSafety::Unknown
+            }
+        }
+    };
+    if safety == crate::monitor::MonitorSafety::NotRecommended {
+        return api_result(Err(WebError::InvalidArgument(
+            "register is write-only; periodic refresh is not recommended".into(),
+        )));
+    }
+    let mut items = state.monitors.lock().unwrap();
+    let id = items.iter().map(|m| m.id).max().unwrap_or(0) + 1;
+    items.push(crate::monitor::MonitorItem {
+        id,
+        peripheral: body.peripheral,
+        register: body.register,
+        rate_ms: body.rate_ms.unwrap_or(500).max(50),
+        safety,
+    });
+    api_result(Ok(json!({ "id": id, "safety": safety })))
+}
+
+async fn monitor_delete(State(state): State<SharedState>, Path(id): Path<u64>) -> Response {
+    state.monitors.lock().unwrap().retain(|m| m.id != id);
+    api_result(Ok(json!({ "deleted": true })))
+}
+
+#[derive(Deserialize)]
+struct RttStartBody {
+    address: Option<u64>,
+}
+async fn rtt_start(State(state): State<SharedState>, Json(body): Json<RttStartBody>) -> Response {
+    let ex = state.executor.clone();
+    let result = ex
+        .call_async(OperationKind::RttAttach, json!({ "address": body.address }))
+        .await;
+    let channels = match result {
+        Ok(v) => v.get("channels").cloned().unwrap_or(json!([])),
+        Err(e) => return api_result(Err(e)),
+    };
+    // Start the RTT poll task.
+    state.rtt_stop.store(false, std::sync::atomic::Ordering::SeqCst);
+    let ex2 = state.executor.clone();
+    let events = state.events.clone();
+    let stop = state.rtt_stop.clone();
+    let handle = tokio::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_millis(20));
+        loop {
+            tick.tick().await;
+            if stop.load(std::sync::atomic::Ordering::SeqCst) {
+                break;
+            }
+            let Ok(v) = ex2.call_async(OperationKind::RttRead, json!({ "channels": [], "max_bytes": 4096 })).await else {
+                continue;
+            };
+            let Some(arr) = v.as_array() else { continue };
+            for item in arr {
+                let channel = item.get("channel").and_then(|c| c.as_u64()).unwrap_or(0) as usize;
+                let name = item.get("name").and_then(|n| n.as_str()).map(String::from);
+                let data = item.get("data").and_then(|d| d.as_array()).map(|a| a.iter().filter_map(|b| b.as_u64()).map(|b| b as u8).collect::<Vec<u8>>()).unwrap_or_default();
+                if data.is_empty() {
+                    continue;
+                }
+                let encoded = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &data);
+                let _ = events.send(ServerEvent::RttOutput { channel, name, data: encoded });
+            }
+        }
+    });
+    *state.rtt_task.lock().unwrap() = Some(handle);
+    api_result(Ok(json!({ "channels": channels })))
+}
+
+async fn rtt_stop(State(state): State<SharedState>) -> Response {
+    state.rtt_stop.store(true, std::sync::atomic::Ordering::SeqCst);
+    let _ = state
+        .executor
+        .call_async(OperationKind::RttDetach, json!({}))
+        .await;
+    api_result(Ok(json!({ "stopped": true })))
+}
+
+async fn rtt_channels(State(_state): State<SharedState>) -> Response {
+    api_result(Ok(json!({ "channels": [] })))
+}
+
+#[derive(Deserialize)]
+struct EvrStartBody {
+    info_address: u64,
+}
+async fn evr_start(State(state): State<SharedState>, Json(body): Json<EvrStartBody>) -> Response {
+    let ex = state.executor.clone();
+    let result = ex
+        .call_async(OperationKind::EvrAttach, json!({ "info_address": body.info_address }))
+        .await;
+    match result {
+        Ok(status) => {
+            state.evr_stop.store(false, std::sync::atomic::Ordering::SeqCst);
+            let ex2 = state.executor.clone();
+            let events = state.events.clone();
+            let stop = state.evr_stop.clone();
+            let handle = tokio::spawn(async move {
+                let mut tick = tokio::time::interval(std::time::Duration::from_millis(50));
+                loop {
+                    tick.tick().await;
+                    if stop.load(std::sync::atomic::Ordering::SeqCst) {
+                        break;
+                    }
+                    let Ok(v) = ex2.call_async(OperationKind::EvrRead, json!({})).await else {
+                        continue;
+                    };
+                    let Some(arr) = v.as_array() else { continue };
+                    for ev in arr {
+                        let _ = events.send(ServerEvent::EvrEventArrived { payload: ev.clone() });
+                    }
+                }
+            });
+            *state.evr_task.lock().unwrap() = Some(handle);
+            api_result(Ok(json!({ "status": status })))
+        }
+        Err(e) => api_result(Err(e)),
+    }
+}
+
+async fn evr_stop(State(state): State<SharedState>) -> Response {
+    state.evr_stop.store(true, std::sync::atomic::Ordering::SeqCst);
+    let _ = state
+        .executor
+        .call_async(OperationKind::EvrDetach, json!({}))
+        .await;
+    api_result(Ok(json!({ "stopped": true })))
+}
+// ---------------------------------------------------------------------------
+// Disassembly + address describe (P5)
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+struct DisassemblyQuery {
+    address: u64,
+    count: Option<usize>,
+}
+async fn disassembly(State(state): State<SharedState>, Query(q): Query<DisassemblyQuery>) -> Response {
+    let count = q.count.unwrap_or(16).clamp(1, 128);
+    let bytes = match state
+        .executor
+        .clone()
+        .call_async(
+            OperationKind::MemoryRead,
+            json!({ "address": q.address, "width": "u8", "count": count * 4 }),
+        )
+        .await
+    {
+        Ok(v) => v.get("bytes").and_then(|b| b.as_array()).map(|a| a.iter().filter_map(|x| x.as_u64()).map(|x| x as u8).collect::<Vec<u8>>()).unwrap_or_default(),
+        Err(e) => return api_result(Err(e)),
+    };
+    let cs = match capstone::Capstone::new()
+        .arm()
+        .mode(capstone::arch::arm::ArchMode::Thumb)
+        .extra_mode(std::iter::once(capstone::arch::arm::ArchExtraMode::MClass))
+        .detail(true)
+        .build()
+    {
+        Ok(cs) => cs,
+        Err(e) => return api_result(Err(WebError::Internal(format!("capstone init: {e}")))),
+    };
+    let symbols = state.symbols.read().unwrap().clone();
+    let disassembled = match cs.disasm_all(&bytes, q.address) {
+        Ok(d) => d,
+        Err(e) => return api_result(Err(WebError::Internal(e.to_string()))),
+    };
+    let mut instructions = Vec::new();
+    for insn in disassembled.iter() {
+        if instructions.len() >= count {
+            break;
+        }
+        let addr = insn.address();
+        let sym = symbols
+            .as_ref()
+            .and_then(|db| db.resolve_address(addr))
+            .map(|(s, off)| format!("{} + 0x{:x}", s.name, off));
+        instructions.push(json!({
+            "address": addr,
+            "bytes": insn.bytes().iter().map(|b| format!("{b:02X}")).collect::<Vec<_>>().join(" "),
+            "mnemonic": insn.mnemonic().unwrap_or("?"),
+            "op_str": insn.op_str().unwrap_or(""),
+            "symbol": sym,
+            "pc": addr,
+        }));
+    }
+    api_result(Ok(json!({ "address": q.address, "instructions": instructions })))
+}
+
+async fn address_describe(State(state): State<SharedState>, Path(address): Path<u64>) -> Response {
+    let symbols = state.symbols.read().unwrap().clone();
+    let svd = state.svd.read().unwrap().clone();
+    let regions = match state
+        .executor
+        .call_async(OperationKind::TargetInfo, json!({}))
+        .await
+    {
+        Ok(v) => v
+            .get("target")
+            .and_then(|t| t.get("memory_regions"))
+            .and_then(|r| r.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|r| {
+                        let name = r.get("name").and_then(|n| n.as_str())?.to_string();
+                        let start = r.get("start").and_then(|s| s.as_u64())?;
+                        let end = r.get("end").and_then(|e| e.as_u64())?;
+                        Some((name, start, end))
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default(),
+        Err(_) => Vec::new(),
+    };
+    let info = crate::resolver::describe_address(
+        symbols.as_ref().unwrap_or(&cmsis_dap_core::symbols::SymbolDatabase::new()),
+        svd.as_ref(),
+        &regions,
+        address,
+    );
+    api_result(Ok(json!({ "address": info })))
 }
 // ---------------------------------------------------------------------------
 // Response helpers

@@ -522,8 +522,46 @@ impl ExecutorRunner {
                 backend.write_memory(address, AccessWidth::U32, &[value])?;
                 Ok(json!({ "written": true }))
             }
-            OperationKind::RttRead | OperationKind::EvrRead => {
-                Ok(json!({ "note": "monitor mode not started" }))
+            OperationKind::RttAttach => {
+                let backend = session.backend();
+                let address = p.get("address").and_then(|v| v.as_u64());
+                let channels = backend.attach_rtt(address)?;
+                Ok(json!({ "channels": channels }))
+            }
+            OperationKind::RttRead => {
+                let backend = session.backend();
+                let channels: Vec<usize> = p
+                    .get("channels")
+                    .and_then(|v| v.as_array())
+                    .map(|a| a.iter().filter_map(|x| x.as_u64()).map(|x| x as usize).collect())
+                    .unwrap_or_default();
+                let max_bytes = p.get("max_bytes").and_then(|v| v.as_u64()).unwrap_or(4096) as usize;
+                let data = backend.read_rtt(&channels, max_bytes)?;
+                Ok(serde_json::to_value(data)
+                    .map_err(|e| WebError::Internal(e.to_string()))?)
+            }
+            OperationKind::RttDetach => {
+                let backend = session.backend();
+                backend.detach_rtt()?;
+                Ok(json!({ "detached": true }))
+            }
+            OperationKind::EvrAttach => {
+                let backend = session.backend();
+                let info_address = param_u64(p, "info_address")?;
+                let status = backend.attach_evr(info_address)?;
+                Ok(serde_json::to_value(status)
+                    .map_err(|e| WebError::Internal(e.to_string()))?)
+            }
+            OperationKind::EvrRead => {
+                let backend = session.backend();
+                let events = backend.read_evr()?;
+                Ok(serde_json::to_value(events)
+                    .map_err(|e| WebError::Internal(e.to_string()))?)
+            }
+            OperationKind::EvrDetach => {
+                let backend = session.backend();
+                backend.detach_evr()?;
+                Ok(json!({ "detached": true }))
             }
             OperationKind::Snapshot => {
                 let backend = session.backend();
@@ -640,13 +678,24 @@ impl ExecutorRunner {
     }
 }
 
+/// Decide whether a backend error means the probe disappeared (USB-level).
+///
+/// Only genuine probe/USB failures invalidate the session. Expected target
+/// errors (e.g. "RTT control block not found") must NOT be treated as probe
+/// loss — they are normal runtime errors.
 fn is_probe_error(e: &WebError) -> bool {
     match e {
         WebError::ProbeLost(_) => true,
-        WebError::Mcp(m) => matches!(
-            m.code,
-            ErrorCode::ProtocolError | ErrorCode::ProbeNotFound | ErrorCode::ConnectFailed
-        ),
+        WebError::Mcp(m) => match m.code {
+            ErrorCode::ProbeNotFound | ErrorCode::ConnectFailed => true,
+            ErrorCode::ProtocolError => {
+                let msg = m.message.to_ascii_lowercase();
+                msg.contains("debug probe")
+                    || msg.contains("command id in response")
+                    || msg.contains("cmsis-dap command")
+            }
+            _ => false,
+        },
         _ => false,
     }
 }

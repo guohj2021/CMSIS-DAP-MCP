@@ -25,6 +25,15 @@ pub struct AppState {
     pub svd: Arc<std::sync::RwLock<Option<cmsis_dap_core::svd::SvdDatabase>>>,
     /// Watch items.
     pub watch: Arc<std::sync::Mutex<Vec<crate::watch::WatchItem>>>,
+    /// Peripheral monitor items.
+    pub monitors: Arc<std::sync::Mutex<Vec<crate::monitor::MonitorItem>>>,
+    /// Stop flags for the live-watch / peripheral schedulers.
+    pub scheduler_stop: Arc<std::sync::atomic::AtomicBool>,
+    /// Active RTT / EVR monitor task handles (None when stopped).
+    pub rtt_task: Arc<std::sync::Mutex<Option<tokio::task::JoinHandle<()>>>>,
+    pub evr_task: Arc<std::sync::Mutex<Option<tokio::task::JoinHandle<()>>>>,
+    pub rtt_stop: Arc<std::sync::atomic::AtomicBool>,
+    pub evr_stop: Arc<std::sync::atomic::AtomicBool>,
 }
 
 pub type SharedState = Arc<AppState>;

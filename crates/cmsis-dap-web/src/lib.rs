@@ -6,7 +6,9 @@ pub mod api;
 pub mod assets;
 pub mod executor;
 pub mod flash;
+pub mod monitor;
 pub mod op;
+pub mod schedulers;
 pub mod resolver;
 pub mod session;
 pub mod watch;
@@ -114,9 +116,15 @@ pub fn serve(backend: Box<dyn Backend>, options: WebServerOptions) -> Result<(),
         symbols: Arc::new(std::sync::RwLock::new(None)),
         svd: Arc::new(std::sync::RwLock::new(None)),
         watch: Arc::new(std::sync::Mutex::new(Vec::new())),
+        monitors: Arc::new(std::sync::Mutex::new(Vec::new())),
+        scheduler_stop: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        rtt_task: Arc::new(std::sync::Mutex::new(None)),
+        evr_task: Arc::new(std::sync::Mutex::new(None)),
+        rtt_stop: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        evr_stop: Arc::new(std::sync::atomic::AtomicBool::new(false)),
     });
 
-    let router = build_router(state);
+    let router = build_router(state.clone());
     let bind = format!("{}:{}", options.host, options.port);
     let listener = runtime
         .block_on(tokio::net::TcpListener::bind(&bind))
@@ -125,6 +133,11 @@ pub fn serve(backend: Box<dyn Backend>, options: WebServerOptions) -> Result<(),
     println!("CMSIS-DAP Web Debug listening on http://{}:{actual_port}", options.host);
 
     runtime.block_on(async move {
+        // Start live debug schedulers (Live Watch + Peripheral periodic refresh).
+        let stop = state.scheduler_stop.clone();
+        crate::schedulers::spawn_live_watch(state.clone(), stop);
+        crate::schedulers::spawn_peripheral_monitor(state.clone(), state.scheduler_stop.clone());
+
         let server = axum::serve(listener, router);
         tokio::select! {
             result = server => {

@@ -32,6 +32,12 @@ fn app() -> (axum::Router, SharedState) {
         symbols: Arc::new(std::sync::RwLock::new(None)),
         svd: Arc::new(std::sync::RwLock::new(None)),
         watch: Arc::new(std::sync::Mutex::new(Vec::new())),
+        monitors: Arc::new(std::sync::Mutex::new(Vec::new())),
+        scheduler_stop: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        rtt_task: Arc::new(std::sync::Mutex::new(None)),
+        evr_task: Arc::new(std::sync::Mutex::new(None)),
+        rtt_stop: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        evr_stop: Arc::new(std::sync::atomic::AtomicBool::new(false)),
     });
     (cmsis_dap_web::build_router(state.clone()), state)
 }

@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, WatchItem } from "../api/client";
 import { useDebugStore } from "../store/debugStore";
+import { onWsEvent } from "../ws/client";
 
 export function WatchPanel() {
   const [items, setItems] = useState<(WatchItem & { value?: number | null })[]>([]);
@@ -20,7 +21,26 @@ export function WatchPanel() {
 
   useEffect(() => {
     refresh();
+    const off = onWsEvent("live_watch_value_changed", (data) => {
+      const d = data as { items: { id: number; value?: number | null }[] };
+      setItems((prev) =>
+        prev.map((w) => {
+          const hit = d.items.find((x) => x.id === w.id);
+          return hit ? { ...w, value: hit.value ?? undefined } : w;
+        })
+      );
+    });
+    return off;
   }, [refresh]);
+
+  async function setRate(id: number, rate_ms: number) {
+    try {
+      await api.watchPatch(id, { rate_ms });
+      setItems((prev) => prev.map((w) => (w.id === id ? { ...w, rate_ms } : w)));
+    } catch {
+      /* ignore */
+    }
+  }
 
   async function onDrop(e: React.DragEvent) {
     e.preventDefault();
@@ -58,6 +78,18 @@ export function WatchPanel() {
         {items.map((w) => (
           <div key={w.id} className="flex items-center gap-2 rounded px-1 py-0.5 hover:bg-zinc-800/50">
             <span className="flex-1 text-zinc-300">{label(w)}</span>
+            <select
+              className="rounded bg-zinc-800 px-1 py-0.5 text-zinc-400 outline-none"
+              value={w.rate_ms}
+              onChange={(e) => setRate(w.id, Number(e.target.value))}
+              title="刷新周期 (Live Watch)"
+            >
+              <option value={50}>50ms</option>
+              <option value={100}>100ms</option>
+              <option value={200}>200ms</option>
+              <option value={500}>500ms</option>
+              <option value={1000}>1s</option>
+            </select>
             <span className="font-mono text-amber-300">
               {w.value !== undefined && w.value !== null ? `0x${w.value.toString(16)}` : "—"}
             </span>

@@ -101,8 +101,12 @@ pub enum OperationKind {
     WatchRead,
     PeripheralRead,
     PeripheralWrite,
+    RttAttach,
     RttRead,
+    RttDetach,
+    EvrAttach,
     EvrRead,
+    EvrDetach,
     Flash,
     Snapshot,
     Status,
@@ -334,6 +338,23 @@ pub enum ServerEvent {
         #[serde(skip_serializing_if = "Option::is_none")]
         message: Option<String>,
     },
+    LiveWatchValueChanged {
+        items: Vec<serde_json::Value>,
+    },
+    PeripheralValueChanged {
+        items: Vec<serde_json::Value>,
+    },
+    #[serde(rename_all = "snake_case")]
+    RttOutput {
+        channel: usize,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
+        /// Base64-encoded bytes.
+        data: String,
+    },
+    EvrEventArrived {
+        payload: serde_json::Value,
+    },
     Console {
         level: String,
         text: String,
@@ -349,6 +370,10 @@ impl ServerEvent {
             ServerEvent::Error { .. } => "error",
             ServerEvent::FlashProgress { .. } => "flash_progress",
             ServerEvent::FlashComplete { .. } => "flash_complete",
+            ServerEvent::LiveWatchValueChanged { .. } => "live_watch_value_changed",
+            ServerEvent::PeripheralValueChanged { .. } => "peripheral_value_changed",
+            ServerEvent::RttOutput { .. } => "rtt_output",
+            ServerEvent::EvrEventArrived { .. } => "evr_event",
             ServerEvent::Console { .. } => "console",
         }
     }

@@ -8,6 +8,8 @@ import { SymbolsPanel } from "../panels/SymbolsPanel";
 import { WatchPanel } from "../panels/WatchPanel";
 import { PeripheralPanel } from "../panels/PeripheralPanel";
 import { BreakpointsPanel } from "../panels/BreakpointsPanel";
+import { RttPanel } from "../panels/RttPanel";
+import { EvrPanel } from "../panels/EvrPanel";
 import { DisassemblyPanel } from "../panels/DisassemblyPanel";
 
 const components: Record<string, React.FC<IDockviewPanelProps<{ title?: string }>>> = {
@@ -18,6 +20,8 @@ const components: Record<string, React.FC<IDockviewPanelProps<{ title?: string }
   watch: () => <WatchPanel />,
   peripheral: () => <PeripheralPanel />,
   breakpoints: () => <BreakpointsPanel />,
+  rtt: () => <RttPanel />,
+  evr: () => <EvrPanel />,
   disassembly: () => <DisassemblyPanel />,
 };
 
@@ -86,6 +90,18 @@ export function DebugWorkspace() {
         component: "breakpoints",
         title: "断点",
         position: { referencePanel: "peripheral", direction: "right" },
+      });
+      api.addPanel({
+        id: "rtt",
+        component: "rtt",
+        title: "RTT",
+        position: { referencePanel: "breakpoints", direction: "right" },
+      });
+      api.addPanel({
+        id: "evr",
+        component: "evr",
+        title: "EVR",
+        position: { referencePanel: "rtt", direction: "right" },
       });
       api.addPanel({
         id: "console",

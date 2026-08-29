@@ -80,6 +80,8 @@ export const api = {
     request<{ id: number }>("POST", "/watch", { target }),
   watchList: () => request<{ items: WatchItem[] }>("GET", "/watch"),
   watchDelete: (id: number) => request<{ deleted: boolean }>("DELETE", `/watch/${id}`),
+  watchPatch: (id: number, body: { enabled?: boolean; rate_ms?: number }) =>
+    request<{ updated: boolean }>("PATCH", `/watch/${id}`, body),
   watchRefresh: () =>
     request<{ items: { id: number; value?: number | null }[] }>("POST", "/watch/refresh"),
   svdUpload: (file: File) => {
@@ -109,7 +111,37 @@ export const api = {
       file_id,
       ...opts,
     }),
+  // P5: monitors / RTT / EVR / disassembly
+  monitorList: () => request<{ items: MonitorItem[] }>("GET", "/peripherals/monitor"),
+  monitorAdd: (p: { peripheral: string; register: string; rate_ms?: number }) =>
+    request<{ id: number; safety: string }>("POST", "/peripherals/monitor", p),
+  monitorDelete: (id: number) => request<{ deleted: boolean }>("DELETE", `/peripherals/monitor/${id}`),
+  rttStart: (address?: number) => request<{ channels: unknown[] }>("POST", "/rtt/start", { address }),
+  rttStop: () => request<{ stopped: boolean }>("POST", "/rtt/stop"),
+  evrStart: (info_address: number) => request<{ status: unknown }>("POST", "/evr/start", { info_address }),
+  evrStop: () => request<{ stopped: boolean }>("POST", "/evr/stop"),
+  disassembly: (address: number, count?: number) =>
+    request<{ address: number; instructions: DisasmInsn[] }>("GET", `/disassembly?address=${address}&count=${count ?? 16}`),
+  addressDescribe: (address: number) =>
+    request<{ address: { region?: string | null; symbol?: unknown; peripheral?: string | null } }>("GET", `/address/${address}`),
 };
+
+export interface MonitorItem {
+  id: number;
+  peripheral: string;
+  register: string;
+  rate_ms: number;
+  safety: string;
+}
+
+export interface DisasmInsn {
+  address: number;
+  bytes: string;
+  mnemonic: string;
+  op_str: string;
+  symbol?: string | null;
+  pc: number;
+}
 
 async function upload<T>(path: string, fd: FormData): Promise<T> {
   const res = await fetch(`/api${path}`, { method: "POST", body: fd });

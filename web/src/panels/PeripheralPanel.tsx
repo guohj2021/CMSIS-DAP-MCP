@@ -1,14 +1,28 @@
 // Peripheral explorer: upload SVD, tree, read/write/decode registers.
-import { useState } from "react";
-import { api, DecodedRegister, PeripheralInfo, PeripheralSummary } from "../api/client";
+import { useEffect, useState } from "react";
+import { api, DecodedRegister, MonitorItem, PeripheralInfo, PeripheralSummary } from "../api/client";
 import { useDebugStore } from "../store/debugStore";
+import { onWsEvent } from "../ws/client";
 
 export function PeripheralPanel() {
   const [peripherals, setPeripherals] = useState<PeripheralSummary[]>([]);
   const [selected, setSelected] = useState<PeripheralInfo | null>(null);
   const [regValue, setRegValue] = useState<Record<string, string>>({});
   const [decoded, setDecoded] = useState<DecodedRegister | null>(null);
+  const [monitors, setMonitors] = useState<MonitorItem[]>([]);
+  const [monitorValues, setMonitorValues] = useState<Record<number, number | null>>({});
   const log = useDebugStore((s) => s.log);
+
+  useEffect(() => {
+    api.monitorList().then((r) => setMonitors(r.items)).catch(() => {});
+    const off = onWsEvent("peripheral_value_changed", (data) => {
+      const d = data as { items: { id: number; value?: number | null }[] };
+      const next: Record<number, number | null> = {};
+      for (const it of d.items) next[it.id] = it.value ?? null;
+      setMonitorValues((m) => ({ ...m, ...next }));
+    });
+    return off;
+  }, []);
 
   async function upload(file: File) {
     try {
@@ -97,6 +111,22 @@ export function PeripheralPanel() {
                 <button className="rounded bg-zinc-700 px-2 py-0.5 hover:bg-zinc-600" onClick={() => read(r.name)}>
                   读
                 </button>
+                <button
+                  className="rounded bg-emerald-900 px-2 py-0.5 text-emerald-200 hover:bg-emerald-800"
+                  onClick={async () => {
+                    try {
+                      const pname = selected?.name ?? "";
+                      const m = await api.monitorAdd({ peripheral: pname, register: r.name, rate_ms: 500 });
+                      setMonitors((prev) => [...prev, { id: m.id, peripheral: pname, register: r.name, rate_ms: 500, safety: m.safety }]);
+                      log("info", `已监控 ${pname}.${r.name}`);
+                    } catch (e) {
+                      log("error", e instanceof Error ? e.message : String(e));
+                    }
+                  }}
+
+                >
+                  监控
+                </button>
                 <button className="rounded bg-zinc-700 px-2 py-0.5 hover:bg-zinc-600" onClick={() => write(r.name, regValue[r.name] ?? "")}>
                   写
                 </button>
@@ -117,6 +147,31 @@ export function PeripheralPanel() {
           ))}
           {selected && selected.registers.length === 0 && (
             <div className="text-zinc-500">无寄存器</div>
+          )}
+          {monitors.length > 0 && (
+            <div className="mt-2 border-t border-zinc-800 pt-1">
+              <div className="mb-1 text-zinc-500">监控中（周期刷新）</div>
+              {monitors.map((m) => (
+                <div key={m.id} className="flex items-center gap-2">
+                  <span className="text-zinc-300">{m.peripheral}.{m.register}</span>
+                  <span className="font-mono text-emerald-300">
+                    {(() => {
+                      const v = monitorValues[m.id];
+                      return v !== undefined && v !== null ? `0x${v.toString(16)}` : "—";
+                    })()}
+                  </span>
+                  <button
+                    className="rounded bg-red-900 px-2 py-0.5 text-red-200 hover:bg-red-800"
+                    onClick={async () => {
+                      await api.monitorDelete(m.id);
+                      setMonitors((prev) => prev.filter((x) => x.id !== m.id));
+                    }}
+                  >
+                    停止
+                  </button>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </div>
