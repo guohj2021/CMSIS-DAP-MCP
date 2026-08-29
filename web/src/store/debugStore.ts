@@ -65,7 +65,12 @@ export const useDebugStore = create<DebugStore>((set) => ({
   wsConnected: false,
 
   setStatus: (s) =>
-    set((st) => ({ status: { ...st.status, ...s }, connected: s.server === "ready" })),
+    set((st) => ({
+      status: { ...st.status, ...s },
+      // Busy implies an established connection; only explicit disconnect or
+      // probe-lost flips this off (prevents busy/ready polling flicker).
+      connected: s.server === "ready" || s.server === "busy",
+    })),
   setWsConnected: (v) => set({ wsConnected: v }),
   setProbes: (p) => set({ probes: p }),
   setTarget: (t) => set({ target: t }),

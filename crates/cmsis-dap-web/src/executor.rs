@@ -217,7 +217,14 @@ impl ExecutorRunner {
         };
         let prev = active.replace(new_active);
         let mut status = self.status.read().unwrap().clone();
-        status.server = ServerState::Busy;
+        // Only exclusive / long-running operations (connect, disconnect,
+        // reset, flash, snapshot) mark the server Busy. Quick reads (status
+        // polling, register/memory refresh, live watch) must NOT toggle the
+        // connection state, otherwise the UI flickers every poll cycle.
+        let was_server = status.server;
+        if op.kind.exclusive() {
+            status.server = ServerState::Busy;
+        }
         status.operation = op.kind.operation_state();
         if op.kind == OperationKind::Reset {
             status.target = TargetState::Resetting;
@@ -231,8 +238,13 @@ impl ExecutorRunner {
         let result = self.dispatch(&op);
 
         // Restore state after the op. The target state set by the dispatch
-        // (e.g. Running/Halted after a reset) is preserved.
+        // (e.g. Running/Halted after a reset) is preserved; the server state
+        // comes from the dispatch for connect/disconnect, otherwise it is
+        // restored to what it was before the op.
         let mut status = self.status.read().unwrap().clone();
+        if !matches!(op.kind, OperationKind::Connect | OperationKind::Disconnect) {
+            status.server = was_server;
+        }
         status.operation = prev
             .as_ref()
             .map(|p| p.operation)
