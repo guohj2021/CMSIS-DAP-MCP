@@ -22,6 +22,9 @@ uuid = { version = "1.26.0", features = ["v4"] }
 tempfile.workspace = true
 base64 = "0.23.1"
 capstone = { version = "0.14.0", features = ["std"] }
+addr2line = "0.27.1"
+gimli = "0.34.0"
+object = { version = "0.40.0", features = ["read", "std"] }
 
 [dev-dependencies]
 http-body-util = "0.1.5"

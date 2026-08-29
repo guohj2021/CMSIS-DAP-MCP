@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+addr2line = "0.24"
 anyhow = "1"
 base64 = "0.22"
 gdbstub = "=0.7.8"

@@ -483,7 +483,10 @@ async fn elf_upload(State(state): State<SharedState>, mut multipart: Multipart) 
             });
         (f, v)
     };
-    *state.symbols.write().unwrap() = Some(db);
+    *state.symbols.write().unwrap() = Some(db.clone());
+    // Load DWARF source locations (best effort; None when absent).
+    let debug_info = cmsis_dap_core::symbols::DebugInfo::load(&path).ok().flatten();
+    *state.debug_info.lock().unwrap() = debug_info;
     api_result(Ok(json!({
         "file_id": id,
         "symbols": state.symbols.read().unwrap().as_ref().map(|d| d.len()).unwrap_or(0),
@@ -991,6 +994,7 @@ async fn disassembly(State(state): State<SharedState>, Query(q): Query<Disassemb
         Err(e) => return api_result(Err(WebError::Internal(format!("capstone init: {e}")))),
     };
     let symbols = state.symbols.read().unwrap().clone();
+    let debug_info = state.debug_info.lock().unwrap();
     let disassembled = match cs.disasm_all(&bytes, q.address) {
         Ok(d) => d,
         Err(e) => return api_result(Err(WebError::Internal(e.to_string()))),
@@ -1005,12 +1009,17 @@ async fn disassembly(State(state): State<SharedState>, Query(q): Query<Disassemb
             .as_ref()
             .and_then(|db| db.resolve_address(addr))
             .map(|(s, off)| format!("{} + 0x{:x}", s.name, off));
+        let source = debug_info
+            .as_ref()
+            .and_then(|di| di.find_location(addr))
+            .map(|sl| json!({ "file": sl.file, "line": sl.line }));
         instructions.push(json!({
             "address": addr,
             "bytes": insn.bytes().iter().map(|b| format!("{b:02X}")).collect::<Vec<_>>().join(" "),
             "mnemonic": insn.mnemonic().unwrap_or("?"),
             "op_str": insn.op_str().unwrap_or(""),
             "symbol": sym,
+            "source": source,
             "pc": addr,
         }));
     }
@@ -1042,13 +1051,30 @@ async fn address_describe(State(state): State<SharedState>, Path(address): Path<
             .unwrap_or_default(),
         Err(_) => Vec::new(),
     };
-    let info = crate::resolver::describe_address(
+    let mut info = crate::resolver::describe_address(
         symbols.as_ref().unwrap_or(&cmsis_dap_core::symbols::SymbolDatabase::new()),
         svd.as_ref(),
         &regions,
         address,
     );
-    api_result(Ok(json!({ "address": info })))
+    let source = state
+        .debug_info
+        .lock()
+        .unwrap()
+        .as_ref()
+        .and_then(|di| di.find_location(address));
+    if let Some(src) = source {
+        info.symbol = info.symbol.or_else(|| {
+            src.function.as_ref().map(|f| crate::resolver::SymbolAt {
+                name: f.clone(),
+                address,
+                offset: 0,
+            })
+        });
+        api_result(Ok(json!({ "address": info, "source_location": src })))
+    } else {
+        api_result(Ok(json!({ "address": info })))
+    }
 }
 // ---------------------------------------------------------------------------
 // Response helpers

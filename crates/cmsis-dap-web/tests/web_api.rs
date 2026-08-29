@@ -42,6 +42,7 @@ fn app_with_destructive(allow_destructive: bool) -> (axum::Router, SharedState) 
         uploads: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
         _upload_dir: upload_dir,
         symbols: Arc::new(std::sync::RwLock::new(None)),
+        debug_info: Arc::new(std::sync::Mutex::new(None)),
         svd: Arc::new(std::sync::RwLock::new(None)),
         watch: Arc::new(std::sync::Mutex::new(Vec::new())),
         monitors: Arc::new(std::sync::Mutex::new(Vec::new())),

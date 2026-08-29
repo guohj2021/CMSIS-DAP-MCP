@@ -140,6 +140,7 @@ export interface DisasmInsn {
   mnemonic: string;
   op_str: string;
   symbol?: string | null;
+  source?: { file: string; line: number } | null;
   pc: number;
 }
 

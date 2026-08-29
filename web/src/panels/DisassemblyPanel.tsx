@@ -74,6 +74,7 @@ export function DisassemblyPanel() {
               <span className="w-20 text-zinc-600">{i.bytes}</span>
               <span className="w-20 text-blue-300">{i.mnemonic}</span>
               <span className="flex-1">{i.op_str}</span>
+              {i.source && <span className="text-emerald-400">{i.source.file.split(/[\\/]/).pop()}:{i.source.line}</span>}
               {i.symbol && <span className="text-emerald-400">{i.symbol}</span>}
             </div>
           );

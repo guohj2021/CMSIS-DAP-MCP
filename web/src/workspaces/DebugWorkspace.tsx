@@ -10,6 +10,8 @@ import { PeripheralPanel } from "../panels/PeripheralPanel";
 import { BreakpointsPanel } from "../panels/BreakpointsPanel";
 import { RttPanel } from "../panels/RttPanel";
 import { EvrPanel } from "../panels/EvrPanel";
+import { CallStackPanel } from "../panels/CallStackPanel";
+import { LocalsPanel } from "../panels/LocalsPanel";
 import { DisassemblyPanel } from "../panels/DisassemblyPanel";
 
 const components: Record<string, React.FC<IDockviewPanelProps<{ title?: string }>>> = {
@@ -22,6 +24,8 @@ const components: Record<string, React.FC<IDockviewPanelProps<{ title?: string }
   breakpoints: () => <BreakpointsPanel />,
   rtt: () => <RttPanel />,
   evr: () => <EvrPanel />,
+  callstack: () => <CallStackPanel />,
+  locals: () => <LocalsPanel />,
   disassembly: () => <DisassemblyPanel />,
 };
 
@@ -102,6 +106,18 @@ export function DebugWorkspace() {
         component: "evr",
         title: "EVR",
         position: { referencePanel: "rtt", direction: "right" },
+      });
+      api.addPanel({
+        id: "callstack",
+        component: "callstack",
+        title: "调用栈",
+        position: { referencePanel: "evr", direction: "right" },
+      });
+      api.addPanel({
+        id: "locals",
+        component: "locals",
+        title: "Locals",
+        position: { referencePanel: "callstack", direction: "right" },
       });
       api.addPanel({
         id: "console",

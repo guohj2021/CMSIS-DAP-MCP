@@ -21,6 +21,8 @@ pub struct AppState {
     pub _upload_dir: tempfile::TempDir,
     /// Loaded ELF/AXF symbol database (V0.1: one active image).
     pub symbols: Arc<std::sync::RwLock<Option<cmsis_dap_core::symbols::SymbolDatabase>>>,
+    /// Loaded DWARF debug info (source locations); None when unavailable.
+    pub debug_info: Arc<std::sync::Mutex<Option<cmsis_dap_core::symbols::DebugInfo>>>,
     /// Loaded SVD database (one active).
     pub svd: Arc<std::sync::RwLock<Option<cmsis_dap_core::svd::SvdDatabase>>>,
     /// Watch items.
