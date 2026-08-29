@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 cmsis-dap-core = { path = "../cmsis-dap-core" }
+cmsis-dap-web = { path = "../cmsis-dap-web" }
 base64 = "0.22"
 chrono = "0.4"
 clap.workspace = true
@@ -25,3 +26,4 @@ windows-sys = { version = "0.61", features = ["Win32_System_Console", "Win32_Fou
 [dev-dependencies]
 object = { version = "0.39", default-features = false, features = ["read", "write", "std"] }
 tempfile.workspace = true
+
