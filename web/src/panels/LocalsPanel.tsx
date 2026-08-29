@@ -31,6 +31,7 @@ export function LocalsPanel() {
   const halted = useDebugStore((s) => s.status.target === "halted");
   const [locals, setLocals] = useState<LocalValue[]>([]);
   const [available, setAvailable] = useState<boolean | null>(null);
+  const [frame, setFrame] = useState<{ pc: number } | null>(null);
   const log = useDebugStore((s) => s.log);
 
   async function refresh() {
@@ -38,11 +39,34 @@ export function LocalsPanel() {
       const r = await api.locals();
       setAvailable(r.available);
       setLocals(r.locals);
+      setFrame(null);
     } catch (e) {
       setAvailable(false);
       log("error", `Locals 获取失败: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
+
+  async function loadFrame(pc: number, registers: Record<string, number>) {
+    try {
+      const r = await api.localsAt(pc, registers);
+      setAvailable(r.available);
+      setLocals(r.locals);
+      setFrame({ pc });
+    } catch (e) {
+      log("error", `帧 Locals 失败: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  // Frame selection from the Call Stack panel evaluates locals in that frame.
+  useEffect(() => {
+    const onFrame = (e: Event) => {
+      const d = (e as CustomEvent).detail as { pc?: number; registers?: Record<string, number> };
+      if (d?.pc && d.registers) loadFrame(d.pc, d.registers);
+    };
+    window.addEventListener("frame-selected", onFrame);
+    return () => window.removeEventListener("frame-selected", onFrame);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (halted) refresh();
@@ -52,10 +76,19 @@ export function LocalsPanel() {
   return (
     <div className="flex h-full flex-col text-xs">
       <div className="flex items-center justify-between border-b border-zinc-700 px-2 py-1">
-        <span className="text-zinc-400">局部变量 / 参数</span>
-        <button className="rounded bg-zinc-700 px-2 py-0.5 hover:bg-zinc-600 disabled:opacity-40" onClick={refresh} disabled={!halted}>
-          刷新
-        </button>
+        <span className="text-zinc-400">
+          局部变量 / 参数{frame ? `（帧 0x${frame.pc.toString(16)}）` : ""}
+        </span>
+        <div className="flex items-center gap-2">
+          {frame && (
+            <button className="rounded bg-zinc-700 px-2 py-0.5 hover:bg-zinc-600" onClick={refresh}>
+              当前帧
+            </button>
+          )}
+          <button className="rounded bg-zinc-700 px-2 py-0.5 hover:bg-zinc-600 disabled:opacity-40" onClick={refresh} disabled={!halted}>
+            刷新
+          </button>
+        </div>
       </div>
       <div className="flex-1 overflow-auto px-1 py-1">
         {available === false && (

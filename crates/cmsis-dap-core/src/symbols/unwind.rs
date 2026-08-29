@@ -13,7 +13,8 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::path::Path;
 
-/// One unwound call-stack frame.
+/// One unwound call-stack frame, including the recovered register set so the
+/// UI can evaluate locals / registers in that frame's context (v5 §9).
 #[derive(Debug, Clone, Serialize)]
 pub struct UnwindFrame {
     pub pc: u64,
@@ -22,6 +23,9 @@ pub struct UnwindFrame {
     pub function: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<SourceLocation>,
+    /// DWARF register number -> value recovered for this frame.
+    #[serde(default)]
+    pub registers: HashMap<u16, u64>,
 }
 
 /// A real DWARF CFI unwinder loaded from a firmware ELF/AXF.
@@ -82,7 +86,9 @@ impl CfiUnwinder {
         // Frame #0: the current PC where execution stopped.
         let pc0 = current.get(&15).copied().unwrap_or(0) & !1;
         if pc0 != 0 {
-            frames.push(self.make_frame(pc0, current.get(&13).copied().unwrap_or(0)));
+            let mut f = self.make_frame(pc0, current.get(&13).copied().unwrap_or(0));
+            f.registers = current.clone();
+            frames.push(f);
         }
 
         let mut guard = 0usize;
@@ -132,7 +138,9 @@ impl CfiUnwinder {
             }
             next.insert(15, new_pc);
             let sp = next.get(&13).copied().unwrap_or(cfa);
-            frames.push(self.make_frame(new_pc_aligned, sp));
+            let mut f = self.make_frame(new_pc_aligned, sp);
+            f.registers = next.clone();
+            frames.push(f);
             current = next;
         }
         frames
@@ -161,6 +169,7 @@ impl CfiUnwinder {
             sp,
             function,
             source,
+            registers: HashMap::new(),
         }
     }
 }

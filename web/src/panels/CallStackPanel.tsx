@@ -28,10 +28,13 @@ export function CallStackPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [halted]);
 
-  function selectFrame(i: number, pc: number) {
+  function selectFrame(i: number, pc: number, registers?: Record<string, number>) {
     setSelected(i);
-    // Frame selection drives the Disassembly panel (DebugContext §9).
+    // Frame selection drives Disassembly, Source and Locals (DebugContext §9).
     window.dispatchEvent(new CustomEvent("goto-address", { detail: { address: pc } }));
+    window.dispatchEvent(
+      new CustomEvent("frame-selected", { detail: { pc, registers: registers ?? {} } })
+    );
   }
 
   return (
@@ -55,7 +58,7 @@ export function CallStackPanel() {
           <div
             key={`${f.pc}-${i}`}
             className={`flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 hover:bg-zinc-800/60 ${selected === i ? "bg-zinc-800 text-blue-300" : "text-zinc-300"}`}
-            onClick={() => selectFrame(i, f.pc)}
+            onClick={() => selectFrame(i, f.pc, f.registers)}
           >
             <span className="w-6 text-zinc-600">#{i}</span>
             <span className="w-28 font-mono text-zinc-400">0x{f.pc.toString(16).toUpperCase().padStart(8, "0")}</span>

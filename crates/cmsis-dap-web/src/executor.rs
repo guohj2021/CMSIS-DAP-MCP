@@ -850,8 +850,6 @@ impl ExecutorRunner {
                 };
                 let unw = self.unwinder.lock().unwrap();
                 let backend = session.backend();
-                let mut regs: std::collections::HashMap<u16, u64> =
-                    std::collections::HashMap::new();
                 let names = [
                     ("r0", 0u16),
                     ("r1", 1),
@@ -870,12 +868,28 @@ impl ExecutorRunner {
                     ("lr", 14),
                     ("pc", 15),
                 ];
-                for (name, num) in names {
-                    if let Ok(v) = backend.read_core_register(&CoreRegister::Name(name.into())) {
-                        regs.insert(num, v);
+                // Frame context (v5 §9): when the UI selects a call-stack frame
+                // it sends that frame's recovered registers + pc so locals are
+                // evaluated in that frame, not the top frame.
+                let frame_regs: Option<Value> = p.get("registers").cloned();
+                let frame_pc = p.get("pc").and_then(|v| v.as_u64());
+                let mut regs: std::collections::HashMap<u16, u64> =
+                    std::collections::HashMap::new();
+                if let Some(fr) = frame_regs {
+                    for (name, num) in names {
+                        if let Some(v) = fr.get(name).and_then(|x| x.as_u64()) {
+                            regs.insert(num, v);
+                        }
+                    }
+                } else {
+                    for (name, num) in names {
+                        if let Ok(v) = backend.read_core_register(&CoreRegister::Name(name.into()))
+                        {
+                            regs.insert(num, v);
+                        }
                     }
                 }
-                let pc = regs.get(&15).copied().unwrap_or(0);
+                let pc = frame_pc.unwrap_or_else(|| regs.get(&15).copied().unwrap_or(0));
                 let cfa = unw.as_ref().and_then(|u| u.cfa_for(pc, &regs));
                 let mut read = |addr: u64, buf: &mut [u8]| -> Result<(), String> {
                     let values = backend

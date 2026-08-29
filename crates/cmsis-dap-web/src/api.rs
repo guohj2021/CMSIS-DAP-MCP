@@ -65,6 +65,7 @@ pub fn router() -> Router<SharedState> {
         .route("/api/address/{address}", get(address_describe))
         .route("/api/callstack", get(callstack))
         .route("/api/locals", get(locals_endpoint))
+        .route("/api/locals/at", post(locals_at))
         .route("/api/expression", post(expression_eval))
         .route("/api/swo/start", post(swo_start))
         .route("/api/swo/stop", post(swo_stop))
@@ -1475,6 +1476,24 @@ async fn swo_stop(State(state): State<SharedState>) -> Response {
             .executor
             .clone()
             .call_async(OperationKind::SwoStop, json!({}))
+            .await,
+    )
+}
+
+#[derive(Deserialize)]
+struct LocalsAtBody {
+    pc: u64,
+    registers: serde_json::Value,
+}
+async fn locals_at(State(state): State<SharedState>, Json(body): Json<LocalsAtBody>) -> Response {
+    api_result(
+        state
+            .executor
+            .clone()
+            .call_async(
+                OperationKind::Locals,
+                json!({ "pc": body.pc, "registers": body.registers }),
+            )
             .await,
     )
 }

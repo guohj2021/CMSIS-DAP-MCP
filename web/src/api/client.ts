@@ -131,6 +131,12 @@ export const api = {
     request<{ available: boolean; frames: UnwindFrame[] }>("GET", "/callstack"),
   locals: () =>
     request<{ available: boolean; cfa?: number | null; locals: LocalValue[] }>("GET", "/locals"),
+  localsAt: (pc: number, registers: Record<string, number>) =>
+    request<{ available: boolean; cfa?: number | null; locals: LocalValue[] }>(
+      "POST",
+      "/locals/at",
+      { pc, registers }
+    ),
   expression: (expr: string) =>
     request<{ result: { value: number; text: string } }>("POST", "/expression", { expr }),
   swoStart: (baud?: number, tpiuClk?: number) =>
@@ -164,6 +170,7 @@ export interface UnwindFrame {
   sp: number;
   function?: string | null;
   source?: { file: string; line: number; column?: number | null; function?: string | null } | null;
+  registers?: Record<string, number>;
 }
 
 export interface MonitorItem {
