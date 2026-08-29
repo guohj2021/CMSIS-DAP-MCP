@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Toolbar } from "./components/Toolbar";
 import { DebugWorkspace } from "./workspaces/DebugWorkspace";
 import { FlashWorkspace } from "./workspaces/FlashWorkspace";
+import { CommandPalette } from "./components/CommandPalette";
 import { connectWs, onWsEvent } from "./ws/client";
 import { refreshProbes, refreshRegisters, refreshFault } from "./debug/operations";
 import { useDebugStore, SessionStatus } from "./store/debugStore";
@@ -11,6 +12,27 @@ export default function App() {
   const target = useDebugStore((s) => s.status.target);
   const error = useDebugStore((s) => s.error);
   const [workspace, setWorkspace] = useState<"debug" | "flash">("debug");
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        setPaletteOpen(true);
+      }
+    };
+    const onWs = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { workspace?: string };
+      if (detail?.workspace === "flash") setWorkspace("flash");
+      if (detail?.workspace === "debug") setWorkspace("debug");
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("open-workspace", onWs);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("open-workspace", onWs);
+    };
+  }, []);
 
   useEffect(() => {
     connectWs();
@@ -96,6 +118,7 @@ export default function App() {
       <div className="flex-1 overflow-hidden">
         {workspace === "debug" ? <DebugWorkspace /> : <FlashWorkspace />}
       </div>
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
     </div>
   );
 }

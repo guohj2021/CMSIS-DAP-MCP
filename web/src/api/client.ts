@@ -130,6 +130,15 @@ export const api = {
     request<{ available: boolean; cfa?: number | null; locals: LocalValue[] }>("GET", "/locals"),
   expression: (expr: string) =>
     request<{ result: { value: number; text: string } }>("POST", "/expression", { expr }),
+  swoStart: (baud?: number, tpiuClk?: number) =>
+    request<{ started: boolean }>("POST", "/swo/start", { baud, tpiu_clk: tpiuClk }),
+  swoStop: () => request<{ stopped: boolean }>("POST", "/swo/stop"),
+  swoRead: () => request<{ data: number[] }>("GET", "/swo/read"),
+  source: (file: string, line: number) =>
+    request<{ file: string; total: number; start: number; current: number; lines: string[] }>(
+      "GET",
+      `/source?file=${encodeURIComponent(file)}&line=${line}&context=12`
+    ),
 };
 
 export interface LocalValue {

@@ -63,6 +63,10 @@ pub fn router() -> Router<SharedState> {
         .route("/api/callstack", get(callstack))
         .route("/api/locals", get(locals_endpoint))
         .route("/api/expression", post(expression_eval))
+        .route("/api/swo/start", post(swo_start))
+        .route("/api/swo/stop", post(swo_stop))
+        .route("/api/swo/read", get(swo_read))
+        .route("/api/source", get(source_view))
         .route("/api/svd", post(svd_upload))
         .route("/api/peripherals", get(peripherals))
         .route("/api/peripherals/{name}", get(peripheral_get))
@@ -1259,6 +1263,157 @@ async fn expression_eval(
         Ok(r) => api_result(Ok(json!({ "result": r }))),
         Err(e) => api_result(Err(WebError::InvalidArgument(e))),
     }
+}
+
+#[derive(Deserialize)]
+struct SwoStartBody {
+    baud: Option<u32>,
+    tpiu_clk: Option<u32>,
+}
+async fn swo_start(State(state): State<SharedState>, Json(body): Json<SwoStartBody>) -> Response {
+    api_result(
+        state
+            .executor
+            .clone()
+            .call_async(
+                OperationKind::SwoStart,
+                json!({ "baud": body.baud, "tpiu_clk": body.tpiu_clk }),
+            )
+            .await,
+    )
+}
+
+#[derive(Deserialize)]
+struct SourceQuery {
+    file: String,
+    line: Option<u64>,
+    context: Option<u64>,
+}
+/// Search bounded roots for a file with the same basename (DWARF paths may
+/// point at a Keil pack location that is not on this host). Only descends into
+/// plausible source directories and caps the walk.
+fn find_source(file: &str) -> Option<std::path::PathBuf> {
+    let p = std::path::Path::new(file);
+    if p.is_file() {
+        return Some(p.to_path_buf());
+    }
+    let name = p.file_name()?.to_string_lossy().into_owned();
+    let mut roots: Vec<std::path::PathBuf> = Vec::new();
+    if let Ok(cwd) = std::env::current_dir() {
+        roots.push(cwd);
+    }
+    let sdk = std::path::Path::new("C:\\Workspace\\DemoWorkspace\\workspace\\DemoMCU_SDK");
+    if sdk.is_dir() {
+        for sub in [
+            "Libraries",
+            "TEST_Example",
+            "Examples",
+            "Project",
+            "FUNCTION_TEST",
+        ] {
+            let d = sdk.join(sub);
+            if d.is_dir() {
+                roots.push(d);
+            }
+        }
+    }
+    let skip = |n: &str| {
+        matches!(
+            n,
+            "Documentation"
+                | "dist"
+                | "build"
+                | ".git"
+                | ".cache"
+                | ".trae"
+                | "node_modules"
+                | "target"
+        )
+    };
+    let mut visited = 0usize;
+    for root in roots {
+        let mut stack = vec![(root, 0usize)];
+        while let Some((dir, depth)) = stack.pop() {
+            if depth > 12 || visited > 30000 {
+                continue;
+            }
+            let Ok(rd) = std::fs::read_dir(&dir) else {
+                continue;
+            };
+            for e in rd.flatten() {
+                let path = e.path();
+                if path.is_dir() {
+                    let dn = path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_default();
+                    if skip(&dn) {
+                        continue;
+                    }
+                    visited += 1;
+                    stack.push((path, depth + 1));
+                } else if path
+                    .file_name()
+                    .map(|n| n.to_string_lossy() == name.as_str())
+                    .unwrap_or(false)
+                {
+                    return Some(path);
+                }
+            }
+        }
+    }
+    None
+}
+
+async fn source_view(Query(q): Query<SourceQuery>) -> Response {
+    let Some(path) = find_source(&q.file) else {
+        return api_result(Err(WebError::InvalidArgument(format!(
+            "source file not found on this host: {}",
+            q.file
+        ))));
+    };
+    let content = match std::fs::read_to_string(&path) {
+        Ok(c) => c,
+        Err(e) => {
+            return api_result(Err(WebError::InvalidArgument(format!(
+                "cannot read source: {e}"
+            ))))
+        }
+    };
+    let lines: Vec<&str> = content.lines().collect();
+    let total = lines.len();
+    let line = q.line.unwrap_or(0);
+    let context = q.context.unwrap_or(10).clamp(1, 50) as usize;
+    let start = line.saturating_sub(context as u64) as usize;
+    let end = ((line as usize) + context).min(total);
+    let slice: Vec<String> = lines[start..end].iter().map(|s| s.to_string()).collect();
+    api_result(Ok(json!({
+        "file": path.to_string_lossy(),
+        "total": total,
+        "start": start + 1,
+        "current": line,
+        "lines": slice,
+    })))
+}
+
+async fn swo_read(State(state): State<SharedState>) -> Response {
+    api_result(
+        state
+            .executor
+            .clone()
+            .call_async(OperationKind::SwoRead, json!({}))
+            .await,
+    )
+}
+
+async fn swo_stop(State(state): State<SharedState>) -> Response {
+    api_result(
+        state
+            .executor
+            .clone()
+            .call_async(OperationKind::SwoStop, json!({}))
+            .await,
+    )
 }
 
 async fn locals_endpoint(State(state): State<SharedState>) -> Response {

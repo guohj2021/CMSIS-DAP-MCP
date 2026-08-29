@@ -12,6 +12,8 @@ import { RttPanel } from "../panels/RttPanel";
 import { EvrPanel } from "../panels/EvrPanel";
 import { CallStackPanel } from "../panels/CallStackPanel";
 import { LocalsPanel } from "../panels/LocalsPanel";
+import { SwoPanel } from "../panels/SwoPanel";
+import { SourceViewerPanel } from "../panels/SourceViewerPanel";
 import { DisassemblyPanel } from "../panels/DisassemblyPanel";
 
 const components: Record<string, React.FC<IDockviewPanelProps<{ title?: string }>>> = {
@@ -26,6 +28,8 @@ const components: Record<string, React.FC<IDockviewPanelProps<{ title?: string }
   evr: () => <EvrPanel />,
   callstack: () => <CallStackPanel />,
   locals: () => <LocalsPanel />,
+  swo: () => <SwoPanel />,
+  source: () => <SourceViewerPanel />,
   disassembly: () => <DisassemblyPanel />,
 };
 
@@ -64,6 +68,12 @@ export function DebugWorkspace() {
         component: "disassembly",
         title: "代码 / 反汇编",
         position: { referencePanel: "symbols", direction: "right" },
+      });
+      api.addPanel({
+        id: "source",
+        component: "source",
+        title: "源码",
+        position: { referencePanel: "disasm", direction: "below" },
       });
       api.addPanel({
         id: "registers",
@@ -120,6 +130,12 @@ export function DebugWorkspace() {
         position: { referencePanel: "callstack", direction: "right" },
       });
       api.addPanel({
+        id: "swo",
+        component: "swo",
+        title: "SWO",
+        position: { referencePanel: "locals", direction: "right" },
+      });
+      api.addPanel({
         id: "console",
         component: "console",
         title: "控制台",
@@ -131,6 +147,31 @@ export function DebugWorkspace() {
   useEffect(() => {
     if (apiRef.current) applyPreset(preset, apiRef.current);
   }, [preset]);
+
+  // Layout persistence: save on change, restore on load (P7a).
+  useEffect(() => {
+    const api = apiRef.current;
+    if (!api) return;
+    const save = () => {
+      try {
+        const json = api.toJSON();
+        localStorage.setItem("cmsis-dap-layout", JSON.stringify(json));
+      } catch {
+        /* ignore */
+      }
+    };
+    const sub = api.onDidLayoutChange(() => save());
+    const restore = localStorage.getItem("cmsis-dap-layout");
+    if (restore) {
+      try {
+        api.fromJSON(JSON.parse(restore));
+        return;
+      } catch {
+        /* fall back to preset */
+      }
+    }
+    return () => sub.dispose();
+  }, []);
 
   return (
     <div className="flex h-full flex-col">

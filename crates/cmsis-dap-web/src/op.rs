@@ -111,6 +111,9 @@ pub enum OperationKind {
     Snapshot,
     CallStack,
     Locals,
+    SwoStart,
+    SwoStop,
+    SwoRead,
     Status,
     DumpFault,
 }

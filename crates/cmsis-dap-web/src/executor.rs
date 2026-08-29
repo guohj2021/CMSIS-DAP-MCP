@@ -660,6 +660,26 @@ impl ExecutorRunner {
                 let frames = unwinder.unwind(&regs, &mut read32, 64);
                 Ok(json!({ "available": true, "frames": frames }))
             }
+            OperationKind::SwoStart => {
+                let backend = session.backend();
+                let baud = p.get("baud").and_then(|v| v.as_u64()).unwrap_or(2_000_000) as u32;
+                let tpiu = p
+                    .get("tpiu_clk")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(8_000_000) as u32;
+                backend.start_swo(baud, tpiu)?;
+                Ok(json!({ "started": true, "baud": baud }))
+            }
+            OperationKind::SwoStop => {
+                let backend = session.backend();
+                backend.stop_swo()?;
+                Ok(json!({ "stopped": true }))
+            }
+            OperationKind::SwoRead => {
+                let backend = session.backend();
+                let data = backend.read_swo_data()?;
+                Ok(json!({ "data": data }))
+            }
             OperationKind::Locals => {
                 {
                     let backend = session.backend();
