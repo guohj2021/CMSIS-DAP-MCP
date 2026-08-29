@@ -122,6 +122,31 @@ export async function refreshBreakpoints() {
   }
 }
 
+export async function snapshot() {
+  try {
+    const r = await api.snapshot() as {
+      state?: string;
+      pc?: number | null;
+      registers?: { name: string; value: number }[];
+      fault?: { name: string; value: number }[];
+    };
+    const regs = new Map((r.registers ?? []).map((x) => [x.name, x.value]));
+    const get = (n: string) => {
+      const v = regs.get(n);
+      return v !== undefined ? `0x${v.toString(16)}` : "?";
+    };
+    const fault = (r.fault ?? []).filter((f) => f.value !== 0)
+      .map((f) => `${f.name}=0x${f.value.toString(16)}`)
+      .join(", ");
+    useDebugStore.getState().log(
+      "info",
+      `快照: state=${r.state ?? "?"} pc=${get("pc")} sp=${get("sp")} lr=${get("lr")} xpsr=${get("xpsr")}${fault ? ` fault=[${fault}]` : ""}`
+    );
+  } catch (e) {
+    useDebugStore.getState().log("error", `快照失败: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
 export function logError(message: string) {
   useDebugStore.getState().log("error", message);
 }

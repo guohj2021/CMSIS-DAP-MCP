@@ -75,6 +75,9 @@ export function Toolbar() {
       <button className={`${btn} bg-zinc-700 hover:bg-zinc-600 text-zinc-200`} onClick={() => ops.reset("halt")} disabled={!connected || busy}>
         复位并暂停
       </button>
+      <button className={`${btn} bg-zinc-700 hover:bg-zinc-600 text-zinc-200`} onClick={ops.snapshot} disabled={!connected || busy}>
+        快照
+      </button>
 
       <span className="ml-auto flex items-center gap-2 text-xs">
         <StatusDot state={status.server} />
