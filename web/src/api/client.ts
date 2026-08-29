@@ -128,6 +128,8 @@ export const api = {
     request<{ available: boolean; frames: UnwindFrame[] }>("GET", "/callstack"),
   locals: () =>
     request<{ available: boolean; cfa?: number | null; locals: LocalValue[] }>("GET", "/locals"),
+  expression: (expr: string) =>
+    request<{ result: { value: number; text: string } }>("POST", "/expression", { expr }),
 };
 
 export interface LocalValue {

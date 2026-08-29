@@ -62,6 +62,7 @@ pub fn router() -> Router<SharedState> {
         .route("/api/address/{address}", get(address_describe))
         .route("/api/callstack", get(callstack))
         .route("/api/locals", get(locals_endpoint))
+        .route("/api/expression", post(expression_eval))
         .route("/api/svd", post(svd_upload))
         .route("/api/peripherals", get(peripherals))
         .route("/api/peripherals/{name}", get(peripheral_get))
@@ -1242,6 +1243,22 @@ async fn disassembly(
     api_result(Ok(
         json!({ "address": q.address, "instructions": instructions }),
     ))
+}
+
+#[derive(Deserialize)]
+struct ExpressionBody {
+    expr: String,
+}
+async fn expression_eval(
+    State(state): State<SharedState>,
+    Json(body): Json<ExpressionBody>,
+) -> Response {
+    let symbols = state.symbols.read().unwrap().clone();
+    let result = crate::expression::evaluate(&body.expr, &state.executor, symbols.as_ref()).await;
+    match result {
+        Ok(r) => api_result(Ok(json!({ "result": r }))),
+        Err(e) => api_result(Err(WebError::InvalidArgument(e))),
+    }
 }
 
 async fn locals_endpoint(State(state): State<SharedState>) -> Response {

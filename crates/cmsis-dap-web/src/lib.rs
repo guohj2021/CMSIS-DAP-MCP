@@ -5,6 +5,7 @@
 pub mod api;
 pub mod assets;
 pub mod executor;
+pub mod expression;
 pub mod flash;
 pub mod monitor;
 pub mod op;
