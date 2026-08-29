@@ -680,6 +680,43 @@ impl ExecutorRunner {
                 let data = backend.read_swo_data()?;
                 Ok(json!({ "data": data }))
             }
+            OperationKind::ProfileRun => {
+                // Sampling profiler: briefly halt, read PC, resume; build a
+                // PC histogram. Never resets; a real, non-fabricated profile.
+                let samples = p
+                    .get("samples")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(200)
+                    .min(5000) as usize;
+                let interval_ms = p
+                    .get("interval_ms")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(5)
+                    .clamp(1, 100);
+                let backend = session.backend();
+                let mut counts: std::collections::HashMap<u64, u64> =
+                    std::collections::HashMap::new();
+                let mut total = 0usize;
+                for _ in 0..samples {
+                    if backend.halt().is_err() {
+                        break;
+                    }
+                    if let Ok(pc) = backend.read_core_register(&CoreRegister::Name("pc".into())) {
+                        *counts.entry(pc & !1).or_insert(0) += 1;
+                        total += 1;
+                    }
+                    let _ = backend.resume();
+                    std::thread::sleep(std::time::Duration::from_millis(interval_ms));
+                }
+                // Ensure the target keeps running afterwards.
+                let _ = backend.resume();
+                let mut items: Vec<Value> = counts
+                    .iter()
+                    .map(|(pc, count)| json!({ "pc": pc, "count": count }))
+                    .collect();
+                items.sort_by(|a, b| b["count"].as_u64().cmp(&a["count"].as_u64()));
+                Ok(json!({ "total": total, "samples": items }))
+            }
             OperationKind::Locals => {
                 {
                     let backend = session.backend();

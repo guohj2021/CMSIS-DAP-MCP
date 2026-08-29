@@ -114,6 +114,7 @@ pub enum OperationKind {
     SwoStart,
     SwoStop,
     SwoRead,
+    ProfileRun,
     Status,
     DumpFault,
 }

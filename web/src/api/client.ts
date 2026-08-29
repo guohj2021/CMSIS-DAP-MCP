@@ -134,6 +134,12 @@ export const api = {
     request<{ started: boolean }>("POST", "/swo/start", { baud, tpiu_clk: tpiuClk }),
   swoStop: () => request<{ stopped: boolean }>("POST", "/swo/stop"),
   swoRead: () => request<{ data: number[] }>("GET", "/swo/read"),
+  profileRun: (samples: number, intervalMs: number) =>
+    request<{ total: number; samples: { pc: number; count: number }[] }>(
+      "POST",
+      "/profile/run",
+      { samples, interval_ms: intervalMs }
+    ),
   source: (file: string, line: number) =>
     request<{ file: string; total: number; start: number; current: number; lines: string[] }>(
       "GET",

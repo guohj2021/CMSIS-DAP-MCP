@@ -67,6 +67,7 @@ pub fn router() -> Router<SharedState> {
         .route("/api/swo/stop", post(swo_stop))
         .route("/api/swo/read", get(swo_read))
         .route("/api/source", get(source_view))
+        .route("/api/profile/run", post(profile_run))
         .route("/api/svd", post(svd_upload))
         .route("/api/peripherals", get(peripherals))
         .route("/api/peripherals/{name}", get(peripheral_get))
@@ -1394,6 +1395,27 @@ async fn source_view(Query(q): Query<SourceQuery>) -> Response {
         "current": line,
         "lines": slice,
     })))
+}
+
+#[derive(Deserialize)]
+struct ProfileRunBody {
+    samples: Option<u64>,
+    interval_ms: Option<u64>,
+}
+async fn profile_run(
+    State(state): State<SharedState>,
+    Json(body): Json<ProfileRunBody>,
+) -> Response {
+    api_result(
+        state
+            .executor
+            .clone()
+            .call_async(
+                OperationKind::ProfileRun,
+                json!({ "samples": body.samples, "interval_ms": body.interval_ms }),
+            )
+            .await,
+    )
 }
 
 async fn swo_read(State(state): State<SharedState>) -> Response {

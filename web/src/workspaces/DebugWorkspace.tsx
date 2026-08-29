@@ -14,6 +14,7 @@ import { CallStackPanel } from "../panels/CallStackPanel";
 import { LocalsPanel } from "../panels/LocalsPanel";
 import { SwoPanel } from "../panels/SwoPanel";
 import { SourceViewerPanel } from "../panels/SourceViewerPanel";
+import { ProfilerPanel } from "../panels/ProfilerPanel";
 import { DisassemblyPanel } from "../panels/DisassemblyPanel";
 
 const components: Record<string, React.FC<IDockviewPanelProps<{ title?: string }>>> = {
@@ -30,6 +31,7 @@ const components: Record<string, React.FC<IDockviewPanelProps<{ title?: string }
   locals: () => <LocalsPanel />,
   swo: () => <SwoPanel />,
   source: () => <SourceViewerPanel />,
+  profiler: () => <ProfilerPanel />,
   disassembly: () => <DisassemblyPanel />,
 };
 
@@ -134,6 +136,12 @@ export function DebugWorkspace() {
         component: "swo",
         title: "SWO",
         position: { referencePanel: "locals", direction: "right" },
+      });
+      api.addPanel({
+        id: "profiler",
+        component: "profiler",
+        title: "Profiler",
+        position: { referencePanel: "swo", direction: "right" },
       });
       api.addPanel({
         id: "console",
