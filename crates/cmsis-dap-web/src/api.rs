@@ -21,6 +21,9 @@ pub fn router() -> Router<SharedState> {
         .route("/api/debug/run", post(debug_run))
         .route("/api/debug/halt", post(debug_halt))
         .route("/api/debug/step", post(debug_step))
+        .route("/api/debug/step_over", post(debug_step_over))
+        .route("/api/debug/step_out", post(debug_step_out))
+        .route("/api/debug/run_to", post(debug_run_to))
         .route("/api/debug/reset", post(debug_reset))
         .route("/api/registers", get(registers).post(register_write))
         .route("/api/memory/read", post(memory_read))
@@ -170,6 +173,43 @@ async fn debug_step(State(state): State<SharedState>) -> Response {
 struct ResetBody {
     mode: Option<String>,
 }
+async fn debug_step_over(State(state): State<SharedState>) -> Response {
+    api_result(
+        state
+            .executor
+            .clone()
+            .call_async(OperationKind::StepOver, json!({}))
+            .await,
+    )
+}
+
+async fn debug_step_out(State(state): State<SharedState>) -> Response {
+    api_result(
+        state
+            .executor
+            .clone()
+            .call_async(OperationKind::StepOut, json!({}))
+            .await,
+    )
+}
+
+#[derive(Deserialize)]
+struct RunToBody {
+    address: u64,
+}
+async fn debug_run_to(State(state): State<SharedState>, Json(body): Json<RunToBody>) -> Response {
+    api_result(
+        state
+            .executor
+            .clone()
+            .call_async(
+                OperationKind::RunToAddress,
+                json!({ "address": body.address }),
+            )
+            .await,
+    )
+}
+
 async fn debug_reset(State(state): State<SharedState>, Json(body): Json<ResetBody>) -> Response {
     api_result(
         state

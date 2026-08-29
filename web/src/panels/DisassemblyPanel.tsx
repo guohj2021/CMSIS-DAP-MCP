@@ -1,6 +1,7 @@
 // Disassembly / code panel: fetch Thumb instructions, PC highlight, Go To.
 import { useEffect, useState } from "react";
 import { api, DisasmInsn } from "../api/client";
+import * as ops from "../debug/operations";
 import { useDebugStore } from "../store/debugStore";
 import { parseNumber } from "../debug/formatters";
 
@@ -86,6 +87,13 @@ export function DisassemblyPanel() {
               <span className="flex-1">{i.op_str}</span>
               {i.source && <span className="text-emerald-400">{i.source.file.split(/[\\/]/).pop()}:{i.source.line}</span>}
               {i.symbol && <span className="text-emerald-400">{i.symbol}</span>}
+              <button
+                className="rounded bg-zinc-700 px-1 py-0.5 text-[10px] text-zinc-300 hover:bg-zinc-600"
+                title="运行到此处"
+                onClick={() => ops.runTo(i.address)}
+              >
+                运行到
+              </button>
             </div>
           );
         })}

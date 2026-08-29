@@ -372,6 +372,15 @@ pub trait Backend: Send {
     fn clear_breakpoints(&mut self) -> Result<(), McpError>;
     fn list_breakpoints(&mut self) -> Result<Vec<u64>, McpError>;
 
+    /// Clear a single hardware breakpoint. The default is conservative and
+    /// clears all breakpoints; backends that support per-address clearing
+    /// (probe-rs, mock) implement it precisely so temporary breakpoints used
+    /// by step-over/step-out/run-to-address never wipe user breakpoints.
+    fn clear_breakpoint(&mut self, address: u64) -> Result<(), McpError> {
+        let _ = address;
+        self.clear_breakpoints()
+    }
+
     /// Hardware breakpoint resource usage `(used, total)`.
     ///
     /// Returns `None` when the backend/probe cannot report the comparator

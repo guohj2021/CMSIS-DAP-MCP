@@ -75,6 +75,36 @@ export async function step() {
   }
 }
 
+export async function stepOver() {
+  try {
+    await api.stepOver();
+    useDebugStore.getState().setStatus({ target: "halted" });
+    await refreshRegisters();
+  } catch (e) {
+    useDebugStore.getState().log("error", `跳过失败: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+export async function stepOut() {
+  try {
+    await api.stepOut();
+    useDebugStore.getState().setStatus({ target: "halted" });
+    await refreshRegisters();
+  } catch (e) {
+    useDebugStore.getState().log("error", `跳出失败: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+export async function runTo(address: number) {
+  try {
+    await api.runTo(address);
+    useDebugStore.getState().setStatus({ target: "halted" });
+    await refreshRegisters();
+  } catch (e) {
+    useDebugStore.getState().log("error", `运行到地址失败: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
 export async function reset(mode: "run" | "halt") {
   try {
     await api.reset(mode);

@@ -669,6 +669,15 @@ impl Backend for ProbeRsBackend {
         Ok(())
     }
 
+    fn clear_breakpoint(&mut self, address: u64) -> Result<(), McpError> {
+        let mut core = self.core()?;
+        core.clear_hw_breakpoint(address)
+            .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))?;
+        drop(core);
+        self.breakpoints.retain(|b| *b != address);
+        Ok(())
+    }
+
     fn list_breakpoints(&mut self) -> Result<Vec<u64>, McpError> {
         self.core()?;
         Ok(self.breakpoints.clone())

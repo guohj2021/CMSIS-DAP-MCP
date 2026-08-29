@@ -11,6 +11,7 @@ use crate::op::{
     Operation, OperationKind, OperationState, ServerEvent, ServerState, SessionStatus, TargetState,
     WebError,
 };
+use capstone::prelude::*;
 use cmsis_dap_core::backend::FlashPhase;
 use cmsis_dap_core::backend::{
     AccessWidth, ConnectOptions, CoreRegister, ImageFileFormat, Protocol, ResetMode, WatchAccess,
@@ -384,6 +385,57 @@ impl ExecutorRunner {
                 let backend = session.backend();
                 backend.step()?;
                 Ok(json!({ "stepped": true }))
+            }
+            OperationKind::StepOver | OperationKind::StepOut | OperationKind::RunToAddress => {
+                let backend = session.backend();
+                let pc = backend.read_core_register(&CoreRegister::Name("pc".into()))? & !1;
+                // Resolve the run target.
+                let (target, mode) = match op.kind {
+                    OperationKind::StepOver => {
+                        let (next, is_call) = next_instruction_info(backend, pc)?;
+                        if !is_call {
+                            backend.step()?;
+                            return Ok(json!({ "stepped": true, "mode": "step_over", "to": next }));
+                        }
+                        (next, "step_over")
+                    }
+                    OperationKind::StepOut => {
+                        let lr = backend.read_core_register(&CoreRegister::Name("lr".into()))? & !1;
+                        if lr == 0 || lr == 0xFFFF_FFFF {
+                            return Err(WebError::InvalidArgument(
+                                "LR is invalid; cannot step out".into(),
+                            ));
+                        }
+                        (lr, "step_out")
+                    }
+                    OperationKind::RunToAddress => {
+                        let addr = p.get("address").and_then(|v| v.as_u64());
+                        let Some(addr) = addr else {
+                            return Err(WebError::InvalidArgument(
+                                "run-to-address requires an address".into(),
+                            ));
+                        };
+                        (addr & !1, "run_to")
+                    }
+                    _ => unreachable!(),
+                };
+                if target == 0 {
+                    return Err(WebError::InvalidArgument("invalid run target".into()));
+                }
+                // Temporary hardware breakpoint, run until it halts, then clear
+                // only the temporary breakpoint (user breakpoints are kept).
+                backend.set_breakpoint(target)?;
+                let result = run_and_wait(backend, 8000);
+                let _ = backend.clear_breakpoint(target);
+                match result {
+                    Ok(status) => Ok(json!({
+                        "stepped": true,
+                        "mode": mode,
+                        "to": target,
+                        "pc": status.pc.map(|p| p & !1),
+                    })),
+                    Err(e) => Err(e),
+                }
             }
             OperationKind::Reset => {
                 let mode = match p.get("mode").and_then(|v| v.as_str()).unwrap_or("run") {
@@ -975,6 +1027,58 @@ fn parse_image_format(s: &str) -> Result<ImageFileFormat, WebError> {
     ImageFileFormat::parse(s).ok_or_else(|| {
         WebError::InvalidArgument(format!("file format must be elf/axf/bin/hex, got {s}"))
     })
+}
+
+/// Disassemble the instruction at `pc` and report `(next_address, is_call)`.
+fn next_instruction_info(
+    backend: &mut dyn cmsis_dap_core::backend::Backend,
+    pc: u64,
+) -> Result<(u64, bool), WebError> {
+    let values = backend
+        .read_memory(pc, AccessWidth::U8, 16)
+        .map_err(|e| WebError::Internal(e.to_string()))?;
+    let bytes: Vec<u8> = values.iter().map(|v| *v as u8).collect();
+    let cs = capstone::Capstone::new()
+        .arm()
+        .mode(capstone::arch::arm::ArchMode::Thumb)
+        .extra_mode(std::iter::once(capstone::arch::arm::ArchExtraMode::MClass))
+        .detail(true)
+        .build()
+        .map_err(|e| WebError::Internal(format!("capstone init: {e}")))?;
+    let dis = cs
+        .disasm_all(&bytes, pc)
+        .map_err(|e| WebError::Internal(e.to_string()))?;
+    let first = dis
+        .iter()
+        .next()
+        .ok_or_else(|| WebError::InvalidArgument(format!("cannot disassemble at 0x{pc:x}")))?;
+    let mnemonic = first.mnemonic().unwrap_or("").to_ascii_lowercase();
+    let is_call = mnemonic == "bl" || mnemonic == "blx";
+    Ok((pc + first.bytes().len() as u64, is_call))
+}
+
+/// Resume and poll until the target halts (or timeout). Leaves the target
+/// running on timeout.
+fn run_and_wait(
+    backend: &mut dyn cmsis_dap_core::backend::Backend,
+    timeout_ms: u64,
+) -> Result<cmsis_dap_core::backend::CoreStatusInfo, WebError> {
+    backend.resume()?;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(timeout_ms);
+    loop {
+        let status = backend
+            .get_core_status()
+            .map_err(|e| WebError::Internal(e.to_string()))?;
+        if status.state == "halted" {
+            return Ok(status);
+        }
+        if std::time::Instant::now() >= deadline {
+            return Err(WebError::InvalidArgument(
+                "target did not halt within timeout (still running)".into(),
+            ));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
 }
 
 fn param_str(p: &Value, name: &str) -> Result<String, WebError> {

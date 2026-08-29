@@ -313,6 +313,14 @@ impl Backend for MockBackend {
         }
     }
 
+    fn clear_breakpoint(&mut self, address: u64) -> Result<(), McpError> {
+        if !self.connected {
+            return Err(not_connected());
+        }
+        self.breakpoints.retain(|b| *b != address);
+        Ok(())
+    }
+
     fn list_breakpoints(&mut self) -> Result<Vec<u64>, McpError> {
         if !self.connected {
             Err(not_connected())

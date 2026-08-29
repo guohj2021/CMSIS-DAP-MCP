@@ -69,6 +69,12 @@ export function Toolbar() {
       <button className={`${btn} bg-zinc-700 hover:bg-zinc-600 text-zinc-200`} onClick={ops.step} disabled={!connected || !halted || busy}>
         单步
       </button>
+      <button className={`${btn} bg-zinc-700 hover:bg-zinc-600 text-zinc-200`} onClick={ops.stepOver} disabled={!connected || !halted || busy}>
+        跳过
+      </button>
+      <button className={`${btn} bg-zinc-700 hover:bg-zinc-600 text-zinc-200`} onClick={ops.stepOut} disabled={!connected || !halted || busy}>
+        跳出
+      </button>
       <button className={`${btn} bg-zinc-700 hover:bg-zinc-600 text-zinc-200`} onClick={() => ops.reset("run")} disabled={!connected || busy}>
         复位
       </button>

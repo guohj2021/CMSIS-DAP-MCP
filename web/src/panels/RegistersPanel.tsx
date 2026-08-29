@@ -6,10 +6,38 @@ import { formatValue, parseNumber, NumFormat } from "../debug/formatters";
 
 const PC_RE = /^(pc|r15)$/i;
 
+const BITFIELDS: Record<string, { bit: number; label: string }[]> = {
+  xpsr: [
+    { bit: 31, label: "N" },
+    { bit: 30, label: "Z" },
+    { bit: 29, label: "C" },
+    { bit: 28, label: "V" },
+    { bit: 27, label: "Q" },
+    { bit: 24, label: "T" },
+  ],
+  primask: [{ bit: 0, label: "PM" }],
+  faultmask: [{ bit: 0, label: "FM" }],
+  control: [{ bit: 0, label: "nPRIV" }],
+};
+
+function bitfieldText(reg: string, value: number): string {
+  const fields = BITFIELDS[reg.toLowerCase()];
+  if (!fields) return "";
+  const parts: string[] = [];
+  for (const f of fields) {
+    parts.push(`${f.label}=${(value >> f.bit) & 1}`);
+  }
+  if (reg.toLowerCase() === "xpsr") {
+    parts.push(`IPSR=0x${(value & 0x1ff).toString(16)}`);
+  }
+  return parts.join("  ");
+}
+
 export function RegistersPanel() {
   const registers = useDebugStore((s) => s.registers);
   const [fmt, setFmt] = useState<NumFormat>("hex");
   const [filter, setFilter] = useState("");
+  const [selected, setSelected] = useState<string | null>(null);
 
   const rows = useMemo(() => {
     const f = filter.trim().toLowerCase();
@@ -56,20 +84,31 @@ export function RegistersPanel() {
         {rows.map((r) => (
           <div
             key={r.name}
-            className={`flex justify-between rounded px-1 py-0.5 ${
+            className={`flex cursor-pointer justify-between rounded px-1 py-0.5 ${
               PC_RE.test(r.name) ? "bg-amber-500/20 font-bold text-amber-300" : "text-zinc-300"
-            }`}
+            } ${selected === r.name ? "bg-zinc-800" : ""}`}
+            onClick={() => setSelected(r.name)}
           >
             <span className="text-zinc-400">{r.name}</span>
             <input
               className="w-24 bg-transparent text-right font-mono text-zinc-200 outline-none focus:bg-zinc-700"
               defaultValue={formatValue(r.value, fmt)}
               key={`${r.name}-${fmt}-${r.value}`}
+              onClick={(e) => e.stopPropagation()}
               onBlur={(e) => writeRegister(r.name, e.target.value)}
             />
           </div>
         ))}
       </div>
+      {selected && (() => {
+        const reg = registers.find((x) => x.name === selected);
+        const text2 = reg ? bitfieldText(reg.name, reg.value) : "";
+        return text2 ? (
+          <div className="border-t border-zinc-800 px-2 py-1 font-mono text-emerald-300">
+            {selected}: {text2}
+          </div>
+        ) : null;
+      })()}
     </div>
   );
 }
