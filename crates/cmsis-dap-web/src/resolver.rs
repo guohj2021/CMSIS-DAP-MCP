@@ -35,12 +35,11 @@ pub fn resolve_symbol_id(db: &SymbolDatabase, id: u64) -> Option<&Symbol> {
 
 /// Nearest symbol at or below `address`.
 pub fn resolve_address(db: &SymbolDatabase, address: u64) -> Option<SymbolAt> {
-    db.resolve_address(address)
-        .map(|(s, offset)| SymbolAt {
-            name: s.name.clone(),
-            address: s.address,
-            offset,
-        })
+    db.resolve_address(address).map(|(s, offset)| SymbolAt {
+        name: s.name.clone(),
+        address: s.address,
+        offset,
+    })
 }
 
 /// Describe an address: memory region + nearest symbol + owning peripheral.
@@ -55,13 +54,12 @@ pub fn describe_address(
         .find(|(_, start, end)| address >= *start && address < *end)
         .map(|(name, _, _)| name.clone());
     let symbol = resolve_address(db, address);
-    let peripheral = svd
-        .and_then(|s| {
-            s.peripherals()
-                .iter()
-                .find(|p| address >= p.base && address < p.base + 0x1000)
-                .map(|p| p.name.clone())
-        });
+    let peripheral = svd.and_then(|s| {
+        s.peripherals()
+            .iter()
+            .find(|p| address >= p.base && address < p.base + 0x1000)
+            .map(|p| p.name.clone())
+    });
     AddressInfo {
         address,
         region,

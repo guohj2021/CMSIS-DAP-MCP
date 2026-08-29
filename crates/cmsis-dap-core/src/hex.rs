@@ -30,7 +30,11 @@ pub fn parse_ihex(text: &str) -> Result<Vec<HexSegment>, String> {
             continue;
         }
         if !line.starts_with(':') {
-            return Err(format!("line {}: not an Intel HEX record: {}", idx + 1, line));
+            return Err(format!(
+                "line {}: not an Intel HEX record: {}",
+                idx + 1,
+                line
+            ));
         }
         let bytes = decode_record(line, idx + 1)?;
         if bytes.len() < 5 {
@@ -64,7 +68,10 @@ pub fn parse_ihex(text: &str) -> Result<Vec<HexSegment>, String> {
             }
             0x04 => {
                 if data.len() != 2 {
-                    return Err(format!("line {}: invalid extended linear address record", idx + 1));
+                    return Err(format!(
+                        "line {}: invalid extended linear address record",
+                        idx + 1
+                    ));
                 }
                 base = ((data[0] as u64) << 8 | data[1] as u64) << 16;
             }

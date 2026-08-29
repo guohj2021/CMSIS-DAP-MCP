@@ -5,7 +5,7 @@ use cmsis_dap_core::symbols::SymbolDatabase;
 use std::io::Write;
 
 fn make_elf() -> Vec<u8> {
-    use object::write::{Object, Symbol as WSymbol, SymbolSection, SymbolScope};
+    use object::write::{Object, Symbol as WSymbol, SymbolScope, SymbolSection};
     use object::{Architecture, BinaryFormat, Endianness, SymbolFlags, SymbolKind as ObjKind};
     let mut obj = Object::new(BinaryFormat::Elf, Architecture::Arm, Endianness::Little);
     obj.add_file_symbol("main.c".as_bytes().to_vec());
@@ -51,12 +51,18 @@ fn symbol_database_load_search_resolve() {
 
     let main = db.resolve_name("main").expect("main symbol");
     assert_eq!(main.address, 0x0800_0100);
-    assert!(matches!(main.kind, cmsis_dap_core::symbols::SymbolKind::Function));
+    assert!(matches!(
+        main.kind,
+        cmsis_dap_core::symbols::SymbolKind::Function
+    ));
     assert_eq!(main.section.as_deref(), Some(".text"));
 
     let speed = db.resolve_name("g_motor_speed").expect("variable");
     assert_eq!(speed.address, 0x2000_0000);
-    assert!(matches!(speed.kind, cmsis_dap_core::symbols::SymbolKind::Variable));
+    assert!(matches!(
+        speed.kind,
+        cmsis_dap_core::symbols::SymbolKind::Variable
+    ));
 
     // Nearest symbol at/below an address.
     let (sym, offset) = db.resolve_address(0x0800_0120).expect("near symbol");

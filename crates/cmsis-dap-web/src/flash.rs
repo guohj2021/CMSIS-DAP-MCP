@@ -55,14 +55,17 @@ pub struct FirmwareImage {
 
 impl FirmwareImage {
     /// Build an image from an uploaded file.
-    pub fn analyze(path: &Path, format: FirmwareFormat, bin_address: Option<u64>) -> Result<Self, WebError> {
+    pub fn analyze(
+        path: &Path,
+        format: FirmwareFormat,
+        bin_address: Option<u64>,
+    ) -> Result<Self, WebError> {
         match format {
             FirmwareFormat::Bin => {
                 let data = std::fs::read(path)
                     .map_err(|e| WebError::Internal(format!("failed to read upload: {e}")))?;
-                let address = bin_address.ok_or_else(|| {
-                    WebError::InvalidArgument("BIN requires an address".into())
-                })?;
+                let address = bin_address
+                    .ok_or_else(|| WebError::InvalidArgument("BIN requires an address".into()))?;
                 if data.is_empty() {
                     return Err(WebError::InvalidArgument("BIN file is empty".into()));
                 }
@@ -83,10 +86,12 @@ impl FirmwareImage {
             FirmwareFormat::Hex => {
                 let text = std::fs::read_to_string(path)
                     .map_err(|e| WebError::Internal(format!("failed to read upload: {e}")))?;
-                let segments = cmsis_dap_core::hex::parse_ihex(&text)
-                    .map_err(WebError::InvalidArgument)?;
+                let segments =
+                    cmsis_dap_core::hex::parse_ihex(&text).map_err(WebError::InvalidArgument)?;
                 if segments.is_empty() {
-                    return Err(WebError::InvalidArgument("HEX file contains no data".into()));
+                    return Err(WebError::InvalidArgument(
+                        "HEX file contains no data".into(),
+                    ));
                 }
                 let total: u64 = segments.iter().map(|s| s.size()).sum();
                 let start = segments.first().map(|s| s.start).unwrap_or(0);

@@ -778,7 +778,6 @@ impl Backend for ProbeRsBackend {
         self.erase_flash_impl(address, size, &mut fp)
     }
 
-
     fn program_flash(&mut self, address: u64, data: &[u8], verify: bool) -> Result<(), McpError> {
         self.program_flash_impl(address, data, verify, false, None)
     }
@@ -1038,7 +1037,6 @@ impl Backend for ProbeRsBackend {
         let fp = flash_progress(progress);
         self.program_file_impl(path, format, address, verify, Some(fp))
     }
-
 
     fn export_memory(
         &mut self,
@@ -1575,4 +1573,5 @@ impl ProbeRsBackend {
                 Ok(bytes)
             }
         }
-    }}
+    }
+}

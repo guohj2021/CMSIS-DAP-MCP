@@ -8,8 +8,8 @@
 //! and probe-lost handling (session-wide fatal event, v5 §6).
 
 use crate::op::{
-    Operation, OperationKind, OperationState, ServerEvent, ServerState, SessionStatus,
-    TargetState, WebError,
+    Operation, OperationKind, OperationState, ServerEvent, ServerState, SessionStatus, TargetState,
+    WebError,
 };
 use cmsis_dap_core::backend::FlashPhase;
 use cmsis_dap_core::backend::{
@@ -214,7 +214,10 @@ impl ExecutorRunner {
         // Restore state after the op. The target state set by the dispatch
         // (e.g. Running/Halted after a reset) is preserved.
         let mut status = self.status.read().unwrap().clone();
-        status.operation = prev.as_ref().map(|p| p.operation).unwrap_or(OperationState::None);
+        status.operation = prev
+            .as_ref()
+            .map(|p| p.operation)
+            .unwrap_or(OperationState::None);
         status.server = match status.server {
             ServerState::Disconnected => ServerState::Disconnected,
             _ => ServerState::Ready,
@@ -253,7 +256,9 @@ impl ExecutorRunner {
         if status.server == ServerState::Disconnected
             && !matches!(op.kind, OperationKind::ListProbes | OperationKind::Connect)
         {
-            return Err(WebError::NotConnected("not connected; call connect first".into()));
+            return Err(WebError::NotConnected(
+                "not connected; call connect first".into(),
+            ));
         }
         // Exclusive op already running.
         if let Some(a) = active {
@@ -381,15 +386,16 @@ impl ExecutorRunner {
                     TargetState::Halted
                 };
                 drop(status);
-                Ok(json!({ "reset": true, "mode": if mode == ResetMode::Run { "run" } else { "halt" } }))
+                Ok(
+                    json!({ "reset": true, "mode": if mode == ResetMode::Run { "run" } else { "halt" } }),
+                )
             }
             OperationKind::ListRegisters => {
                 let backend = session.backend();
                 let names = backend.list_core_registers()?;
                 let mut registers = Vec::new();
                 for name in &names {
-                    if let Ok(value) =
-                        backend.read_core_register(&CoreRegister::Name(name.clone()))
+                    if let Ok(value) = backend.read_core_register(&CoreRegister::Name(name.clone()))
                     {
                         registers.push(json!({ "name": name, "value": value }));
                     }
@@ -478,7 +484,8 @@ impl ExecutorRunner {
                 match action.as_str() {
                     "set" => {
                         let address = param_u64(p, "address")?;
-                        let access = match p.get("access").and_then(|v| v.as_str()).unwrap_or("rw") {
+                        let access = match p.get("access").and_then(|v| v.as_str()).unwrap_or("rw")
+                        {
                             "read" => WatchAccess::Read,
                             "write" => WatchAccess::Write,
                             "rw" => WatchAccess::ReadWrite,
@@ -533,12 +540,17 @@ impl ExecutorRunner {
                 let channels: Vec<usize> = p
                     .get("channels")
                     .and_then(|v| v.as_array())
-                    .map(|a| a.iter().filter_map(|x| x.as_u64()).map(|x| x as usize).collect())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|x| x.as_u64())
+                            .map(|x| x as usize)
+                            .collect()
+                    })
                     .unwrap_or_default();
-                let max_bytes = p.get("max_bytes").and_then(|v| v.as_u64()).unwrap_or(4096) as usize;
+                let max_bytes =
+                    p.get("max_bytes").and_then(|v| v.as_u64()).unwrap_or(4096) as usize;
                 let data = backend.read_rtt(&channels, max_bytes)?;
-                Ok(serde_json::to_value(data)
-                    .map_err(|e| WebError::Internal(e.to_string()))?)
+                Ok(serde_json::to_value(data).map_err(|e| WebError::Internal(e.to_string()))?)
             }
             OperationKind::RttDetach => {
                 let backend = session.backend();
@@ -549,14 +561,12 @@ impl ExecutorRunner {
                 let backend = session.backend();
                 let info_address = param_u64(p, "info_address")?;
                 let status = backend.attach_evr(info_address)?;
-                Ok(serde_json::to_value(status)
-                    .map_err(|e| WebError::Internal(e.to_string()))?)
+                Ok(serde_json::to_value(status).map_err(|e| WebError::Internal(e.to_string()))?)
             }
             OperationKind::EvrRead => {
                 let backend = session.backend();
                 let events = backend.read_evr()?;
-                Ok(serde_json::to_value(events)
-                    .map_err(|e| WebError::Internal(e.to_string()))?)
+                Ok(serde_json::to_value(events).map_err(|e| WebError::Internal(e.to_string()))?)
             }
             OperationKind::EvrDetach => {
                 let backend = session.backend();
@@ -574,8 +584,7 @@ impl ExecutorRunner {
                     p.get("stack_words").and_then(|v| v.as_u64()).unwrap_or(16) as usize;
                 let restore = p.get("restore").and_then(|v| v.as_bool()).unwrap_or(true);
                 let dump = backend.dump_cpu_state(&addresses, stack_words, restore)?;
-                Ok(serde_json::to_value(dump)
-                    .map_err(|e| WebError::Internal(e.to_string()))?)
+                Ok(serde_json::to_value(dump).map_err(|e| WebError::Internal(e.to_string()))?)
             }
             OperationKind::DumpFault => {
                 let backend = session.backend();
@@ -638,7 +647,9 @@ impl ExecutorRunner {
                             bytes,
                             message: None,
                         });
-                        Ok(json!({ "programmed": true, "bytes": bytes, "verify": verify, "mode": mode }))
+                        Ok(
+                            json!({ "programmed": true, "bytes": bytes, "verify": verify, "mode": mode }),
+                        )
                     }
                     other => Err(WebError::InvalidArgument(format!(
                         "unknown flash action {other}"
@@ -753,10 +764,19 @@ pub fn parse_connect_options(p: &Value) -> Result<ConnectOptions, WebError> {
     Ok(ConnectOptions {
         probe_id: p.get("probe_id").and_then(|v| v.as_str()).map(String::from),
         protocol: parse_protocol(p.get("protocol").and_then(|v| v.as_str()).unwrap_or("swd"))?,
-        speed_khz: p.get("speed_khz").and_then(|v| v.as_u64()).map(|v| v as u32),
+        speed_khz: p
+            .get("speed_khz")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as u32),
         target: p.get("target").and_then(|v| v.as_str()).map(String::from),
-        under_reset: p.get("under_reset").and_then(|v| v.as_bool()).unwrap_or(false),
-        core_index: p.get("core_index").and_then(|v| v.as_u64()).map(|v| v as usize),
+        under_reset: p
+            .get("under_reset")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+        core_index: p
+            .get("core_index")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize),
     })
 }
 
@@ -774,10 +794,3 @@ fn values_to_bytes(values: &[u64], width: AccessWidth) -> Vec<u8> {
 fn _unused(p: PathBuf) -> PathBuf {
     p
 }
-
-
-
-
-
-
-

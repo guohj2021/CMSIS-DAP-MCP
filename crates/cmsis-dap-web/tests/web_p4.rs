@@ -15,11 +15,17 @@ fn app() -> (axum::Router, SharedState) {
     let session = SessionManager::new(Box::new(MockBackend::new()));
     let executor = spawn(
         session,
-        ExecutorConfig { allow_destructive: true, flash_timeout: Duration::from_secs(600) },
+        ExecutorConfig {
+            allow_destructive: true,
+            flash_timeout: Duration::from_secs(600),
+        },
     );
     let events = executor.events();
     let lease = cmsis_dap_web::session::SessionLease::new(Duration::from_secs(30));
-    let upload_dir = tempfile::Builder::new().prefix("cmsis-dap-web-p4-").tempdir().unwrap();
+    let upload_dir = tempfile::Builder::new()
+        .prefix("cmsis-dap-web-p4-")
+        .tempdir()
+        .unwrap();
     let state = Arc::new(AppState {
         executor,
         events,
@@ -43,7 +49,12 @@ fn app() -> (axum::Router, SharedState) {
     (cmsis_dap_web::build_router(state.clone()), state)
 }
 
-async fn send(app: &axum::Router, method: &str, path: &str, body: Option<serde_json::Value>) -> (StatusCode, serde_json::Value) {
+async fn send(
+    app: &axum::Router,
+    method: &str,
+    path: &str,
+    body: Option<serde_json::Value>,
+) -> (StatusCode, serde_json::Value) {
     let req = Request::builder()
         .method(method)
         .uri(path)
@@ -61,7 +72,7 @@ async fn send(app: &axum::Router, method: &str, path: &str, body: Option<serde_j
 }
 
 fn make_elf() -> Vec<u8> {
-    use object::write::{Object, Symbol as WSymbol, SymbolSection, SymbolScope};
+    use object::write::{Object, Symbol as WSymbol, SymbolScope, SymbolSection};
     use object::{Architecture, BinaryFormat, Endianness, SymbolFlags, SymbolKind as ObjKind};
     let mut obj = Object::new(BinaryFormat::Elf, Architecture::Arm, Endianness::Little);
     obj.add_file_symbol("main.c".as_bytes().to_vec());
@@ -70,12 +81,24 @@ fn make_elf() -> Vec<u8> {
     obj.append_section_data(text, &[0x00; 64], 4);
     obj.append_section_data(data, &[0x11; 16], 4);
     obj.add_symbol(WSymbol {
-        name: b"main".to_vec(), value: 0x0800_0100, size: 64, kind: ObjKind::Text,
-        scope: SymbolScope::Dynamic, weak: false, section: SymbolSection::Section(text), flags: SymbolFlags::None,
+        name: b"main".to_vec(),
+        value: 0x0800_0100,
+        size: 64,
+        kind: ObjKind::Text,
+        scope: SymbolScope::Dynamic,
+        weak: false,
+        section: SymbolSection::Section(text),
+        flags: SymbolFlags::None,
     });
     obj.add_symbol(WSymbol {
-        name: b"g_motor_speed".to_vec(), value: 0x2000_0000, size: 4, kind: ObjKind::Data,
-        scope: SymbolScope::Dynamic, weak: false, section: SymbolSection::Section(data), flags: SymbolFlags::None,
+        name: b"g_motor_speed".to_vec(),
+        value: 0x2000_0000,
+        size: 4,
+        kind: ObjKind::Data,
+        scope: SymbolScope::Dynamic,
+        weak: false,
+        section: SymbolSection::Section(data),
+        flags: SymbolFlags::None,
     });
     let mut buf = Vec::new();
     obj.write_stream(&mut buf).unwrap();
@@ -117,7 +140,10 @@ async fn elf_upload_symbols_search_and_watch() {
     let req = Request::builder()
         .method("POST")
         .uri("/api/files/elf")
-        .header("content-type", format!("multipart/form-data; boundary={boundary}"))
+        .header(
+            "content-type",
+            format!("multipart/form-data; boundary={boundary}"),
+        )
         .body(Body::from(body))
         .unwrap();
     let res = app.clone().oneshot(req).await.unwrap();
@@ -179,7 +205,10 @@ async fn svd_upload_peripheral_read_and_decode() {
     let req = Request::builder()
         .method("POST")
         .uri("/api/svd")
-        .header("content-type", format!("multipart/form-data; boundary={boundary}"))
+        .header(
+            "content-type",
+            format!("multipart/form-data; boundary={boundary}"),
+        )
         .body(Body::from(body))
         .unwrap();
     let res = app.clone().oneshot(req).await.unwrap();

@@ -154,7 +154,6 @@ impl OperationKind {
         )
     }
 
-
     /// Exclusive operations set `OperationState` and reject concurrent ops.
     pub fn exclusive(self) -> bool {
         matches!(
@@ -213,7 +212,10 @@ impl Operation {
         id: u64,
         kind: OperationKind,
         params: serde_json::Value,
-    ) -> (Self, tokio::sync::oneshot::Receiver<Result<serde_json::Value, WebError>>) {
+    ) -> (
+        Self,
+        tokio::sync::oneshot::Receiver<Result<serde_json::Value, WebError>>,
+    ) {
         let (tx, rx) = tokio::sync::oneshot::channel();
         (
             Self {
@@ -378,5 +380,3 @@ impl ServerEvent {
         }
     }
 }
-
-

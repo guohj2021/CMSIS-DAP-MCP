@@ -96,7 +96,10 @@ pub fn spawn_peripheral_monitor(state: SharedState, stop: Arc<AtomicBool>) {
             for (id, periph, reg, addr) in to_read {
                 let value = state
                     .executor
-                    .call_async(OperationKind::PeripheralRead, serde_json::json!({ "address": addr }))
+                    .call_async(
+                        OperationKind::PeripheralRead,
+                        serde_json::json!({ "address": addr }),
+                    )
                     .await
                     .ok()
                     .and_then(|v| v.get("value").and_then(|x| x.as_u64()));
@@ -118,15 +121,24 @@ async fn read_target(
 ) -> Option<u64> {
     match target {
         WatchTarget::Address { address } => executor
-            .call_async(OperationKind::WatchRead, serde_json::json!({ "address": address, "width": "u32" }))
+            .call_async(
+                OperationKind::WatchRead,
+                serde_json::json!({ "address": address, "width": "u32" }),
+            )
             .await
             .ok()
             .and_then(|v| v.get("value").and_then(|x| x.as_u64())),
         WatchTarget::Symbol { symbol_id } => {
-            let addr = symbols.as_ref().and_then(|db| db.resolve_id(*symbol_id)).map(|s| s.address);
+            let addr = symbols
+                .as_ref()
+                .and_then(|db| db.resolve_id(*symbol_id))
+                .map(|s| s.address);
             match addr {
                 Some(a) => executor
-                    .call_async(OperationKind::WatchRead, serde_json::json!({ "address": a, "width": "u32" }))
+                    .call_async(
+                        OperationKind::WatchRead,
+                        serde_json::json!({ "address": a, "width": "u32" }),
+                    )
                     .await
                     .ok()
                     .and_then(|v| v.get("value").and_then(|x| x.as_u64())),
@@ -134,7 +146,10 @@ async fn read_target(
             }
         }
         WatchTarget::Register { name } => executor
-            .call_async(OperationKind::RegisterRead, serde_json::json!({ "name": name }))
+            .call_async(
+                OperationKind::RegisterRead,
+                serde_json::json!({ "name": name }),
+            )
             .await
             .ok()
             .and_then(|v| v.get("value").and_then(|x| x.as_u64())),

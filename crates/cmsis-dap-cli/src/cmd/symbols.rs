@@ -18,9 +18,7 @@ pub fn load_symbols(path: &Path) -> Result<BTreeMap<String, u64>, CliError> {
     let db = SymbolDatabase::load(path).map_err(|e| file_error(e.to_string()))?;
     let mut symbols = BTreeMap::new();
     for symbol in db.symbols() {
-        symbols
-            .entry(symbol.name.clone())
-            .or_insert(symbol.address);
+        symbols.entry(symbol.name.clone()).or_insert(symbol.address);
     }
     Ok(symbols)
 }

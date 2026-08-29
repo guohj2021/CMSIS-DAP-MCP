@@ -1,6 +1,6 @@
 //! ELF/AXF symbol loader (object crate).
 
-use super::{Symbol, SymbolDatabase, SymbolKind, not_found};
+use super::{not_found, Symbol, SymbolDatabase, SymbolKind};
 use crate::error::McpError;
 use object::{Object, ObjectSection, ObjectSymbol};
 

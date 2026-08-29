@@ -18,7 +18,8 @@ pub struct SourceLocation {
 
 /// DWARF debug-info context loaded from a firmware ELF/AXF.
 pub struct DebugInfo {
-    ctx: addr2line::Context<addr2line::gimli::EndianSlice<'static, addr2line::gimli::RunTimeEndian>>,
+    ctx:
+        addr2line::Context<addr2line::gimli::EndianSlice<'static, addr2line::gimli::RunTimeEndian>>,
 }
 
 impl DebugInfo {
@@ -26,7 +27,10 @@ impl DebugInfo {
     /// usable debug info (callers show "not available", never fake).
     pub fn load(path: &Path) -> Result<Option<Self>, McpError> {
         let bytes = std::fs::read(path).map_err(|e| {
-            McpError::new(ErrorCode::FileError, format!("failed to read {}: {e}", path.display()))
+            McpError::new(
+                ErrorCode::FileError,
+                format!("failed to read {}: {e}", path.display()),
+            )
         })?;
         let file = match object::File::parse(&bytes[..]) {
             Ok(f) => f,
@@ -46,9 +50,15 @@ impl DebugInfo {
         } else {
             gimli::RunTimeEndian::Big
         };
-        let load_section = |id: gimli::SectionId| -> Result<gimli::EndianSlice<'static, gimli::RunTimeEndian>, gimli::Error> {
+        let load_section = |id: gimli::SectionId| -> Result<
+            gimli::EndianSlice<'static, gimli::RunTimeEndian>,
+            gimli::Error,
+        > {
             let name = id.name();
-            let data: &'static [u8] = match file.section_by_name(name).and_then(|s| s.uncompressed_data().ok()) {
+            let data: &'static [u8] = match file
+                .section_by_name(name)
+                .and_then(|s| s.uncompressed_data().ok())
+            {
                 Some(d) => Box::leak(d.into_owned().into_boxed_slice()),
                 None => &[],
             };

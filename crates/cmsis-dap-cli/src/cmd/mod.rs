@@ -1155,6 +1155,3 @@ pub fn run(
         Command::Web(_) => unreachable!("web command handled before session creation"),
     }
 }
-
-
-

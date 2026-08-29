@@ -108,13 +108,16 @@ impl SvdDatabase {
                             name: r.name.clone(),
                             offset: r.address_offset as u64,
                             size_bits: props.size.unwrap_or(32),
-                            access: props.access.as_ref().map(|a| match a {
-                                svd_parser::svd::Access::ReadOnly => "read-only",
-                                svd_parser::svd::Access::WriteOnly => "write-only",
-                                svd_parser::svd::Access::ReadWrite => "read-write",
-                                svd_parser::svd::Access::WriteOnce => "write-once",
-                                svd_parser::svd::Access::ReadWriteOnce => "read-write-once",
-                            }.to_string()),
+                            access: props.access.as_ref().map(|a| {
+                                match a {
+                                    svd_parser::svd::Access::ReadOnly => "read-only",
+                                    svd_parser::svd::Access::WriteOnly => "write-only",
+                                    svd_parser::svd::Access::ReadWrite => "read-write",
+                                    svd_parser::svd::Access::WriteOnce => "write-once",
+                                    svd_parser::svd::Access::ReadWriteOnce => "read-write-once",
+                                }
+                                .to_string()
+                            }),
                             description: r.description.clone(),
                             fields: r
                                 .fields
@@ -185,14 +188,11 @@ impl SvdDatabase {
             .find(|p| p.name.eq_ignore_ascii_case(peripheral))
     }
 
-    pub fn get_register(
-        &self,
-        peripheral: &str,
-        register: &str,
-    ) -> Option<&SvdRegisterInfo> {
-        self.get_peripheral(peripheral)?.registers.iter().find(|r| {
-            r.name.eq_ignore_ascii_case(register)
-        })
+    pub fn get_register(&self, peripheral: &str, register: &str) -> Option<&SvdRegisterInfo> {
+        self.get_peripheral(peripheral)?
+            .registers
+            .iter()
+            .find(|r| r.name.eq_ignore_ascii_case(register))
     }
 
     /// Decode a register value into bit fields with enumerated text
@@ -250,7 +250,9 @@ impl SvdDatabase {
                 format!("register {register} not found in {peripheral}"),
             )
         })?;
-        let p = self.get_peripheral(peripheral).expect("register implies peripheral");
+        let p = self
+            .get_peripheral(peripheral)
+            .expect("register implies peripheral");
         let addr = p.base + r.offset;
         match field {
             None => Ok((addr, None)),

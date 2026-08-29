@@ -17,7 +17,11 @@ pub async fn serve_static(uri: &str) -> Response {
         let mime = mime_guess::from_path(path).first_or_octet_stream();
         return Response::builder()
             .status(StatusCode::OK)
-            .header(header::CONTENT_TYPE, HeaderValue::from_str(mime.as_ref()).unwrap_or(HeaderValue::from_static("application/octet-stream")))
+            .header(
+                header::CONTENT_TYPE,
+                HeaderValue::from_str(mime.as_ref())
+                    .unwrap_or(HeaderValue::from_static("application/octet-stream")),
+            )
             .body(Body::from(file.data.into_owned()))
             .unwrap_or_else(|_| Response::new(Body::from("internal error")));
     }
@@ -38,4 +42,3 @@ pub async fn serve_static(uri: &str) -> Response {
         .body(Body::from("not found"))
         .unwrap()
 }
-

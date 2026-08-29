@@ -23,7 +23,11 @@ async fn handle_socket(mut socket: WebSocket, state: SharedState) {
         "type": "ready",
         "session": state.executor.status(),
     });
-    if socket.send(Message::Text(ready.to_string().into())).await.is_err() {
+    if socket
+        .send(Message::Text(ready.to_string().into()))
+        .await
+        .is_err()
+    {
         state.lease.client_disconnected();
         return;
     }
@@ -101,4 +105,3 @@ pub fn event_json(event: &ServerEvent) -> String {
     })
     .to_string()
 }
-

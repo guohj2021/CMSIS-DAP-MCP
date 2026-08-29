@@ -27,17 +27,32 @@ pub fn router() -> Router<SharedState> {
         .route("/api/memory/write", post(memory_write))
         .route("/api/breakpoints", get(breakpoints).post(breakpoint_set))
         .route("/api/breakpoints/limits", get(breakpoint_limits))
-        .route("/api/breakpoints/{address}", axum::routing::delete(breakpoint_delete))
+        .route(
+            "/api/breakpoints/{address}",
+            axum::routing::delete(breakpoint_delete),
+        )
         .route("/api/watchpoints", get(watchpoints).post(watchpoint_set))
-        .route("/api/watchpoints/{address}", axum::routing::delete(watchpoint_delete))
+        .route(
+            "/api/watchpoints/{address}",
+            axum::routing::delete(watchpoint_delete),
+        )
         .route("/api/files/elf", post(elf_upload))
         .route("/api/symbols", get(symbols))
         .route("/api/symbols/resolve", get(symbols_resolve))
         .route("/api/watch", get(watch_list).post(watch_add))
-        .route("/api/watch/{id}", axum::routing::delete(watch_delete).patch(watch_patch))
+        .route(
+            "/api/watch/{id}",
+            axum::routing::delete(watch_delete).patch(watch_patch),
+        )
         .route("/api/watch/refresh", post(watch_refresh))
-        .route("/api/peripherals/monitor", get(monitor_list).post(monitor_add))
-        .route("/api/peripherals/monitor/{id}", axum::routing::delete(monitor_delete))
+        .route(
+            "/api/peripherals/monitor",
+            get(monitor_list).post(monitor_add),
+        )
+        .route(
+            "/api/peripherals/monitor/{id}",
+            axum::routing::delete(monitor_delete),
+        )
         .route("/api/rtt/start", post(rtt_start))
         .route("/api/rtt/stop", post(rtt_stop))
         .route("/api/rtt/channels", get(rtt_channels))
@@ -116,13 +131,31 @@ async fn status(State(state): State<SharedState>) -> Response {
 }
 
 async fn debug_run(State(state): State<SharedState>) -> Response {
-    api_result(state.executor.clone().call_async(OperationKind::Run, json!({})).await)
+    api_result(
+        state
+            .executor
+            .clone()
+            .call_async(OperationKind::Run, json!({}))
+            .await,
+    )
 }
 async fn debug_halt(State(state): State<SharedState>) -> Response {
-    api_result(state.executor.clone().call_async(OperationKind::Halt, json!({})).await)
+    api_result(
+        state
+            .executor
+            .clone()
+            .call_async(OperationKind::Halt, json!({}))
+            .await,
+    )
 }
 async fn debug_step(State(state): State<SharedState>) -> Response {
-    api_result(state.executor.clone().call_async(OperationKind::Step, json!({})).await)
+    api_result(
+        state
+            .executor
+            .clone()
+            .call_async(OperationKind::Step, json!({}))
+            .await,
+    )
 }
 
 #[derive(Deserialize)]
@@ -140,7 +173,13 @@ async fn debug_reset(State(state): State<SharedState>, Json(body): Json<ResetBod
 }
 
 async fn registers(State(state): State<SharedState>) -> Response {
-    api_result(state.executor.clone().call_async(OperationKind::ListRegisters, json!({})).await)
+    api_result(
+        state
+            .executor
+            .clone()
+            .call_async(OperationKind::ListRegisters, json!({}))
+            .await,
+    )
 }
 
 #[derive(Deserialize)]
@@ -148,12 +187,18 @@ struct RegisterWriteBody {
     name: String,
     value: u64,
 }
-async fn register_write(State(state): State<SharedState>, Json(body): Json<RegisterWriteBody>) -> Response {
+async fn register_write(
+    State(state): State<SharedState>,
+    Json(body): Json<RegisterWriteBody>,
+) -> Response {
     api_result(
         state
             .executor
             .clone()
-            .call_async(OperationKind::RegisterWrite, json!({ "name": body.name, "value": body.value }))
+            .call_async(
+                OperationKind::RegisterWrite,
+                json!({ "name": body.name, "value": body.value }),
+            )
             .await,
     )
 }
@@ -164,7 +209,10 @@ struct MemoryReadBody {
     width: Option<String>,
     count: Option<u32>,
 }
-async fn memory_read(State(state): State<SharedState>, Json(body): Json<MemoryReadBody>) -> Response {
+async fn memory_read(
+    State(state): State<SharedState>,
+    Json(body): Json<MemoryReadBody>,
+) -> Response {
     api_result(
         state
             .executor
@@ -183,7 +231,10 @@ struct MemoryWriteBody {
     width: Option<String>,
     values: Vec<u64>,
 }
-async fn memory_write(State(state): State<SharedState>, Json(body): Json<MemoryWriteBody>) -> Response {
+async fn memory_write(
+    State(state): State<SharedState>,
+    Json(body): Json<MemoryWriteBody>,
+) -> Response {
     api_result(
         state
             .executor
@@ -213,7 +264,10 @@ struct BreakpointBody {
     /// { "kind": "symbol", "name": "main" } resolves via the loaded ELF.
     target: Option<Value>,
 }
-async fn breakpoint_set(State(state): State<SharedState>, Json(body): Json<BreakpointBody>) -> Response {
+async fn breakpoint_set(
+    State(state): State<SharedState>,
+    Json(body): Json<BreakpointBody>,
+) -> Response {
     let action = match body.kind.as_deref() {
         Some("sw_flash") | Some("flash") => "set_flash",
         _ => "set",
@@ -222,7 +276,9 @@ async fn breakpoint_set(State(state): State<SharedState>, Json(body): Json<Break
         if t.get("kind").and_then(|k| k.as_str()) == Some("symbol") {
             let name = t.get("name").and_then(|n| n.as_str());
             let Some(name) = name else {
-                return api_result(Err(WebError::InvalidArgument("symbol target needs name".into())));
+                return api_result(Err(WebError::InvalidArgument(
+                    "symbol target needs name".into(),
+                )));
             };
             let sym = state
                 .symbols
@@ -256,12 +312,18 @@ async fn breakpoint_set(State(state): State<SharedState>, Json(body): Json<Break
         state
             .executor
             .clone()
-            .call_async(OperationKind::Breakpoint, json!({ "action": action, "address": address }))
+            .call_async(
+                OperationKind::Breakpoint,
+                json!({ "action": action, "address": address }),
+            )
             .await,
     )
 }
 
-async fn breakpoint_delete(State(state): State<SharedState>, Path(_address): Path<u64>) -> Response {
+async fn breakpoint_delete(
+    State(state): State<SharedState>,
+    Path(_address): Path<u64>,
+) -> Response {
     api_result(
         state
             .executor
@@ -296,7 +358,10 @@ struct WatchpointBody {
     address: u64,
     access: Option<String>,
 }
-async fn watchpoint_set(State(state): State<SharedState>, Json(body): Json<WatchpointBody>) -> Response {
+async fn watchpoint_set(
+    State(state): State<SharedState>,
+    Json(body): Json<WatchpointBody>,
+) -> Response {
     api_result(
         state
             .executor
@@ -309,7 +374,10 @@ async fn watchpoint_set(State(state): State<SharedState>, Json(body): Json<Watch
     )
 }
 
-async fn watchpoint_delete(State(state): State<SharedState>, Path(_address): Path<u64>) -> Response {
+async fn watchpoint_delete(
+    State(state): State<SharedState>,
+    Path(_address): Path<u64>,
+) -> Response {
     api_result(
         state
             .executor
@@ -320,11 +388,23 @@ async fn watchpoint_delete(State(state): State<SharedState>, Path(_address): Pat
 }
 
 async fn fault(State(state): State<SharedState>) -> Response {
-    api_result(state.executor.clone().call_async(OperationKind::DumpFault, json!({})).await)
+    api_result(
+        state
+            .executor
+            .clone()
+            .call_async(OperationKind::DumpFault, json!({}))
+            .await,
+    )
 }
 
 async fn snapshot(State(state): State<SharedState>) -> Response {
-    api_result(state.executor.clone().call_async(OperationKind::Snapshot, json!({})).await)
+    api_result(
+        state
+            .executor
+            .clone()
+            .call_async(OperationKind::Snapshot, json!({}))
+            .await,
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -358,17 +438,24 @@ async fn firmware_upload(State(state): State<SharedState>, mut multipart: Multip
         return api_result(Err(WebError::InvalidArgument("missing file name".into())));
     };
 
-    let format = match crate::flash::FirmwareFormat::from_extension(std::path::Path::new(&file_name)) {
-        Ok(f) => f,
-        Err(e) => return api_result(Err(e)),
-    };
+    let format =
+        match crate::flash::FirmwareFormat::from_extension(std::path::Path::new(&file_name)) {
+            Ok(f) => f,
+            Err(e) => return api_result(Err(e)),
+        };
     let id = uuid::Uuid::new_v4().to_string();
     let ext = format.as_str();
     let path = state._upload_dir.path().join(format!("{id}.{ext}"));
     if let Err(e) = std::fs::write(&path, &data) {
-        return api_result(Err(WebError::Internal(format!("failed to save upload: {e}"))));
+        return api_result(Err(WebError::Internal(format!(
+            "failed to save upload: {e}"
+        ))));
     }
-    state.uploads.lock().unwrap().insert(id.clone(), path.clone());
+    state
+        .uploads
+        .lock()
+        .unwrap()
+        .insert(id.clone(), path.clone());
 
     match crate::flash::FirmwareImage::analyze(&path, format, bin_address) {
         Ok(image) => api_result(Ok(serde_json::json!({
@@ -389,7 +476,10 @@ struct FlashEraseBody {
     address: u64,
     size: u64,
 }
-async fn flash_erase(State(state): State<SharedState>, Json(body): Json<FlashEraseBody>) -> Response {
+async fn flash_erase(
+    State(state): State<SharedState>,
+    Json(body): Json<FlashEraseBody>,
+) -> Response {
     api_result(
         state
             .executor
@@ -409,13 +499,11 @@ struct FlashProgramBody {
     verify: Option<bool>,
     mode: Option<String>,
 }
-async fn flash_program(State(state): State<SharedState>, Json(body): Json<FlashProgramBody>) -> Response {
-    let path = state
-        .uploads
-        .lock()
-        .unwrap()
-        .get(&body.file_id)
-        .cloned();
+async fn flash_program(
+    State(state): State<SharedState>,
+    Json(body): Json<FlashProgramBody>,
+) -> Response {
+    let path = state.uploads.lock().unwrap().get(&body.file_id).cloned();
     let Some(path) = path else {
         return api_result(Err(WebError::InvalidArgument(format!(
             "unknown file_id {}",
@@ -465,7 +553,9 @@ async fn elf_upload(State(state): State<SharedState>, mut multipart: Multipart) 
     let id = uuid::Uuid::new_v4().to_string();
     let path = state._upload_dir.path().join(&id);
     if let Err(e) = std::fs::write(&path, &data) {
-        return api_result(Err(WebError::Internal(format!("failed to save upload: {e}"))));
+        return api_result(Err(WebError::Internal(format!(
+            "failed to save upload: {e}"
+        ))));
     }
     let _ = file_name;
     let db = match cmsis_dap_core::symbols::SymbolDatabase::load(&path) {
@@ -485,7 +575,9 @@ async fn elf_upload(State(state): State<SharedState>, mut multipart: Multipart) 
     };
     *state.symbols.write().unwrap() = Some(db.clone());
     // Load DWARF source locations (best effort; None when absent).
-    let debug_info = cmsis_dap_core::symbols::DebugInfo::load(&path).ok().flatten();
+    let debug_info = cmsis_dap_core::symbols::DebugInfo::load(&path)
+        .ok()
+        .flatten();
     *state.debug_info.lock().unwrap() = debug_info;
     api_result(Ok(json!({
         "file_id": id,
@@ -516,7 +608,12 @@ async fn symbols(State(state): State<SharedState>, Query(q): Query<SymbolsQuery>
             ))))
         }
     };
-    let (total, page) = db.search(kind, q.pattern.as_deref(), q.offset.unwrap_or(0), q.limit.unwrap_or(200));
+    let (total, page) = db.search(
+        kind,
+        q.pattern.as_deref(),
+        q.offset.unwrap_or(0),
+        q.limit.unwrap_or(200),
+    );
     api_result(Ok(json!({
         "total": total,
         "items": page.iter().map(|s| json!({
@@ -530,7 +627,10 @@ async fn symbols(State(state): State<SharedState>, Query(q): Query<SymbolsQuery>
 struct SymbolsResolveQuery {
     name: String,
 }
-async fn symbols_resolve(State(state): State<SharedState>, Query(q): Query<SymbolsResolveQuery>) -> Response {
+async fn symbols_resolve(
+    State(state): State<SharedState>,
+    Query(q): Query<SymbolsResolveQuery>,
+) -> Response {
     let Some(db) = state.symbols.read().unwrap().clone() else {
         return api_result(Err(WebError::InvalidArgument("no ELF loaded".into())));
     };
@@ -538,7 +638,10 @@ async fn symbols_resolve(State(state): State<SharedState>, Query(q): Query<Symbo
         Some(s) => api_result(Ok(json!({
             "symbol": { "id": s.id, "name": s.name, "address": s.address, "size": s.size, "kind": s.kind }
         }))),
-        None => api_result(Err(WebError::InvalidArgument(format!("symbol {} not found", q.name)))),
+        None => api_result(Err(WebError::InvalidArgument(format!(
+            "symbol {} not found",
+            q.name
+        )))),
     }
 }
 
@@ -554,7 +657,11 @@ async fn watch_add(State(state): State<SharedState>, Json(body): Json<WatchAddBo
     let target = match body.target.get("kind").and_then(|k| k.as_str()) {
         Some("symbol") => {
             let id = body.target.get("symbol_id").and_then(|v| v.as_u64());
-            let name = body.target.get("name").and_then(|v| v.as_str()).map(String::from);
+            let name = body
+                .target
+                .get("name")
+                .and_then(|v| v.as_str())
+                .map(String::from);
             let resolved_id = match id {
                 Some(i) => i,
                 None => {
@@ -576,19 +683,29 @@ async fn watch_add(State(state): State<SharedState>, Json(body): Json<WatchAddBo
                     }
                 }
             };
-            crate::watch::WatchTarget::Symbol { symbol_id: resolved_id }
+            crate::watch::WatchTarget::Symbol {
+                symbol_id: resolved_id,
+            }
         }
         Some("address") => {
             let address = body.target.get("address").and_then(|v| v.as_u64());
             let Some(address) = address else {
-                return api_result(Err(WebError::InvalidArgument("address target needs address".into())));
+                return api_result(Err(WebError::InvalidArgument(
+                    "address target needs address".into(),
+                )));
             };
             crate::watch::WatchTarget::Address { address }
         }
         Some("register") => {
-            let name = body.target.get("name").and_then(|v| v.as_str()).map(String::from);
+            let name = body
+                .target
+                .get("name")
+                .and_then(|v| v.as_str())
+                .map(String::from);
             let Some(name) = name else {
-                return api_result(Err(WebError::InvalidArgument("register target needs name".into())));
+                return api_result(Err(WebError::InvalidArgument(
+                    "register target needs name".into(),
+                )));
             };
             crate::watch::WatchTarget::Register { name }
         }
@@ -625,7 +742,11 @@ struct WatchPatchBody {
     enabled: Option<bool>,
     rate_ms: Option<u32>,
 }
-async fn watch_patch(State(state): State<SharedState>, Path(id): Path<u64>, Json(body): Json<WatchPatchBody>) -> Response {
+async fn watch_patch(
+    State(state): State<SharedState>,
+    Path(id): Path<u64>,
+    Json(body): Json<WatchPatchBody>,
+) -> Response {
     let mut items = state.watch.lock().unwrap();
     if let Some(w) = items.iter_mut().find(|w| w.id == id) {
         if let Some(enabled) = body.enabled {
@@ -636,7 +757,9 @@ async fn watch_patch(State(state): State<SharedState>, Path(id): Path<u64>, Json
         }
         api_result(Ok(json!({ "updated": true })))
     } else {
-        api_result(Err(WebError::InvalidArgument(format!("no watch item {id}"))))
+        api_result(Err(WebError::InvalidArgument(format!(
+            "no watch item {id}"
+        ))))
     }
 }
 
@@ -651,15 +774,24 @@ async fn watch_refresh(State(state): State<SharedState>) -> Response {
         }
         let read = match &w.target {
             crate::watch::WatchTarget::Address { address } => ex
-                .call_async(OperationKind::WatchRead, json!({ "address": address, "width": "u32" }))
+                .call_async(
+                    OperationKind::WatchRead,
+                    json!({ "address": address, "width": "u32" }),
+                )
                 .await
                 .ok()
                 .and_then(|v| v.get("value").and_then(|x| x.as_u64())),
             crate::watch::WatchTarget::Symbol { symbol_id } => {
-                let addr = symbols.as_ref().and_then(|db| db.resolve_id(*symbol_id)).map(|s| s.address);
+                let addr = symbols
+                    .as_ref()
+                    .and_then(|db| db.resolve_id(*symbol_id))
+                    .map(|s| s.address);
                 match addr {
                     Some(a) => ex
-                        .call_async(OperationKind::WatchRead, json!({ "address": a, "width": "u32" }))
+                        .call_async(
+                            OperationKind::WatchRead,
+                            json!({ "address": a, "width": "u32" }),
+                        )
                         .await
                         .ok()
                         .and_then(|v| v.get("value").and_then(|x| x.as_u64())),
@@ -694,9 +826,14 @@ async fn svd_upload(State(state): State<SharedState>, mut multipart: Multipart) 
     let Some(data) = data else {
         return api_result(Err(WebError::InvalidArgument("missing file field".into())));
     };
-    let path = state._upload_dir.path().join(format!("{}.svd", uuid::Uuid::new_v4()));
+    let path = state
+        ._upload_dir
+        .path()
+        .join(format!("{}.svd", uuid::Uuid::new_v4()));
     if let Err(e) = std::fs::write(&path, &data) {
-        return api_result(Err(WebError::Internal(format!("failed to save upload: {e}"))));
+        return api_result(Err(WebError::Internal(format!(
+            "failed to save upload: {e}"
+        ))));
     }
     let db = match cmsis_dap_core::svd::SvdDatabase::load(&path) {
         Ok(db) => db,
@@ -704,7 +841,9 @@ async fn svd_upload(State(state): State<SharedState>, mut multipart: Multipart) 
     };
     let summary = db.summary();
     *state.svd.write().unwrap() = Some(db);
-    api_result(Ok(json!({ "name": summary.name, "peripherals": summary.peripherals })))
+    api_result(Ok(
+        json!({ "name": summary.name, "peripherals": summary.peripherals }),
+    ))
 }
 
 async fn peripherals(State(state): State<SharedState>) -> Response {
@@ -725,7 +864,9 @@ async fn peripheral_get(State(state): State<SharedState>, Path(name): Path<Strin
     };
     match svd.get_peripheral(&name) {
         Some(p) => api_result(Ok(json!({ "peripheral": p }))),
-        None => api_result(Err(WebError::InvalidArgument(format!("peripheral {name} not found")))),
+        None => api_result(Err(WebError::InvalidArgument(format!(
+            "peripheral {name} not found"
+        )))),
     }
 }
 
@@ -733,7 +874,11 @@ async fn peripheral_get(State(state): State<SharedState>, Path(name): Path<Strin
 struct PeripheralReadBody {
     register: String,
 }
-async fn peripheral_read(State(state): State<SharedState>, Path(name): Path<String>, Json(body): Json<PeripheralReadBody>) -> Response {
+async fn peripheral_read(
+    State(state): State<SharedState>,
+    Path(name): Path<String>,
+    Json(body): Json<PeripheralReadBody>,
+) -> Response {
     let Some(svd) = state.svd.read().unwrap().clone() else {
         return api_result(Err(WebError::InvalidArgument("no SVD loaded".into())));
     };
@@ -749,7 +894,9 @@ async fn peripheral_read(State(state): State<SharedState>, Path(name): Path<Stri
         Ok(v) => {
             let value = v.get("value").and_then(|x| x.as_u64()).unwrap_or(0) as u32;
             let decoded = svd.decode_register(&name, &body.register, value).ok();
-            api_result(Ok(json!({ "address": addr, "value": value, "decoded": decoded })))
+            api_result(Ok(
+                json!({ "address": addr, "value": value, "decoded": decoded }),
+            ))
         }
         Err(e) => api_result(Err(e)),
     }
@@ -760,7 +907,11 @@ struct PeripheralWriteBody {
     register: String,
     value: u32,
 }
-async fn peripheral_write(State(state): State<SharedState>, Path(name): Path<String>, Json(body): Json<PeripheralWriteBody>) -> Response {
+async fn peripheral_write(
+    State(state): State<SharedState>,
+    Path(name): Path<String>,
+    Json(body): Json<PeripheralWriteBody>,
+) -> Response {
     let Some(svd) = state.svd.read().unwrap().clone() else {
         return api_result(Err(WebError::InvalidArgument("no SVD loaded".into())));
     };
@@ -772,7 +923,10 @@ async fn peripheral_write(State(state): State<SharedState>, Path(name): Path<Str
         state
             .executor
             .clone()
-            .call_async(OperationKind::PeripheralWrite, json!({ "address": addr, "value": body.value }))
+            .call_async(
+                OperationKind::PeripheralWrite,
+                json!({ "address": addr, "value": body.value }),
+            )
             .await,
     )
 }
@@ -782,7 +936,11 @@ struct PeripheralDecodeBody {
     register: String,
     value: u32,
 }
-async fn peripheral_decode(State(state): State<SharedState>, Path(name): Path<String>, Json(body): Json<PeripheralDecodeBody>) -> Response {
+async fn peripheral_decode(
+    State(state): State<SharedState>,
+    Path(name): Path<String>,
+    Json(body): Json<PeripheralDecodeBody>,
+) -> Response {
     let Some(svd) = state.svd.read().unwrap().clone() else {
         return api_result(Err(WebError::InvalidArgument("no SVD loaded".into())));
     };
@@ -807,7 +965,10 @@ struct MonitorAddBody {
     rate_ms: Option<u32>,
     safety: Option<String>,
 }
-async fn monitor_add(State(state): State<SharedState>, Json(body): Json<MonitorAddBody>) -> Response {
+async fn monitor_add(
+    State(state): State<SharedState>,
+    Json(body): Json<MonitorAddBody>,
+) -> Response {
     let svd = state.svd.read().unwrap().clone();
     let Some(svd) = svd else {
         return api_result(Err(WebError::InvalidArgument("no SVD loaded".into())));
@@ -870,7 +1031,9 @@ async fn rtt_start(State(state): State<SharedState>, Json(body): Json<RttStartBo
         Err(e) => return api_result(Err(e)),
     };
     // Start the RTT poll task.
-    state.rtt_stop.store(false, std::sync::atomic::Ordering::SeqCst);
+    state
+        .rtt_stop
+        .store(false, std::sync::atomic::Ordering::SeqCst);
     let ex2 = state.executor.clone();
     let events = state.events.clone();
     let stop = state.rtt_stop.clone();
@@ -881,19 +1044,39 @@ async fn rtt_start(State(state): State<SharedState>, Json(body): Json<RttStartBo
             if stop.load(std::sync::atomic::Ordering::SeqCst) {
                 break;
             }
-            let Ok(v) = ex2.call_async(OperationKind::RttRead, json!({ "channels": [], "max_bytes": 4096 })).await else {
+            let Ok(v) = ex2
+                .call_async(
+                    OperationKind::RttRead,
+                    json!({ "channels": [], "max_bytes": 4096 }),
+                )
+                .await
+            else {
                 continue;
             };
             let Some(arr) = v.as_array() else { continue };
             for item in arr {
                 let channel = item.get("channel").and_then(|c| c.as_u64()).unwrap_or(0) as usize;
                 let name = item.get("name").and_then(|n| n.as_str()).map(String::from);
-                let data = item.get("data").and_then(|d| d.as_array()).map(|a| a.iter().filter_map(|b| b.as_u64()).map(|b| b as u8).collect::<Vec<u8>>()).unwrap_or_default();
+                let data = item
+                    .get("data")
+                    .and_then(|d| d.as_array())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|b| b.as_u64())
+                            .map(|b| b as u8)
+                            .collect::<Vec<u8>>()
+                    })
+                    .unwrap_or_default();
                 if data.is_empty() {
                     continue;
                 }
-                let encoded = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &data);
-                let _ = events.send(ServerEvent::RttOutput { channel, name, data: encoded });
+                let encoded =
+                    base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &data);
+                let _ = events.send(ServerEvent::RttOutput {
+                    channel,
+                    name,
+                    data: encoded,
+                });
             }
         }
     });
@@ -902,7 +1085,9 @@ async fn rtt_start(State(state): State<SharedState>, Json(body): Json<RttStartBo
 }
 
 async fn rtt_stop(State(state): State<SharedState>) -> Response {
-    state.rtt_stop.store(true, std::sync::atomic::Ordering::SeqCst);
+    state
+        .rtt_stop
+        .store(true, std::sync::atomic::Ordering::SeqCst);
     let _ = state
         .executor
         .call_async(OperationKind::RttDetach, json!({}))
@@ -921,11 +1106,16 @@ struct EvrStartBody {
 async fn evr_start(State(state): State<SharedState>, Json(body): Json<EvrStartBody>) -> Response {
     let ex = state.executor.clone();
     let result = ex
-        .call_async(OperationKind::EvrAttach, json!({ "info_address": body.info_address }))
+        .call_async(
+            OperationKind::EvrAttach,
+            json!({ "info_address": body.info_address }),
+        )
         .await;
     match result {
         Ok(status) => {
-            state.evr_stop.store(false, std::sync::atomic::Ordering::SeqCst);
+            state
+                .evr_stop
+                .store(false, std::sync::atomic::Ordering::SeqCst);
             let ex2 = state.executor.clone();
             let events = state.events.clone();
             let stop = state.evr_stop.clone();
@@ -941,7 +1131,9 @@ async fn evr_start(State(state): State<SharedState>, Json(body): Json<EvrStartBo
                     };
                     let Some(arr) = v.as_array() else { continue };
                     for ev in arr {
-                        let _ = events.send(ServerEvent::EvrEventArrived { payload: ev.clone() });
+                        let _ = events.send(ServerEvent::EvrEventArrived {
+                            payload: ev.clone(),
+                        });
                     }
                 }
             });
@@ -953,7 +1145,9 @@ async fn evr_start(State(state): State<SharedState>, Json(body): Json<EvrStartBo
 }
 
 async fn evr_stop(State(state): State<SharedState>) -> Response {
-    state.evr_stop.store(true, std::sync::atomic::Ordering::SeqCst);
+    state
+        .evr_stop
+        .store(true, std::sync::atomic::Ordering::SeqCst);
     let _ = state
         .executor
         .call_async(OperationKind::EvrDetach, json!({}))
@@ -969,7 +1163,10 @@ struct DisassemblyQuery {
     address: u64,
     count: Option<usize>,
 }
-async fn disassembly(State(state): State<SharedState>, Query(q): Query<DisassemblyQuery>) -> Response {
+async fn disassembly(
+    State(state): State<SharedState>,
+    Query(q): Query<DisassemblyQuery>,
+) -> Response {
     let count = q.count.unwrap_or(16).clamp(1, 128);
     let bytes = match state
         .executor
@@ -980,7 +1177,16 @@ async fn disassembly(State(state): State<SharedState>, Query(q): Query<Disassemb
         )
         .await
     {
-        Ok(v) => v.get("bytes").and_then(|b| b.as_array()).map(|a| a.iter().filter_map(|x| x.as_u64()).map(|x| x as u8).collect::<Vec<u8>>()).unwrap_or_default(),
+        Ok(v) => v
+            .get("bytes")
+            .and_then(|b| b.as_array())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|x| x.as_u64())
+                    .map(|x| x as u8)
+                    .collect::<Vec<u8>>()
+            })
+            .unwrap_or_default(),
         Err(e) => return api_result(Err(e)),
     };
     let cs = match capstone::Capstone::new()
@@ -1023,7 +1229,9 @@ async fn disassembly(State(state): State<SharedState>, Query(q): Query<Disassemb
             "pc": addr,
         }));
     }
-    api_result(Ok(json!({ "address": q.address, "instructions": instructions })))
+    api_result(Ok(
+        json!({ "address": q.address, "instructions": instructions }),
+    ))
 }
 
 async fn address_describe(State(state): State<SharedState>, Path(address): Path<u64>) -> Response {
@@ -1052,7 +1260,9 @@ async fn address_describe(State(state): State<SharedState>, Path(address): Path<
         Err(_) => Vec::new(),
     };
     let mut info = crate::resolver::describe_address(
-        symbols.as_ref().unwrap_or(&cmsis_dap_core::symbols::SymbolDatabase::new()),
+        symbols
+            .as_ref()
+            .unwrap_or(&cmsis_dap_core::symbols::SymbolDatabase::new()),
         svd.as_ref(),
         &regions,
         address,
@@ -1093,6 +1303,3 @@ fn api_result(result: Result<Value, WebError>) -> Response {
 // Keep ExecutorHandle import used (handlers rely on it via state).
 #[allow(dead_code)]
 fn _executor_type(_: &ExecutorHandle) {}
-
-
-

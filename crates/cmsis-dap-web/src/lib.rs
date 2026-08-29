@@ -8,11 +8,11 @@ pub mod executor;
 pub mod flash;
 pub mod monitor;
 pub mod op;
-pub mod schedulers;
 pub mod resolver;
+pub mod schedulers;
 pub mod session;
-pub mod watch;
 pub mod state;
+pub mod watch;
 pub mod ws;
 
 use crate::executor::{spawn, ExecutorConfig};
@@ -130,8 +130,14 @@ pub fn serve(backend: Box<dyn Backend>, options: WebServerOptions) -> Result<(),
     let listener = runtime
         .block_on(tokio::net::TcpListener::bind(&bind))
         .map_err(|e| WebError::Internal(format!("bind {bind}: {e}")))?;
-    let actual_port = listener.local_addr().map_err(|e| WebError::Internal(e.to_string()))?.port();
-    println!("CMSIS-DAP Web Debug listening on http://{}:{actual_port}", options.host);
+    let actual_port = listener
+        .local_addr()
+        .map_err(|e| WebError::Internal(e.to_string()))?
+        .port();
+    println!(
+        "CMSIS-DAP Web Debug listening on http://{}:{actual_port}",
+        options.host
+    );
 
     runtime.block_on(async move {
         // Start live debug schedulers (Live Watch + Peripheral periodic refresh).
@@ -152,4 +158,3 @@ pub fn serve(backend: Box<dyn Backend>, options: WebServerOptions) -> Result<(),
         Ok(())
     })
 }
-

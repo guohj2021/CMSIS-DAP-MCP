@@ -31,7 +31,10 @@ fn app_with_destructive(allow_destructive: bool) -> (axum::Router, SharedState) 
     );
     let events = executor.events();
     let lease = cmsis_dap_web::session::SessionLease::new(Duration::from_secs(30));
-    let upload_dir = tempfile::Builder::new().prefix("cmsis-dap-web-test-").tempdir().unwrap();
+    let upload_dir = tempfile::Builder::new()
+        .prefix("cmsis-dap-web-test-")
+        .tempdir()
+        .unwrap();
     let state = Arc::new(AppState {
         executor,
         events,
@@ -55,7 +58,12 @@ fn app_with_destructive(allow_destructive: bool) -> (axum::Router, SharedState) 
     (cmsis_dap_web::build_router(state.clone()), state)
 }
 
-async fn send(app: &axum::Router, method: &str, path: &str, body: Option<serde_json::Value>) -> (StatusCode, serde_json::Value) {
+async fn send(
+    app: &axum::Router,
+    method: &str,
+    path: &str,
+    body: Option<serde_json::Value>,
+) -> (StatusCode, serde_json::Value) {
     let req = Request::builder()
         .method(method)
         .uri(path)
@@ -105,7 +113,13 @@ async fn connect_run_halt_reset_state_machine() {
     assert_eq!(state.executor.status().target, TargetState::Halted);
 
     // Reset & Halt.
-    let (status, json) = send(&app, "POST", "/api/debug/reset", Some(serde_json::json!({ "mode": "halt" }))).await;
+    let (status, json) = send(
+        &app,
+        "POST",
+        "/api/debug/reset",
+        Some(serde_json::json!({ "mode": "halt" })),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["mode"], "halt");
     assert_eq!(state.executor.status().target, TargetState::Halted);
@@ -151,7 +165,13 @@ async fn breakpoints_and_watchpoints() {
     send(&app, "POST", "/api/connect", Some(serde_json::json!({}))).await;
 
     // Breakpoint set/list/limits.
-    let (status, _) = send(&app, "POST", "/api/breakpoints", Some(serde_json::json!({ "address": 0x08000100 }))).await;
+    let (status, _) = send(
+        &app,
+        "POST",
+        "/api/breakpoints",
+        Some(serde_json::json!({ "address": 0x08000100 })),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     let (status, json) = send(&app, "GET", "/api/breakpoints", None).await;
     assert_eq!(status, StatusCode::OK);
@@ -216,7 +236,10 @@ async fn ws_event_flow_ready_and_state_changed() {
             break;
         }
     }
-    assert!(saw_ready, "expected a ready server state event after connect");
+    assert!(
+        saw_ready,
+        "expected a ready server state event after connect"
+    );
 }
 #[tokio::test]
 async fn firmware_upload_hex_analyze_and_region_validation() {
