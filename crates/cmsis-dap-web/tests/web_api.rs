@@ -17,16 +17,21 @@ use std::time::Duration;
 use tower::ServiceExt;
 
 fn app() -> (axum::Router, SharedState) {
+    app_with_destructive(false)
+}
+
+fn app_with_destructive(allow_destructive: bool) -> (axum::Router, SharedState) {
     let session = SessionManager::new(Box::new(MockBackend::new()));
     let executor = spawn(
         session,
         ExecutorConfig {
-            allow_destructive: false,
+            allow_destructive,
             flash_timeout: Duration::from_secs(600),
         },
     );
     let events = executor.events();
     let lease = cmsis_dap_web::session::SessionLease::new(Duration::from_secs(30));
+    let upload_dir = tempfile::Builder::new().prefix("cmsis-dap-web-test-").tempdir().unwrap();
     let state = Arc::new(AppState {
         executor,
         events,
@@ -34,6 +39,8 @@ fn app() -> (axum::Router, SharedState) {
         host: "127.0.0.1".into(),
         port: 0,
         default_connect: WebServerOptions::default().default_connect,
+        uploads: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
+        _upload_dir: upload_dir,
     });
     (cmsis_dap_web::build_router(state.clone()), state)
 }
@@ -200,4 +207,63 @@ async fn ws_event_flow_ready_and_state_changed() {
         }
     }
     assert!(saw_ready, "expected a ready server state event after connect");
+}
+#[tokio::test]
+async fn firmware_upload_hex_analyze_and_region_validation() {
+    let (app, state) = app_with_destructive(true);
+    send(&app, "POST", "/api/connect", Some(serde_json::json!({}))).await;
+
+    // Mock flash region is 0x0800_0000..0x0801_0000 (nvm).
+    // Write a tiny HEX image at 0x0800_0000.
+    let hex = ":020000040800F2\n:040000001122334452\n:00000001FF\n";
+    let id = "test-hex".to_string();
+    let path = state._upload_dir.path().join("test.hex");
+    std::fs::write(&path, hex).unwrap();
+    state.uploads.lock().unwrap().insert(id.clone(), path);
+
+    // Analyze via the upload path is exercised through Multipart; here we
+    // validate the program pipeline directly.
+    let upload_path = state.uploads.lock().unwrap().get(&id).unwrap().clone();
+    let result = cmsis_dap_web::flash::program_image(
+        &state.executor,
+        &id,
+        None,
+        true,
+        "stay_halted",
+        cmsis_dap_web::flash::FirmwareFormat::Hex,
+        &upload_path,
+    )
+    .await;
+    assert!(result.is_ok(), "program_image failed: {result:?}");
+    let json = result.unwrap();
+    assert_eq!(json["programmed"], true);
+    assert!(json["bytes"].as_u64().unwrap() > 0, "programmed some bytes");
+}
+
+#[tokio::test]
+async fn flash_region_validation_rejects_out_of_range() {
+    let (app, state) = app();
+    send(&app, "POST", "/api/connect", Some(serde_json::json!({}))).await;
+
+    // HEX segment far outside flash (0x4000_0000) must fail validation.
+    let hex = ":020000044000BA\n:040000001122334452\n:00000001FF\n";
+    let path = state._upload_dir.path().join("bad.hex");
+    std::fs::write(&path, hex).unwrap();
+    state.uploads.lock().unwrap().insert("bad".into(), path);
+
+    let upload_path = state.uploads.lock().unwrap().get("bad").unwrap().clone();
+    let result = cmsis_dap_web::flash::program_image(
+        &state.executor,
+        "bad",
+        None,
+        true,
+        "stay_halted",
+        cmsis_dap_web::flash::FirmwareFormat::Hex,
+        &upload_path,
+    )
+    .await;
+    match result {
+        Err(cmsis_dap_web::op::WebError::RegionOverflow(_)) => {}
+        other => panic!("expected RegionOverflow, got {other:?}"),
+    }
 }

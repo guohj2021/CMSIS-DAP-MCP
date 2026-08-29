@@ -11,8 +11,9 @@ use crate::op::{
     Operation, OperationKind, OperationState, ServerEvent, ServerState, SessionStatus,
     TargetState, WebError,
 };
+use cmsis_dap_core::backend::FlashPhase;
 use cmsis_dap_core::backend::{
-    AccessWidth, ConnectOptions, CoreRegister, Protocol, ResetMode, WatchAccess,
+    AccessWidth, ConnectOptions, CoreRegister, ImageFileFormat, Protocol, ResetMode, WatchAccess,
 };
 use cmsis_dap_core::error::ErrorCode;
 use cmsis_dap_core::session::SessionManager;
@@ -296,6 +297,14 @@ impl ExecutorRunner {
                 let backend = session.backend();
                 Ok(json!({ "probes": backend.list_probes()? }))
             }
+            OperationKind::TargetInfo => {
+                session.ensure_connected()?;
+                let info = session
+                    .target_info()
+                    .ok_or_else(|| WebError::NotConnected("no target".into()))?
+                    .clone();
+                Ok(json!({ "target": info }))
+            }
             OperationKind::Connect => {
                 let opts = parse_connect_options(p)?;
                 let info = session.connect(&opts)?;
@@ -535,9 +544,69 @@ impl ExecutorRunner {
                 let dump = backend.dump_cpu_state(&[], 0, false)?;
                 Ok(json!({ "fault": dump.fault }))
             }
-            OperationKind::Flash => Err(WebError::InvalidArgument(
-                "flash is handled by the flash pipeline".into(),
-            )),
+            OperationKind::Flash => {
+                if !self.allow_destructive {
+                    return Err(WebError::DestructiveDisabled(
+                        "flash requires --allow-destructive".into(),
+                    ));
+                }
+                let action = param_str(p, "action").unwrap_or("program".into());
+                let op_id = op.id;
+                let events = self.events.clone();
+                let events_done = events.clone();
+                let base = p.get("address").and_then(|v| v.as_u64()).unwrap_or(0);
+                let mut cb = move |phase: FlashPhase, done: u64, total: u64, _addr: u64| {
+                    let phase_name = serde_json::to_string(&phase)
+                        .map(|s| s.trim_matches('"').to_string())
+                        .unwrap_or_else(|_| "unknown".into());
+                    let _ = events.send(ServerEvent::FlashProgress {
+                        operation_id: op_id,
+                        phase: phase_name,
+                        bytes_done: done,
+                        bytes_total: total,
+                        current_address: base + done,
+                    });
+                };
+                match action.as_str() {
+                    "erase" => {
+                        let address = param_u64(p, "address")?;
+                        let size = param_u64(p, "size")?;
+                        let backend = session.backend();
+                        backend.erase_flash_with_progress(address, size, &mut cb)?;
+                        Ok(json!({ "erased": true, "address": address, "size": size }))
+                    }
+                    "program" => {
+                        let path_str = param_str(p, "path")?;
+                        let format = parse_image_format(param_str(p, "format")?.as_str())?;
+                        let address = param_u64(p, "address")?;
+                        let verify = p.get("verify").and_then(|v| v.as_bool()).unwrap_or(true);
+                        let mode = param_str(p, "mode").unwrap_or("stay_halted".into());
+                        let backend = session.backend();
+                        let bytes = backend.program_file_with_progress(
+                            std::path::Path::new(&path_str),
+                            format,
+                            address,
+                            verify,
+                            &mut cb,
+                        )?;
+                        match mode.as_str() {
+                            "reset" | "reset_run" => backend.reset(ResetMode::Run)?,
+                            "reset_halt" => backend.reset(ResetMode::Halt)?,
+                            _ => {}
+                        }
+                        let _ = events_done.send(ServerEvent::FlashComplete {
+                            operation_id: op_id,
+                            ok: true,
+                            bytes,
+                            message: None,
+                        });
+                        Ok(json!({ "programmed": true, "bytes": bytes, "verify": verify, "mode": mode }))
+                    }
+                    other => Err(WebError::InvalidArgument(format!(
+                        "unknown flash action {other}"
+                    ))),
+                }
+            }
         }
     }
     /// Probe-lost: session-wide fatal event (v5 §6). Immediate, no grace.
@@ -585,6 +654,12 @@ fn is_probe_error(e: &WebError) -> bool {
 // ---------------------------------------------------------------------------
 // Param helpers
 // ---------------------------------------------------------------------------
+
+fn parse_image_format(s: &str) -> Result<ImageFileFormat, WebError> {
+    ImageFileFormat::parse(s).ok_or_else(|| {
+        WebError::InvalidArgument(format!("file format must be elf/axf/bin/hex, got {s}"))
+    })
+}
 
 fn param_str(p: &Value, name: &str) -> Result<String, WebError> {
     p.get(name)

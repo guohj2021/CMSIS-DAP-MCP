@@ -113,3 +113,14 @@ are constructible. `module` requires DWARF compile units, so it stays `None` in 
 2. HW breakpoint total shows "Unknown" on backends without `available_breakpoint_units`.
 3. `module` in `Symbol` is `None` until DWARF lands (P6.1).
 No plan changes required; all other assumptions validated as specified.
+## Implementation deviations (web, recorded during P3)
+
+1. **Operation model `requires_halt` for Flash = No** (v5 §4 table said Yes).
+   probe-rs' flash loader manages core halt internally (same as the CLI
+   `flash` command), so requiring a pre-halted target would wrongly gate
+   flash after a plain connect. RegisterRead/Write and Step still require halt.
+2. **HW breakpoint `used` count** comes from the backend's own breakpoint list,
+   because probe-rs 0.32 does not expose used comparator units publicly.
+3. **Flash progress granularity** is phase + byte level (erase sectors, program
+   pages, verify), driven by probe-rs `FlashProgress` events. `current_address`
+   is approximated as `base + bytes_done` within a phase.

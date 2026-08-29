@@ -289,6 +289,16 @@ pub struct CpuStateDump {
     pub memory: Vec<MemorySample>,
 }
 
+/// One phase of a flash operation (progress reporting).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FlashPhase {
+    Analyze,
+    Erase,
+    Program,
+    Verify,
+}
+
 /// A pure helper that maps a register name to a lookup strategy.
 ///
 /// Special roles (pc/sp/fp/lr/psr/msp/psp/fpsr) and general registers
@@ -374,6 +384,40 @@ pub trait Backend: Send {
     fn write_dap(&mut self, address: u32, value: u32) -> Result<(), McpError>;
     fn erase_flash(&mut self, address: u64, size: u64) -> Result<(), McpError>;
     fn program_flash(&mut self, address: u64, data: &[u8], verify: bool) -> Result<(), McpError>;
+
+    /// Erase with progress reporting. `progress` receives
+    /// `(phase, bytes_done, bytes_total, current_address)`.
+    fn erase_flash_with_progress(
+        &mut self,
+        address: u64,
+        size: u64,
+        _progress: &mut dyn FnMut(FlashPhase, u64, u64, u64),
+    ) -> Result<(), McpError> {
+        self.erase_flash(address, size)
+    }
+
+    /// Program raw data with progress reporting (see [`Self::erase_flash_with_progress`]).
+    fn program_flash_with_progress(
+        &mut self,
+        address: u64,
+        data: &[u8],
+        verify: bool,
+        _progress: &mut dyn FnMut(FlashPhase, u64, u64, u64),
+    ) -> Result<(), McpError> {
+        self.program_flash(address, data, verify)
+    }
+
+    /// Program a firmware file with progress reporting (see [`Self::erase_flash_with_progress`]).
+    fn program_file_with_progress(
+        &mut self,
+        path: &Path,
+        format: ImageFileFormat,
+        address: u64,
+        verify: bool,
+        _progress: &mut dyn FnMut(FlashPhase, u64, u64, u64),
+    ) -> Result<u64, McpError> {
+        self.program_file(path, format, address, verify)
+    }
 
     /// Set a software breakpoint in flash by patching the instruction with a
     /// Thumb `BKPT`. Destructive: modifies flash contents, so callers must

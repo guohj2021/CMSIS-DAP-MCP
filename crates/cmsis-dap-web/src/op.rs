@@ -83,6 +83,7 @@ pub enum TimeoutPolicy {
 #[serde(rename_all = "snake_case")]
 pub enum OperationKind {
     ListProbes,
+    TargetInfo,
     Connect,
     Disconnect,
     Run,
@@ -111,12 +112,11 @@ pub enum OperationKind {
 impl OperationKind {
     /// The target must be halted for this operation to be meaningful.
     pub fn requires_halt(self) -> bool {
+        // Note: Flash is intentionally excluded — probe-rs' flash loader
+        // manages core halt internally (same as the CLI `flash` command).
         matches!(
             self,
-            OperationKind::RegisterRead
-                | OperationKind::RegisterWrite
-                | OperationKind::Step
-                | OperationKind::Flash
+            OperationKind::RegisterRead | OperationKind::RegisterWrite | OperationKind::Step
         )
     }
 

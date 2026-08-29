@@ -3,7 +3,7 @@
 use crate::executor::ExecutorHandle;
 use crate::op::{OperationKind, WebError};
 use crate::state::SharedState;
-use axum::extract::{Path, State};
+use axum::extract::{Multipart, Path, State};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
@@ -31,6 +31,9 @@ pub fn router() -> Router<SharedState> {
         .route("/api/watchpoints/{address}", axum::routing::delete(watchpoint_delete))
         .route("/api/fault", get(fault))
         .route("/api/snapshot", post(snapshot))
+        .route("/api/files/firmware", post(firmware_upload))
+        .route("/api/flash/erase", post(flash_erase))
+        .route("/api/flash/program", post(flash_program))
 }
 
 // ---------------------------------------------------------------------------
@@ -266,6 +269,117 @@ async fn snapshot(State(state): State<SharedState>) -> Response {
     api_result(state.executor.clone().call_async(OperationKind::Snapshot, json!({})).await)
 }
 
+// ---------------------------------------------------------------------------
+// Firmware upload + flash (v5 §7)
+// ---------------------------------------------------------------------------
+
+async fn firmware_upload(State(state): State<SharedState>, mut multipart: Multipart) -> Response {
+    let mut data: Option<Vec<u8>> = None;
+    let mut file_name: Option<String> = None;
+    let mut bin_address: Option<u64> = None;
+    while let Ok(Some(field)) = multipart.next_field().await {
+        let name = field.name().unwrap_or("").to_string();
+        if name == "file" {
+            file_name = field.file_name().map(|s| s.to_string());
+            data = Some(match field.bytes().await {
+                Ok(b) => b.to_vec(),
+                Err(e) => {
+                    return api_result(Err(WebError::Internal(format!("upload read failed: {e}"))))
+                }
+            });
+        } else if name == "address" {
+            if let Ok(text) = field.text().await {
+                bin_address = text.trim().parse::<u64>().ok();
+            }
+        }
+    }
+    let Some(data) = data else {
+        return api_result(Err(WebError::InvalidArgument("missing file field".into())));
+    };
+    let Some(file_name) = file_name else {
+        return api_result(Err(WebError::InvalidArgument("missing file name".into())));
+    };
+
+    let format = match crate::flash::FirmwareFormat::from_extension(std::path::Path::new(&file_name)) {
+        Ok(f) => f,
+        Err(e) => return api_result(Err(e)),
+    };
+    let id = uuid::Uuid::new_v4().to_string();
+    let ext = format.as_str();
+    let path = state._upload_dir.path().join(format!("{id}.{ext}"));
+    if let Err(e) = std::fs::write(&path, &data) {
+        return api_result(Err(WebError::Internal(format!("failed to save upload: {e}"))));
+    }
+    state.uploads.lock().unwrap().insert(id.clone(), path.clone());
+
+    match crate::flash::FirmwareImage::analyze(&path, format, bin_address) {
+        Ok(image) => api_result(Ok(serde_json::json!({
+            "file_id": id,
+            "format": format.as_str(),
+            "total_size": image.total_size,
+            "address_range": image.address_range,
+            "segments": image.segments.iter().map(|s| serde_json::json!({
+                "start": s.start, "end": s.end, "size": s.size()
+            })).collect::<Vec<_>>(),
+        }))),
+        Err(e) => api_result(Err(e)),
+    }
+}
+
+#[derive(Deserialize)]
+struct FlashEraseBody {
+    address: u64,
+    size: u64,
+}
+async fn flash_erase(State(state): State<SharedState>, Json(body): Json<FlashEraseBody>) -> Response {
+    api_result(
+        state
+            .executor
+            .clone()
+            .call_async(
+                OperationKind::Flash,
+                json!({ "action": "erase", "address": body.address, "size": body.size }),
+            )
+            .await,
+    )
+}
+
+#[derive(Deserialize)]
+struct FlashProgramBody {
+    file_id: String,
+    address: Option<u64>,
+    verify: Option<bool>,
+    mode: Option<String>,
+}
+async fn flash_program(State(state): State<SharedState>, Json(body): Json<FlashProgramBody>) -> Response {
+    let path = state
+        .uploads
+        .lock()
+        .unwrap()
+        .get(&body.file_id)
+        .cloned();
+    let Some(path) = path else {
+        return api_result(Err(WebError::InvalidArgument(format!(
+            "unknown file_id {}",
+            body.file_id
+        ))));
+    };
+    let format = match crate::flash::FirmwareFormat::from_extension(&path) {
+        Ok(f) => f,
+        Err(e) => return api_result(Err(e)),
+    };
+    let result = crate::flash::program_image(
+        &state.executor,
+        &body.file_id,
+        body.address,
+        body.verify.unwrap_or(true),
+        body.mode.as_deref().unwrap_or("stay_halted"),
+        format,
+        &path,
+    )
+    .await;
+    api_result(result)
+}
 // ---------------------------------------------------------------------------
 // Response helpers
 // ---------------------------------------------------------------------------

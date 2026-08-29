@@ -5,6 +5,7 @@
 pub mod api;
 pub mod assets;
 pub mod executor;
+pub mod flash;
 pub mod op;
 pub mod session;
 pub mod state;
@@ -95,6 +96,10 @@ pub fn serve(backend: Box<dyn Backend>, options: WebServerOptions) -> Result<(),
 
     let events = executor.events();
     let lease = SessionLease::new(Duration::from_secs(30));
+    let upload_dir = tempfile::Builder::new()
+        .prefix("cmsis-dap-web-uploads-")
+        .tempdir()
+        .map_err(|e| WebError::Internal(format!("failed to create upload dir: {e}")))?;
     let state = Arc::new(AppState {
         executor: executor.clone(),
         events,
@@ -102,6 +107,8 @@ pub fn serve(backend: Box<dyn Backend>, options: WebServerOptions) -> Result<(),
         host: options.host.clone(),
         port: options.port,
         default_connect: options.default_connect,
+        uploads: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
+        _upload_dir: upload_dir,
     });
 
     let router = build_router(state);
