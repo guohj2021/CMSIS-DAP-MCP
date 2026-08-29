@@ -124,3 +124,21 @@ No plan changes required; all other assumptions validated as specified.
 3. **Flash progress granularity** is phase + byte level (erase sectors, program
    pages, verify), driven by probe-rs `FlashProgress` events. `current_address`
    is approximated as `base + bytes_done` within a phase.
+## V2 remaining items and hardware blockers (recorded at P8 completion)
+
+The implementable scope of the frozen v5 plan (P0-P7b, P8 SWO/ITM/Profiler) is
+complete and hardware-verified. The remaining V2 items are blocked by external
+state (hardware/ecosystem), not by software effort:
+
+| Item | Why blocked on this environment |
+| --- | --- |
+| Trace timeline / ETM / instruction trace | Requires ETM trace port + trace decoder; CMSIS-DAP CMSIS-DAP has no trace port (SWO start returns an ARM protocol error). Fabricating a trace view would violate the plan's "never fabricate" rule. |
+| Logic Analyzer | Requires high-speed GPIO sampling through the probe; not supported over SWD/HID CMSIS-DAP. |
+| Code Coverage | Requires instruction trace (ETM) or instrumentation runtime; neither is present in the demo firmware. |
+| RTOS awareness | Requires an RTOS (e.g. FreeRTOS) firmware with a task list; the DemoMCU demo has no RTOS. Can be added once an RTOS firmware is supplied (task-list symbol + stack pointer scan per task). |
+| Advanced Performance Analyzer (call-tree) | Profiler (PC histogram) is done; call-graph attribution needs trace or full unwind per sample — deferred. |
+| Multi-session / multi-probe | Explicitly "future, not implemented" in the plan; architecture reserves it in AppState. |
+
+These are genuine hardware/ecosystem dependencies. Per the plan's hard rule
+"unsupported capabilities are never fabricated", they are reported honestly
+and remain as follow-up work requiring a trace-capable probe / RTOS firmware.
