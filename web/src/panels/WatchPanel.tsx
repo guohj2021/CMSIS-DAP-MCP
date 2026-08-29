@@ -7,6 +7,7 @@ import { onWsEvent } from "../ws/client";
 export function WatchPanel() {
   const [items, setItems] = useState<(WatchItem & { value?: number | null })[]>([]);
   const log = useDebugStore((s) => s.log);
+  const running = useDebugStore((s) => s.status.target === "running");
 
   const refresh = useCallback(async () => {
     try {
@@ -70,6 +71,11 @@ export function WatchPanel() {
         </button>
       </div>
       <div className="flex-1 overflow-auto px-2 py-1">
+        {running && items.some((w) => w.target.kind === "register") && (
+          <div className="mb-1 rounded border border-amber-800 bg-amber-950/40 px-2 py-1 text-amber-300">
+            Live Watch is not available while target is running.（寄存器项仅在暂停时读取）
+          </div>
+        )}
         {items.length === 0 && (
           <div className="rounded border border-dashed border-zinc-700 p-3 text-center text-zinc-500">
             将符号拖拽到这里建立 Watch
