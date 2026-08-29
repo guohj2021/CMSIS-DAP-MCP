@@ -4,11 +4,14 @@
 //! DWARF `DebugInfo` (P6.1). Loaders live under `loaders/` so ELF/AXF, MAP
 //! and DWARF sources can be added without changing consumers.
 
+pub mod cfi;
 mod dwarf;
 mod elf;
+mod unwind;
 
 pub use dwarf::DebugInfo;
 pub use elf::load_elf;
+pub use unwind::{CfiUnwinder, UnwindFrame};
 
 use crate::error::{ErrorCode, McpError};
 

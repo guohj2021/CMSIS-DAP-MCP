@@ -124,7 +124,16 @@ export const api = {
     request<{ address: number; instructions: DisasmInsn[] }>("GET", `/disassembly?address=${address}&count=${count ?? 16}`),
   addressDescribe: (address: number) =>
     request<{ address: { region?: string | null; symbol?: unknown; peripheral?: string | null } }>("GET", `/address/${address}`),
+  callstack: () =>
+    request<{ available: boolean; frames: UnwindFrame[] }>("GET", "/callstack"),
 };
+
+export interface UnwindFrame {
+  pc: number;
+  sp: number;
+  function?: string | null;
+  source?: { file: string; line: number; column?: number | null; function?: string | null } | null;
+}
 
 export interface MonitorItem {
   id: number;

@@ -60,6 +60,7 @@ pub fn router() -> Router<SharedState> {
         .route("/api/evr/stop", post(evr_stop))
         .route("/api/disassembly", get(disassembly))
         .route("/api/address/{address}", get(address_describe))
+        .route("/api/callstack", get(callstack))
         .route("/api/svd", post(svd_upload))
         .route("/api/peripherals", get(peripherals))
         .route("/api/peripherals/{name}", get(peripheral_get))
@@ -574,11 +575,15 @@ async fn elf_upload(State(state): State<SharedState>, mut multipart: Multipart) 
         (f, v)
     };
     *state.symbols.write().unwrap() = Some(db.clone());
-    // Load DWARF source locations (best effort; None when absent).
+    // Load DWARF source locations + CFI unwinder (best effort).
     let debug_info = cmsis_dap_core::symbols::DebugInfo::load(&path)
         .ok()
         .flatten();
     *state.debug_info.lock().unwrap() = debug_info;
+    let unwinder = cmsis_dap_core::symbols::CfiUnwinder::load(&path)
+        .ok()
+        .flatten();
+    state.executor.set_unwinder(unwinder);
     api_result(Ok(json!({
         "file_id": id,
         "symbols": state.symbols.read().unwrap().as_ref().map(|d| d.len()).unwrap_or(0),
@@ -1232,6 +1237,16 @@ async fn disassembly(
     api_result(Ok(
         json!({ "address": q.address, "instructions": instructions }),
     ))
+}
+
+async fn callstack(State(state): State<SharedState>) -> Response {
+    api_result(
+        state
+            .executor
+            .clone()
+            .call_async(OperationKind::CallStack, json!({}))
+            .await,
+    )
 }
 
 async fn address_describe(State(state): State<SharedState>, Path(address): Path<u64>) -> Response {

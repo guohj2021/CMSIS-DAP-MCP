@@ -33,6 +33,7 @@ pub struct ExecutorHandle {
     next_id: Arc<AtomicU64>,
     allow_destructive: bool,
     shutdown: Arc<AtomicBool>,
+    unwinder: Arc<std::sync::Mutex<Option<cmsis_dap_core::symbols::CfiUnwinder>>>,
 }
 
 impl ExecutorHandle {
@@ -94,6 +95,11 @@ impl ExecutorHandle {
     pub fn set_status(&self, status: SessionStatus) {
         *self.status.write().unwrap() = status;
     }
+
+    /// Install the DWARF CFI unwinder for the loaded firmware (None clears it).
+    pub fn set_unwinder(&self, unwinder: Option<cmsis_dap_core::symbols::CfiUnwinder>) {
+        *self.unwinder.lock().unwrap() = unwinder;
+    }
 }
 
 /// Run state of the executor loop.
@@ -118,6 +124,7 @@ pub fn spawn(session: SessionManager, config: ExecutorConfig) -> ExecutorHandle 
         next_id: Arc::new(AtomicU64::new(1)),
         allow_destructive: config.allow_destructive,
         shutdown: Arc::new(AtomicBool::new(false)),
+        unwinder: Arc::new(std::sync::Mutex::new(None)),
     };
     let runner = ExecutorRunner {
         session: std::sync::Mutex::new(session),
@@ -126,6 +133,7 @@ pub fn spawn(session: SessionManager, config: ExecutorConfig) -> ExecutorHandle 
         allow_destructive: config.allow_destructive,
         flash_timeout: config.flash_timeout,
         shutdown: handle.shutdown.clone(),
+        unwinder: handle.unwinder.clone(),
     };
     std::thread::Builder::new()
         .name("cmsis-dap-web-executor".into())
@@ -142,6 +150,7 @@ struct ExecutorRunner {
     #[allow(dead_code)] // used by the flash pipeline (P3)
     flash_timeout: Duration,
     shutdown: Arc<AtomicBool>,
+    unwinder: Arc<std::sync::Mutex<Option<cmsis_dap_core::symbols::CfiUnwinder>>>,
 }
 
 impl ExecutorRunner {
@@ -585,6 +594,58 @@ impl ExecutorRunner {
                 let restore = p.get("restore").and_then(|v| v.as_bool()).unwrap_or(true);
                 let dump = backend.dump_cpu_state(&addresses, stack_words, restore)?;
                 Ok(serde_json::to_value(dump).map_err(|e| WebError::Internal(e.to_string()))?)
+            }
+            OperationKind::CallStack => {
+                if self.status.read().unwrap().target != TargetState::Halted {
+                    return Err(WebError::InvalidArgument(
+                        "call stack requires a halted target".into(),
+                    ));
+                }
+                let unw = self.unwinder.lock().unwrap();
+                let Some(unwinder) = unw.as_ref() else {
+                    return Ok(json!({ "available": false, "frames": [] }));
+                };
+                let backend = session.backend();
+                // DWARF register numbers: r0-r12=0-12, sp=13, lr=14, pc=15.
+                let mut regs: std::collections::HashMap<u16, u64> =
+                    std::collections::HashMap::new();
+                let names = [
+                    ("r0", 0u16),
+                    ("r1", 1),
+                    ("r2", 2),
+                    ("r3", 3),
+                    ("r4", 4),
+                    ("r5", 5),
+                    ("r6", 6),
+                    ("r7", 7),
+                    ("r8", 8),
+                    ("r9", 9),
+                    ("r10", 10),
+                    ("r11", 11),
+                    ("r12", 12),
+                    ("sp", 13),
+                    ("lr", 14),
+                    ("pc", 15),
+                ];
+                for (name, num) in names {
+                    if let Ok(v) = backend.read_core_register(&CoreRegister::Name(name.into())) {
+                        regs.insert(num, v);
+                    }
+                }
+                let mut read32 = |addr: u64| -> Result<u32, String> {
+                    let values = backend
+                        .read_memory(addr, AccessWidth::U8, 4)
+                        .map_err(|e| e.to_string())?;
+                    if values.len() < 4 {
+                        return Err("short memory read".into());
+                    }
+                    Ok((values[0] as u32)
+                        | ((values[1] as u32) << 8)
+                        | ((values[2] as u32) << 16)
+                        | ((values[3] as u32) << 24))
+                };
+                let frames = unwinder.unwind(&regs, &mut read32, 64);
+                Ok(json!({ "available": true, "frames": frames }))
             }
             OperationKind::DumpFault => {
                 let backend = session.backend();

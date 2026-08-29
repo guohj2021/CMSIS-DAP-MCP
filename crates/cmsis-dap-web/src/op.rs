@@ -109,6 +109,7 @@ pub enum OperationKind {
     EvrDetach,
     Flash,
     Snapshot,
+    CallStack,
     Status,
     DumpFault,
 }

@@ -42,6 +42,16 @@ export function DisassemblyPanel() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Frame selection from the Call Stack panel jumps here (DebugContext §9).
+  useEffect(() => {
+    const onGoto = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { address?: number };
+      if (detail?.address) load(detail.address);
+    };
+    window.addEventListener("goto-address", onGoto);
+    return () => window.removeEventListener("goto-address", onGoto);
+  }, []);
+
   return (
     <div className="flex h-full flex-col text-xs">
       <div className="flex items-center gap-2 border-b border-zinc-700 px-2 py-1">
