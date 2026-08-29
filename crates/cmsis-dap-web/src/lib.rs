@@ -7,7 +7,9 @@ pub mod assets;
 pub mod executor;
 pub mod flash;
 pub mod op;
+pub mod resolver;
 pub mod session;
+pub mod watch;
 pub mod state;
 pub mod ws;
 
@@ -109,6 +111,9 @@ pub fn serve(backend: Box<dyn Backend>, options: WebServerOptions) -> Result<(),
         default_connect: options.default_connect,
         uploads: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
         _upload_dir: upload_dir,
+        symbols: Arc::new(std::sync::RwLock::new(None)),
+        svd: Arc::new(std::sync::RwLock::new(None)),
+        watch: Arc::new(std::sync::Mutex::new(Vec::new())),
     });
 
     let router = build_router(state);

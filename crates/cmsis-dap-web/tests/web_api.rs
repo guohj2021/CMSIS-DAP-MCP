@@ -41,6 +41,9 @@ fn app_with_destructive(allow_destructive: bool) -> (axum::Router, SharedState) 
         default_connect: WebServerOptions::default().default_connect,
         uploads: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
         _upload_dir: upload_dir,
+        symbols: Arc::new(std::sync::RwLock::new(None)),
+        svd: Arc::new(std::sync::RwLock::new(None)),
+        watch: Arc::new(std::sync::Mutex::new(Vec::new())),
     });
     (cmsis_dap_web::build_router(state.clone()), state)
 }

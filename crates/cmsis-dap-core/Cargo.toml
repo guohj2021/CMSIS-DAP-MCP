@@ -20,5 +20,6 @@ tokio = { workspace = true, features = ["net", "io-util", "sync"] }
 tracing.workspace = true
 
 [dev-dependencies]
+object = { version = "0.39", features = ["read", "write", "std"] }
 tempfile.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

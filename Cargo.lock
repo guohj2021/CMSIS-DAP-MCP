@@ -381,7 +381,7 @@ dependencies = [
  "cmsis-dap-core",
  "cmsis-dap-web",
  "libc",
- "object",
+ "object 0.39.1",
  "serde_json",
  "tempfile",
  "thiserror 2.0.20",
@@ -399,7 +399,7 @@ dependencies = [
  "base64 0.22.1",
  "gdbstub",
  "itertools",
- "object",
+ "object 0.39.1",
  "parking_lot",
  "probe-rs",
  "serde",
@@ -439,6 +439,7 @@ dependencies = [
  "futures-util",
  "http-body-util",
  "mime_guess",
+ "object 0.40.0",
  "rust-embed",
  "serde",
  "serde_json",
@@ -1524,9 +1525,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2e5a6c098c7a3b6547378093f5cc30bc54fd361ce711e05293a5cc589562739b"
 dependencies = [
  "crc32fast",
+ "flate2",
  "hashbrown",
  "indexmap",
  "memchr",
+ "ruzstd 0.8.3",
+]
+
+[[package]]
+name = "object"
+version = "0.40.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd229a0361b9d0d4396176e02d65897f487eebeab7caa6d443855ee152ca0b9c"
+dependencies = [
+ "crc32fast",
+ "flate2",
+ "hashbrown",
+ "indexmap",
+ "memchr",
+ "ruzstd 0.9.0",
 ]
 
 [[package]]
@@ -1666,7 +1683,7 @@ dependencies = [
  "jep106",
  "nix 0.31.3",
  "nusb",
- "object",
+ "object 0.39.1",
  "parking_lot",
  "probe-rs-target",
  "rmp-serde",
@@ -1931,6 +1948,24 @@ name = "rustversion"
 version = "1.0.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b39cdef0fa800fc44525c84ccb54a029961a8215f9619753635a9c0d2538d46d"
+
+[[package]]
+name = "ruzstd"
+version = "0.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a7c1c839d570d835527c9a5e4db7cb2198683a988cb9d7293fc8674e6bd58fc8"
+dependencies = [
+ "twox-hash",
+]
+
+[[package]]
+name = "ruzstd"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a252f5e20f038fe7b4ea53e073e65398d652c864cc162fc77c56c2f13717b888"
+dependencies = [
+ "twox-hash",
+]
 
 [[package]]
 name = "ryu"
@@ -2526,6 +2561,12 @@ dependencies = [
  "sha1",
  "thiserror 2.0.20",
 ]
+
+[[package]]
+name = "twox-hash"
+version = "2.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8464ec13c3691491391d9fce00f6416c9a48e46972f72d7865688be2080192c9"
 
 [[package]]
 name = "typenum"

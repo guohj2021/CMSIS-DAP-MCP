@@ -19,6 +19,12 @@ pub struct AppState {
     /// shutdown.
     pub uploads: Arc<std::sync::Mutex<std::collections::HashMap<String, std::path::PathBuf>>>,
     pub _upload_dir: tempfile::TempDir,
+    /// Loaded ELF/AXF symbol database (V0.1: one active image).
+    pub symbols: Arc<std::sync::RwLock<Option<cmsis_dap_core::symbols::SymbolDatabase>>>,
+    /// Loaded SVD database (one active).
+    pub svd: Arc<std::sync::RwLock<Option<cmsis_dap_core::svd::SvdDatabase>>>,
+    /// Watch items.
+    pub watch: Arc<std::sync::Mutex<Vec<crate::watch::WatchItem>>>,
 }
 
 pub type SharedState = Arc<AppState>;

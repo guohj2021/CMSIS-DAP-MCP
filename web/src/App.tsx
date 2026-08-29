@@ -1,7 +1,8 @@
 // App shell: WS bootstrap + toolbar + workspace + fault banner.
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Toolbar } from "./components/Toolbar";
 import { DebugWorkspace } from "./workspaces/DebugWorkspace";
+import { FlashWorkspace } from "./workspaces/FlashWorkspace";
 import { connectWs, onWsEvent } from "./ws/client";
 import { refreshProbes, refreshRegisters, refreshFault } from "./debug/operations";
 import { useDebugStore, SessionStatus } from "./store/debugStore";
@@ -9,6 +10,7 @@ import { useDebugStore, SessionStatus } from "./store/debugStore";
 export default function App() {
   const target = useDebugStore((s) => s.status.target);
   const error = useDebugStore((s) => s.error);
+  const [workspace, setWorkspace] = useState<"debug" | "flash">("debug");
 
   useEffect(() => {
     connectWs();
@@ -83,8 +85,16 @@ export default function App() {
           {error ? ` (${error})` : ""}
         </div>
       )}
+      <div className="flex items-center gap-1 border-b border-zinc-800 bg-zinc-900 px-2 py-0.5 text-xs">
+        <button className={`rounded px-2 py-0.5 ${workspace === "debug" ? "bg-blue-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`} onClick={() => setWorkspace("debug")}>
+          Debug
+        </button>
+        <button className={`rounded px-2 py-0.5 ${workspace === "flash" ? "bg-blue-600 text-white" : "text-zinc-400 hover:text-zinc-200"}`} onClick={() => setWorkspace("flash")}>
+          Flash
+        </button>
+      </div>
       <div className="flex-1 overflow-hidden">
-        <DebugWorkspace />
+        {workspace === "debug" ? <DebugWorkspace /> : <FlashWorkspace />}
       </div>
     </div>
   );

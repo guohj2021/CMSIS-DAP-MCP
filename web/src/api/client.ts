@@ -62,7 +62,119 @@ export const api = {
     request<{ set: number }>("POST", "/watchpoints", { address, access }),
   fault: () => request<{ fault: RegisterValue[] }>("GET", "/fault"),
   snapshot: () => request<Record<string, unknown>>("POST", "/snapshot"),
+  // P4: ELF / symbols / watch / SVD
+  elfUpload: (file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return upload<{ file_id: string; symbols: number; functions: number; variables: number; name?: string }>("/files/elf", fd);
+  },
+  symbols: (q: { kind?: string; pattern?: string; offset?: number; limit?: number }) => {
+    const p = new URLSearchParams();
+    if (q.kind) p.set("kind", q.kind);
+    if (q.pattern) p.set("pattern", q.pattern);
+    p.set("offset", String(q.offset ?? 0));
+    p.set("limit", String(q.limit ?? 200));
+    return request<{ total: number; items: SymbolItem[] }>("GET", `/symbols?${p}`);
+  },
+  watchAdd: (target: Record<string, unknown>) =>
+    request<{ id: number }>("POST", "/watch", { target }),
+  watchList: () => request<{ items: WatchItem[] }>("GET", "/watch"),
+  watchDelete: (id: number) => request<{ deleted: boolean }>("DELETE", `/watch/${id}`),
+  watchRefresh: () =>
+    request<{ items: { id: number; value?: number | null }[] }>("POST", "/watch/refresh"),
+  svdUpload: (file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return upload<{ name?: string; peripherals: number }>("/svd", fd);
+  },
+  peripherals: () => request<{ peripherals: PeripheralSummary[] }>("GET", "/peripherals"),
+  peripheralGet: (name: string) =>
+    request<{ peripheral: PeripheralInfo }>("GET", `/peripherals/${name}`),
+  peripheralRead: (name: string, register: string) =>
+    request<{ address: number; value: number; decoded?: DecodedRegister }>("POST", `/peripherals/${name}/read`, { register }),
+  peripheralWrite: (name: string, register: string, value: number) =>
+    request<{ written: boolean }>("POST", `/peripherals/${name}/write`, { register, value }),
+  peripheralDecode: (name: string, register: string, value: number) =>
+    request<{ decoded: DecodedRegister }>("POST", `/peripherals/${name}/decode`, { register, value }),
+  firmwareUpload: (file: File, address?: number) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    if (address !== undefined) fd.append("address", String(address));
+    return upload<FirmwareUploadResult>("/files/firmware", fd);
+  },
+  flashErase: (address: number, size: number) =>
+    request<{ erased: boolean }>("POST", "/flash/erase", { address, size }),
+  flashProgram: (file_id: string, opts: { address?: number; verify?: boolean; mode?: string }) =>
+    request<{ programmed: boolean; bytes: number; verify: boolean; mode: string }>("POST", "/flash/program", {
+      file_id,
+      ...opts,
+    }),
 };
+
+async function upload<T>(path: string, fd: FormData): Promise<T> {
+  const res = await fetch(`/api${path}`, { method: "POST", body: fd });
+  if (!res.ok) {
+    let err: ApiError = { code: "http_" + res.status, message: res.statusText };
+    try {
+      const data = await res.json();
+      if (data?.error) err = data.error;
+    } catch {
+      /* ignore */
+    }
+    throw new ApiErrorImpl(res.status, err);
+  }
+  return (await res.json()) as T;
+}
+
+export interface SymbolItem {
+  id: number;
+  name: string;
+  address: number;
+  size: number;
+  kind: "function" | "variable" | "other";
+  section?: string | null;
+  module?: string | null;
+}
+
+export interface WatchItem {
+  id: number;
+  target: { kind: string; symbol_id?: number; address?: number; name?: string };
+  format: string;
+  rate_ms: number;
+  enabled: boolean;
+}
+
+export interface PeripheralSummary {
+  name: string;
+  base: number;
+  registers: number;
+}
+
+export interface PeripheralInfo {
+  name: string;
+  base: number;
+  registers: {
+    name: string;
+    offset: number;
+    size_bits: number;
+    access?: string | null;
+    description?: string | null;
+    fields: { name: string; offset: number; width: number; description?: string | null; values: { name: string; value: number }[] }[];
+  }[];
+}
+
+export interface DecodedRegister {
+  value: number;
+  fields: { name: string; value: number; offset: number; width: number; text?: string | null; description?: string | null }[];
+}
+
+export interface FirmwareUploadResult {
+  file_id: string;
+  format: "bin" | "hex";
+  total_size: number;
+  address_range?: [number, number] | null;
+  segments: { start: number; end: number; size: number }[];
+}
 
 export interface ProbeInfo {
   id: string;

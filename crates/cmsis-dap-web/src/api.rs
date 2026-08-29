@@ -3,7 +3,7 @@
 use crate::executor::ExecutorHandle;
 use crate::op::{OperationKind, WebError};
 use crate::state::SharedState;
-use axum::extract::{Multipart, Path, State};
+use axum::extract::{Multipart, Path, Query, State};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
@@ -29,6 +29,18 @@ pub fn router() -> Router<SharedState> {
         .route("/api/breakpoints/{address}", axum::routing::delete(breakpoint_delete))
         .route("/api/watchpoints", get(watchpoints).post(watchpoint_set))
         .route("/api/watchpoints/{address}", axum::routing::delete(watchpoint_delete))
+        .route("/api/files/elf", post(elf_upload))
+        .route("/api/symbols", get(symbols))
+        .route("/api/symbols/resolve", get(symbols_resolve))
+        .route("/api/watch", get(watch_list).post(watch_add))
+        .route("/api/watch/{id}", axum::routing::delete(watch_delete).patch(watch_patch))
+        .route("/api/watch/refresh", post(watch_refresh))
+        .route("/api/svd", post(svd_upload))
+        .route("/api/peripherals", get(peripherals))
+        .route("/api/peripherals/{name}", get(peripheral_get))
+        .route("/api/peripherals/{name}/read", post(peripheral_read))
+        .route("/api/peripherals/{name}/write", post(peripheral_write))
+        .route("/api/peripherals/{name}/decode", post(peripheral_decode))
         .route("/api/fault", get(fault))
         .route("/api/snapshot", post(snapshot))
         .route("/api/files/firmware", post(firmware_upload))
@@ -186,19 +198,55 @@ async fn breakpoints(State(state): State<SharedState>) -> Response {
 
 #[derive(Deserialize)]
 struct BreakpointBody {
-    address: u64,
+    address: Option<u64>,
     kind: Option<String>,
+    /// { "kind": "symbol", "name": "main" } resolves via the loaded ELF.
+    target: Option<Value>,
 }
 async fn breakpoint_set(State(state): State<SharedState>, Json(body): Json<BreakpointBody>) -> Response {
     let action = match body.kind.as_deref() {
         Some("sw_flash") | Some("flash") => "set_flash",
         _ => "set",
     };
+    let address = if let Some(t) = &body.target {
+        if t.get("kind").and_then(|k| k.as_str()) == Some("symbol") {
+            let name = t.get("name").and_then(|n| n.as_str());
+            let Some(name) = name else {
+                return api_result(Err(WebError::InvalidArgument("symbol target needs name".into())));
+            };
+            let sym = state
+                .symbols
+                .read()
+                .unwrap()
+                .as_ref()
+                .and_then(|db| db.resolve_name(name))
+                .map(|s| s.address);
+            match sym {
+                Some(a) => a,
+                None => {
+                    return api_result(Err(WebError::InvalidArgument(format!(
+                        "symbol {name} not found in loaded ELF"
+                    ))))
+                }
+            }
+        } else {
+            return api_result(Err(WebError::InvalidArgument(
+                "target must be {kind:symbol, name} or use address".into(),
+            )));
+        }
+    } else {
+        let Some(a) = body.address else {
+            return api_result(Err(WebError::InvalidArgument(
+                "breakpoint requires address or target".into(),
+            )));
+        };
+        a
+    };
     api_result(
         state
             .executor
             .clone()
-            .call_async(OperationKind::Breakpoint, json!({ "action": action, "address": body.address }))
+            .call_async(OperationKind::Breakpoint, json!({ "action": action, "address": address }))
             .await,
     )
 }
@@ -379,6 +427,356 @@ async fn flash_program(State(state): State<SharedState>, Json(body): Json<FlashP
     )
     .await;
     api_result(result)
+}
+// ---------------------------------------------------------------------------
+// ELF / Symbols / Watch / SVD (frozen v5 §5, §8, §9)
+// ---------------------------------------------------------------------------
+
+async fn elf_upload(State(state): State<SharedState>, mut multipart: Multipart) -> Response {
+    let mut data: Option<Vec<u8>> = None;
+    let mut file_name: Option<String> = None;
+    while let Ok(Some(field)) = multipart.next_field().await {
+        if field.name().unwrap_or("") == "file" {
+            file_name = field.file_name().map(|s| s.to_string());
+            data = Some(match field.bytes().await {
+                Ok(b) => b.to_vec(),
+                Err(e) => {
+                    return api_result(Err(WebError::Internal(format!("upload read failed: {e}"))))
+                }
+            });
+        }
+    }
+    let Some(data) = data else {
+        return api_result(Err(WebError::InvalidArgument("missing file field".into())));
+    };
+    let Some(file_name) = file_name else {
+        return api_result(Err(WebError::InvalidArgument("missing file name".into())));
+    };
+    let id = uuid::Uuid::new_v4().to_string();
+    let path = state._upload_dir.path().join(&id);
+    if let Err(e) = std::fs::write(&path, &data) {
+        return api_result(Err(WebError::Internal(format!("failed to save upload: {e}"))));
+    }
+    let _ = file_name;
+    let db = match cmsis_dap_core::symbols::SymbolDatabase::load(&path) {
+        Ok(db) => db,
+        Err(e) => return api_result(Err(WebError::InvalidArgument(e.to_string()))),
+    };
+    let (functions, variables) = {
+        let (f, v) = db
+            .symbols()
+            .iter()
+            .fold((0usize, 0usize), |(f, v), s| match s.kind {
+                cmsis_dap_core::symbols::SymbolKind::Function => (f + 1, v),
+                cmsis_dap_core::symbols::SymbolKind::Variable => (f, v + 1),
+                _ => (f, v),
+            });
+        (f, v)
+    };
+    *state.symbols.write().unwrap() = Some(db);
+    api_result(Ok(json!({
+        "file_id": id,
+        "symbols": state.symbols.read().unwrap().as_ref().map(|d| d.len()).unwrap_or(0),
+        "functions": functions,
+        "variables": variables,
+    })))
+}
+
+#[derive(Deserialize)]
+struct SymbolsQuery {
+    kind: Option<String>,
+    pattern: Option<String>,
+    offset: Option<usize>,
+    limit: Option<usize>,
+}
+async fn symbols(State(state): State<SharedState>, Query(q): Query<SymbolsQuery>) -> Response {
+    let Some(db) = state.symbols.read().unwrap().clone() else {
+        return api_result(Ok(json!({ "total": 0, "items": [] })));
+    };
+    let kind = match q.kind.as_deref() {
+        None | Some("") => None,
+        Some("function") => Some(cmsis_dap_core::symbols::SymbolKind::Function),
+        Some("variable") => Some(cmsis_dap_core::symbols::SymbolKind::Variable),
+        Some(other) => {
+            return api_result(Err(WebError::InvalidArgument(format!(
+                "kind must be function|variable, got {other}"
+            ))))
+        }
+    };
+    let (total, page) = db.search(kind, q.pattern.as_deref(), q.offset.unwrap_or(0), q.limit.unwrap_or(200));
+    api_result(Ok(json!({
+        "total": total,
+        "items": page.iter().map(|s| json!({
+            "id": s.id, "name": s.name, "address": s.address, "size": s.size,
+            "kind": s.kind, "section": s.section, "module": s.module,
+        })).collect::<Vec<_>>(),
+    })))
+}
+
+#[derive(Deserialize)]
+struct SymbolsResolveQuery {
+    name: String,
+}
+async fn symbols_resolve(State(state): State<SharedState>, Query(q): Query<SymbolsResolveQuery>) -> Response {
+    let Some(db) = state.symbols.read().unwrap().clone() else {
+        return api_result(Err(WebError::InvalidArgument("no ELF loaded".into())));
+    };
+    match db.resolve_name(&q.name) {
+        Some(s) => api_result(Ok(json!({
+            "symbol": { "id": s.id, "name": s.name, "address": s.address, "size": s.size, "kind": s.kind }
+        }))),
+        None => api_result(Err(WebError::InvalidArgument(format!("symbol {} not found", q.name)))),
+    }
+}
+
+// --- Watch ---
+
+#[derive(Deserialize)]
+struct WatchAddBody {
+    target: Value,
+    format: Option<String>,
+    rate_ms: Option<u32>,
+}
+async fn watch_add(State(state): State<SharedState>, Json(body): Json<WatchAddBody>) -> Response {
+    let target = match body.target.get("kind").and_then(|k| k.as_str()) {
+        Some("symbol") => {
+            let id = body.target.get("symbol_id").and_then(|v| v.as_u64());
+            let name = body.target.get("name").and_then(|v| v.as_str()).map(String::from);
+            let resolved_id = match id {
+                Some(i) => i,
+                None => {
+                    let Some(name) = name else {
+                        return api_result(Err(WebError::InvalidArgument(
+                            "symbol target needs symbol_id or name".into(),
+                        )));
+                    };
+                    let Some(db) = state.symbols.read().unwrap().clone() else {
+                        return api_result(Err(WebError::InvalidArgument("no ELF loaded".into())));
+                    };
+                    match db.resolve_name(&name).map(|s| s.id) {
+                        Some(i) => i,
+                        None => {
+                            return api_result(Err(WebError::InvalidArgument(format!(
+                                "symbol {name} not found"
+                            ))))
+                        }
+                    }
+                }
+            };
+            crate::watch::WatchTarget::Symbol { symbol_id: resolved_id }
+        }
+        Some("address") => {
+            let address = body.target.get("address").and_then(|v| v.as_u64());
+            let Some(address) = address else {
+                return api_result(Err(WebError::InvalidArgument("address target needs address".into())));
+            };
+            crate::watch::WatchTarget::Address { address }
+        }
+        Some("register") => {
+            let name = body.target.get("name").and_then(|v| v.as_str()).map(String::from);
+            let Some(name) = name else {
+                return api_result(Err(WebError::InvalidArgument("register target needs name".into())));
+            };
+            crate::watch::WatchTarget::Register { name }
+        }
+        other => {
+            return api_result(Err(WebError::InvalidArgument(format!(
+                "target kind must be symbol|address|register, got {other:?}"
+            ))))
+        }
+    };
+    let mut items = state.watch.lock().unwrap();
+    let id = items.iter().map(|w| w.id).max().unwrap_or(0) + 1;
+    items.push(crate::watch::WatchItem {
+        id,
+        target,
+        format: body.format.unwrap_or_else(|| "auto".into()),
+        rate_ms: body.rate_ms.unwrap_or(500),
+        enabled: true,
+    });
+    api_result(Ok(json!({ "id": id })))
+}
+
+async fn watch_list(State(state): State<SharedState>) -> Response {
+    let items = state.watch.lock().unwrap().clone();
+    api_result(Ok(json!({ "items": items })))
+}
+
+async fn watch_delete(State(state): State<SharedState>, Path(id): Path<u64>) -> Response {
+    state.watch.lock().unwrap().retain(|w| w.id != id);
+    api_result(Ok(json!({ "deleted": true })))
+}
+
+#[derive(Deserialize)]
+struct WatchPatchBody {
+    enabled: Option<bool>,
+    rate_ms: Option<u32>,
+}
+async fn watch_patch(State(state): State<SharedState>, Path(id): Path<u64>, Json(body): Json<WatchPatchBody>) -> Response {
+    let mut items = state.watch.lock().unwrap();
+    if let Some(w) = items.iter_mut().find(|w| w.id == id) {
+        if let Some(enabled) = body.enabled {
+            w.enabled = enabled;
+        }
+        if let Some(rate_ms) = body.rate_ms {
+            w.rate_ms = rate_ms;
+        }
+        api_result(Ok(json!({ "updated": true })))
+    } else {
+        api_result(Err(WebError::InvalidArgument(format!("no watch item {id}"))))
+    }
+}
+
+async fn watch_refresh(State(state): State<SharedState>) -> Response {
+    let items = state.watch.lock().unwrap().clone();
+    let symbols = state.symbols.read().unwrap().clone();
+    let ex = state.executor.clone();
+    let mut out = Vec::new();
+    for w in &items {
+        if !w.enabled {
+            continue;
+        }
+        let read = match &w.target {
+            crate::watch::WatchTarget::Address { address } => ex
+                .call_async(OperationKind::WatchRead, json!({ "address": address, "width": "u32" }))
+                .await
+                .ok()
+                .and_then(|v| v.get("value").and_then(|x| x.as_u64())),
+            crate::watch::WatchTarget::Symbol { symbol_id } => {
+                let addr = symbols.as_ref().and_then(|db| db.resolve_id(*symbol_id)).map(|s| s.address);
+                match addr {
+                    Some(a) => ex
+                        .call_async(OperationKind::WatchRead, json!({ "address": a, "width": "u32" }))
+                        .await
+                        .ok()
+                        .and_then(|v| v.get("value").and_then(|x| x.as_u64())),
+                    None => None,
+                }
+            }
+            crate::watch::WatchTarget::Register { name } => ex
+                .call_async(OperationKind::RegisterRead, json!({ "name": name }))
+                .await
+                .ok()
+                .and_then(|v| v.get("value").and_then(|x| x.as_u64())),
+        };
+        out.push(json!({ "id": w.id, "value": read }));
+    }
+    api_result(Ok(json!({ "items": out })))
+}
+
+// --- SVD / Peripherals ---
+
+async fn svd_upload(State(state): State<SharedState>, mut multipart: Multipart) -> Response {
+    let mut data: Option<Vec<u8>> = None;
+    while let Ok(Some(field)) = multipart.next_field().await {
+        if field.name().unwrap_or("") == "file" {
+            data = Some(match field.bytes().await {
+                Ok(b) => b.to_vec(),
+                Err(e) => {
+                    return api_result(Err(WebError::Internal(format!("upload read failed: {e}"))))
+                }
+            });
+        }
+    }
+    let Some(data) = data else {
+        return api_result(Err(WebError::InvalidArgument("missing file field".into())));
+    };
+    let path = state._upload_dir.path().join(format!("{}.svd", uuid::Uuid::new_v4()));
+    if let Err(e) = std::fs::write(&path, &data) {
+        return api_result(Err(WebError::Internal(format!("failed to save upload: {e}"))));
+    }
+    let db = match cmsis_dap_core::svd::SvdDatabase::load(&path) {
+        Ok(db) => db,
+        Err(e) => return api_result(Err(WebError::InvalidArgument(e.to_string()))),
+    };
+    let summary = db.summary();
+    *state.svd.write().unwrap() = Some(db);
+    api_result(Ok(json!({ "name": summary.name, "peripherals": summary.peripherals })))
+}
+
+async fn peripherals(State(state): State<SharedState>) -> Response {
+    let Some(svd) = state.svd.read().unwrap().clone() else {
+        return api_result(Err(WebError::InvalidArgument("no SVD loaded".into())));
+    };
+    let list: Vec<Value> = svd
+        .peripherals()
+        .iter()
+        .map(|p| json!({ "name": p.name, "base": p.base, "registers": p.registers.len() }))
+        .collect();
+    api_result(Ok(json!({ "peripherals": list })))
+}
+
+async fn peripheral_get(State(state): State<SharedState>, Path(name): Path<String>) -> Response {
+    let Some(svd) = state.svd.read().unwrap().clone() else {
+        return api_result(Err(WebError::InvalidArgument("no SVD loaded".into())));
+    };
+    match svd.get_peripheral(&name) {
+        Some(p) => api_result(Ok(json!({ "peripheral": p }))),
+        None => api_result(Err(WebError::InvalidArgument(format!("peripheral {name} not found")))),
+    }
+}
+
+#[derive(Deserialize)]
+struct PeripheralReadBody {
+    register: String,
+}
+async fn peripheral_read(State(state): State<SharedState>, Path(name): Path<String>, Json(body): Json<PeripheralReadBody>) -> Response {
+    let Some(svd) = state.svd.read().unwrap().clone() else {
+        return api_result(Err(WebError::InvalidArgument("no SVD loaded".into())));
+    };
+    let (addr, _) = match svd.resolve(&name, &body.register, None) {
+        Ok(v) => v,
+        Err(e) => return api_result(Err(WebError::InvalidArgument(e.to_string()))),
+    };
+    let ex = state.executor.clone();
+    let result = ex
+        .call_async(OperationKind::PeripheralRead, json!({ "address": addr }))
+        .await;
+    match result {
+        Ok(v) => {
+            let value = v.get("value").and_then(|x| x.as_u64()).unwrap_or(0) as u32;
+            let decoded = svd.decode_register(&name, &body.register, value).ok();
+            api_result(Ok(json!({ "address": addr, "value": value, "decoded": decoded })))
+        }
+        Err(e) => api_result(Err(e)),
+    }
+}
+
+#[derive(Deserialize)]
+struct PeripheralWriteBody {
+    register: String,
+    value: u32,
+}
+async fn peripheral_write(State(state): State<SharedState>, Path(name): Path<String>, Json(body): Json<PeripheralWriteBody>) -> Response {
+    let Some(svd) = state.svd.read().unwrap().clone() else {
+        return api_result(Err(WebError::InvalidArgument("no SVD loaded".into())));
+    };
+    let (addr, _) = match svd.resolve(&name, &body.register, None) {
+        Ok(v) => v,
+        Err(e) => return api_result(Err(WebError::InvalidArgument(e.to_string()))),
+    };
+    api_result(
+        state
+            .executor
+            .clone()
+            .call_async(OperationKind::PeripheralWrite, json!({ "address": addr, "value": body.value }))
+            .await,
+    )
+}
+
+#[derive(Deserialize)]
+struct PeripheralDecodeBody {
+    register: String,
+    value: u32,
+}
+async fn peripheral_decode(State(state): State<SharedState>, Path(name): Path<String>, Json(body): Json<PeripheralDecodeBody>) -> Response {
+    let Some(svd) = state.svd.read().unwrap().clone() else {
+        return api_result(Err(WebError::InvalidArgument("no SVD loaded".into())));
+    };
+    match svd.decode_register(&name, &body.register, body.value) {
+        Ok(decoded) => api_result(Ok(json!({ "decoded": decoded }))),
+        Err(e) => api_result(Err(WebError::InvalidArgument(e.to_string()))),
+    }
 }
 // ---------------------------------------------------------------------------
 // Response helpers
