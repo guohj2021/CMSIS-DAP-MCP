@@ -9,4 +9,5 @@ pub mod script;
 pub mod security;
 pub mod session;
 pub mod svd;
+pub mod swo;
 pub mod symbols;

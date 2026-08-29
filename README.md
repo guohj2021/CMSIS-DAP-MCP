@@ -45,6 +45,22 @@ flash from firmware files, and run J-Link / OpenOCD style debug scripts.
   native binary (`npx -y cmsis-dap-cli` for the CLI).
 - Cross-platform: Windows / Linux / macOS.
 
+## Web Debug (browser UI)
+
+`cmsis-dap-cli web` starts a local Web Debug server (`127.0.0.1:8080`) with a
+browser Debug Workspace over the same engine: connect, run/halt/step/reset,
+registers, memory, hardware/software breakpoints, ELF symbols, Watch /
+Live Watch, SVD peripheral explorer with bit-field decode, real DWARF CFI
+call stack + locals, disassembly with source locations, RTT / EVR, SWO/ITM,
+a sampling profiler, an expression evaluator, and firmware download
+(BIN/HEX) with region validation and progress.
+
+```bash
+cmsis-dap-cli web --target-yaml target/demo.yaml --probe-id <serial> --allow-destructive
+```
+
+See [Web Debug](https://guohj2021.github.io/CMSIS-DAP-MCP/web.html) in the docs.
+
 ## Features
 
 | Area | Tools |

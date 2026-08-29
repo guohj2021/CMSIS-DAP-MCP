@@ -7,6 +7,17 @@ export default defineConfig({
   build: {
     outDir: "../crates/cmsis-dap-web/assets",
     emptyOutDir: true,
+    rolldownOptions: {
+      output: {
+        // Split heavy vendor libs (dockview, react) so no single chunk is huge.
+        codeSplitting: {
+          groups: [
+            { name: "react", test: /node_modules[\\/](react|react-dom|scheduler)/ },
+            { name: "dockview", test: /node_modules[\\/](dockview|dockview-react|dockview-core)/ },
+          ],
+        },
+      },
+    },
   },
   server: {
     proxy: {

@@ -678,11 +678,15 @@ impl ExecutorRunner {
             OperationKind::SwoRead => {
                 let backend = session.backend();
                 let data = backend.read_swo_data()?;
-                Ok(json!({ "data": data }))
+                let packets = cmsis_dap_core::swo::decode_swo(&data);
+                let text = cmsis_dap_core::swo::port0_text(&packets);
+                Ok(json!({ "data": data, "packets": packets, "text": text }))
             }
             OperationKind::ProfileRun => {
-                // Sampling profiler: briefly halt, read PC, resume; build a
-                // PC histogram. Never resets; a real, non-fabricated profile.
+                // Sampling profiler: briefly halt, read PC, resume; build a PC
+                // histogram, and (when `tree` is set) a call tree by unwinding
+                // each sample with the DWARF CFI unwinder. Never resets; a
+                // real, non-fabricated profile.
                 let samples = p
                     .get("samples")
                     .and_then(|v| v.as_u64())
@@ -693,17 +697,67 @@ impl ExecutorRunner {
                     .and_then(|v| v.as_u64())
                     .unwrap_or(5)
                     .clamp(1, 100);
+                let build_tree = p.get("tree").and_then(|v| v.as_bool()).unwrap_or(false);
+                let unw = self.unwinder.lock().unwrap();
                 let backend = session.backend();
                 let mut counts: std::collections::HashMap<u64, u64> =
                     std::collections::HashMap::new();
+                // Call-tree aggregation: path (pc chain, leaf last) -> count.
+                let mut tree_counts: std::collections::HashMap<Vec<u64>, u64> =
+                    std::collections::HashMap::new();
                 let mut total = 0usize;
+                let reg_names = [
+                    ("r4", 4u16),
+                    ("r5", 5),
+                    ("r6", 6),
+                    ("r7", 7),
+                    ("r8", 8),
+                    ("r9", 9),
+                    ("r10", 10),
+                    ("r11", 11),
+                    ("sp", 13),
+                    ("lr", 14),
+                    ("pc", 15),
+                ];
                 for _ in 0..samples {
                     if backend.halt().is_err() {
                         break;
                     }
-                    if let Ok(pc) = backend.read_core_register(&CoreRegister::Name("pc".into())) {
-                        *counts.entry(pc & !1).or_insert(0) += 1;
+                    let pc = backend
+                        .read_core_register(&CoreRegister::Name("pc".into()))
+                        .unwrap_or(0)
+                        & !1;
+                    if pc != 0 {
+                        *counts.entry(pc).or_insert(0) += 1;
                         total += 1;
+                        if build_tree {
+                            let mut regs: std::collections::HashMap<u16, u64> =
+                                std::collections::HashMap::new();
+                            for (name, num) in reg_names {
+                                if let Ok(v) =
+                                    backend.read_core_register(&CoreRegister::Name(name.into()))
+                                {
+                                    regs.insert(num, v);
+                                }
+                            }
+                            if let Some(u) = unw.as_ref() {
+                                let mut read32 = |addr: u64| -> Result<u32, String> {
+                                    let values = backend
+                                        .read_memory(addr, AccessWidth::U8, 4)
+                                        .map_err(|e| e.to_string())?;
+                                    if values.len() < 4 {
+                                        return Err("short read".into());
+                                    }
+                                    Ok((values[0] as u32)
+                                        | ((values[1] as u32) << 8)
+                                        | ((values[2] as u32) << 16)
+                                        | ((values[3] as u32) << 24))
+                                };
+                                let frames = u.unwind(&regs, &mut read32, 32);
+                                let path: Vec<u64> = frames.iter().map(|f| f.pc & !1).collect();
+                                *tree_counts.entry(path).or_insert(0) += 1;
+                            }
+                        }
                     }
                     let _ = backend.resume();
                     std::thread::sleep(std::time::Duration::from_millis(interval_ms));
@@ -715,7 +769,18 @@ impl ExecutorRunner {
                     .map(|(pc, count)| json!({ "pc": pc, "count": count }))
                     .collect();
                 items.sort_by(|a, b| b["count"].as_u64().cmp(&a["count"].as_u64()));
-                Ok(json!({ "total": total, "samples": items }))
+                let tree: Vec<Value> = if build_tree {
+                    let mut paths: Vec<(Vec<u64>, u64)> = tree_counts.into_iter().collect();
+                    paths.sort_by_key(|p| std::cmp::Reverse(p.1));
+                    paths
+                        .into_iter()
+                        .take(64)
+                        .map(|(path, count)| json!({ "path": path, "count": count }))
+                        .collect()
+                } else {
+                    Vec::new()
+                };
+                Ok(json!({ "total": total, "samples": items, "tree": tree }))
             }
             OperationKind::Locals => {
                 {

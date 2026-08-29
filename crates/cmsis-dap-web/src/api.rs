@@ -1401,6 +1401,7 @@ async fn source_view(Query(q): Query<SourceQuery>) -> Response {
 struct ProfileRunBody {
     samples: Option<u64>,
     interval_ms: Option<u64>,
+    tree: Option<bool>,
 }
 async fn profile_run(
     State(state): State<SharedState>,
@@ -1412,7 +1413,7 @@ async fn profile_run(
             .clone()
             .call_async(
                 OperationKind::ProfileRun,
-                json!({ "samples": body.samples, "interval_ms": body.interval_ms }),
+                json!({ "samples": body.samples, "interval_ms": body.interval_ms, "tree": body.tree }),
             )
             .await,
     )

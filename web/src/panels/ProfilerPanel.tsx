@@ -1,31 +1,40 @@
-// Profiler panel: sampling PC histogram (V2 - Performance Analyzer basics).
+// Profiler panel: sampling PC histogram + call tree (DWARF CFI).
 import { useState } from "react";
 import { api } from "../api/client";
 import { useDebugStore } from "../store/debugStore";
+
+interface ProfileResult {
+  total: number;
+  samples: { pc: number; count: number }[];
+  tree: { path: number[]; count: number }[];
+}
 
 export function ProfilerPanel() {
   const connected = useDebugStore((s) => s.connected);
   const log = useDebugStore((s) => s.log);
   const [samples, setSamples] = useState(200);
+  const [treeMode, setTreeMode] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<{ total: number; samples: { pc: number; count: number }[] } | null>(null);
+  const [result, setResult] = useState<ProfileResult | null>(null);
   const [symbols, setSymbols] = useState<Record<number, string>>({});
 
   async function run() {
     setBusy(true);
     try {
-      const r = await api.profileRun(samples, 5);
+      const r = await api.profileRun(samples, 5, treeMode);
       setResult(r);
-      // Resolve top PCs to symbols.
+      const all: number[] = [];
+      for (const s of r.samples.slice(0, 12)) all.push(s.pc);
+      for (const t of r.tree) for (const pc of t.path) all.push(pc);
       const map: Record<number, string> = {};
-      for (const s of r.samples.slice(0, 12)) {
-        const addr = s.pc;
-        const syms = await api.symbols({ kind: "function", limit: 2000 });
+      const syms = await api.symbols({ kind: "function", limit: 2000 });
+      for (const addr of all) {
+        if (map[addr]) continue;
         const hit = syms.items.find((x) => x.address <= addr && addr < x.address + Math.max(x.size, 4));
         map[addr] = hit ? `${hit.name}+0x${(addr - hit.address).toString(16)}` : `0x${addr.toString(16)}`;
       }
       setSymbols(map);
-      log("info", `采样完成: ${r.total} 个样本`);
+      log("info", `采样完成: ${r.total} 个样本${treeMode ? "（含调用树）" : ""}`);
     } catch (e) {
       log("error", `采样失败: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -34,6 +43,7 @@ export function ProfilerPanel() {
   }
 
   const max = Math.max(1, ...(result?.samples.map((s) => s.count) ?? []));
+  const maxTree = Math.max(1, ...(result?.tree.map((t) => t.count) ?? []));
 
   return (
     <div className="flex h-full flex-col text-xs">
@@ -48,11 +58,35 @@ export function ProfilerPanel() {
           onChange={(e) => setSamples(Number(e.target.value))}
         />
         <span className="text-zinc-500">样本</span>
+        <label className="flex items-center gap-1 text-zinc-400">
+          <input type="checkbox" checked={treeMode} onChange={(e) => setTreeMode(e.target.checked)} /> 调用树
+        </label>
         <button className="rounded bg-blue-600 px-2 py-0.5 text-white hover:bg-blue-500 disabled:opacity-40" onClick={run} disabled={!connected || busy}>
           {busy ? "采样中…" : "开始"}
         </button>
       </div>
       <div className="flex-1 overflow-auto px-2 py-1">
+        {treeMode && result && result.tree.length > 0 && (
+          <div className="mb-2 border-b border-zinc-800 pb-1">
+            <div className="mb-1 text-zinc-500">调用路径（叶子在右，越深越热）</div>
+            {result.tree.slice(0, 12).map((t, i) => (
+              <div key={i} className="flex items-center gap-2 py-0.5">
+                <div className="flex-1 truncate">
+                  {t.path.map((pc, j) => (
+                    <span key={j} className={j === t.path.length - 1 ? "text-amber-300" : "text-zinc-400"}>
+                      {j > 0 && <span className="text-zinc-600"> → </span>}
+                      {symbols[pc] ?? `0x${pc.toString(16)}`}
+                    </span>
+                  ))}
+                </div>
+                <div className="h-2 w-24 rounded bg-zinc-800">
+                  <div className="h-2 rounded bg-emerald-500" style={{ width: `${(t.count / maxTree) * 100}%` }} />
+                </div>
+                <span className="w-16 text-right text-zinc-400">{t.count}</span>
+              </div>
+            ))}
+          </div>
+        )}
         {result?.samples.slice(0, 20).map((s, i) => (
           <div key={s.pc} className="flex items-center gap-2 py-0.5">
             <span className="w-8 text-zinc-600">{i + 1}</span>

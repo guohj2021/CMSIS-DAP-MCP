@@ -16,8 +16,15 @@ export function SwoPanel() {
       try {
         const r = await api.swoRead();
         if (r.data && r.data.length) {
-          const bytes = Uint8Array.from(r.data);
-          setText((t) => (t + decoder.decode(bytes)).slice(-8000));
+          // Prefer the server-side ITM decode (port 0 console text); fall back
+          // to raw bytes when the probe returns an unsupported stream.
+          const decoded = (r as { text?: string }).text;
+          if (decoded) {
+            setText((t) => (t + decoded).slice(-8000));
+          } else {
+            const bytes = Uint8Array.from(r.data);
+            setText((t) => (t + decoder.decode(bytes)).slice(-8000));
+          }
         }
       } catch {
         /* ignore */
