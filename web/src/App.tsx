@@ -64,21 +64,17 @@ export default function App() {
       }
     }, 500);
 
+    // IMPORTANT: WS events only update the store. Registers/fault are
+    // refreshed by the bounded status poller and explicit actions — never
+    // from inside this handler, otherwise every executor op (which emits a
+    // target_state_changed) would trigger another refresh and cascade.
     const offReady = onWsEvent("ready", (data) => {
       const d = data as unknown as Partial<SessionStatus>;
       useDebugStore.getState().setStatus(d);
-      if (d.server === "ready") {
-        refreshRegisters();
-        refreshFault();
-      }
     });
     const offState = onWsEvent("target_state_changed", (data) => {
       const d = data as unknown as Partial<SessionStatus>;
       useDebugStore.getState().setStatus(d);
-      if (d.server === "ready") {
-        refreshRegisters();
-        refreshFault();
-      }
     });
     const offLost = onWsEvent("probe_lost", (data) => {
       const d = data as { message?: string };
