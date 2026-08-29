@@ -629,6 +629,19 @@ impl Backend for ProbeRsBackend {
         Ok(self.breakpoints.clone())
     }
 
+    fn hw_breakpoint_limits(&mut self) -> Result<Option<(u32, u32)>, McpError> {
+        let total = {
+            let mut core = self.core()?;
+            match core.available_breakpoint_units() {
+                Ok(n) => n,
+                Err(_) => return Ok(None),
+            }
+        };
+        // probe-rs 0.32 does not expose used units publicly; count the
+        // breakpoints this backend has set itself.
+        Ok(Some((self.breakpoints.len() as u32, total)))
+    }
+
     fn reset(&mut self, mode: ResetMode) -> Result<(), McpError> {
         let mut core = self.core()?;
         let result = match mode {
@@ -1460,3 +1473,4 @@ impl Backend for ProbeRsBackend {
         Ok(())
     }
 }
+

@@ -53,6 +53,13 @@ export const api = {
   breakpoints: () => request<{ breakpoints: number[] }>("GET", "/breakpoints"),
   breakpointSet: (address: number, kind?: string) =>
     request<{ set: number }>("POST", "/breakpoints", { address, kind }),
+  breakpointClear: () => request<{ cleared: boolean }>("DELETE", "/breakpoints"),
+  breakpointsLimits: () =>
+    request<{ used?: number; total?: number | null }>("GET", "/breakpoints/limits"),
+  watchpoints: () =>
+    request<{ watchpoints: { address: number; access: string }[] }>("GET", "/watchpoints"),
+  watchpointSet: (address: number, access?: string) =>
+    request<{ set: number }>("POST", "/watchpoints", { address, access }),
   fault: () => request<{ fault: RegisterValue[] }>("GET", "/fault"),
   snapshot: () => request<Record<string, unknown>>("POST", "/snapshot"),
 };

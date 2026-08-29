@@ -95,6 +95,8 @@ pub enum OperationKind {
     MemoryRead,
     MemoryWrite,
     Breakpoint,
+    BreakpointLimits,
+    Watchpoint,
     WatchRead,
     PeripheralRead,
     PeripheralWrite,

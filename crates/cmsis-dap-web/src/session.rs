@@ -42,10 +42,12 @@ impl SessionLease {
         tokio::spawn(async move {
             tokio::time::sleep(grace).await;
             if lease.active_clients() == 0 {
-                let _ = executor.call(
-                    crate::op::OperationKind::Disconnect,
-                    serde_json::json!({}),
-                );
+                let _ = executor
+                    .call_async(
+                        crate::op::OperationKind::Disconnect,
+                        serde_json::json!({}),
+                    )
+                    .await;
             }
         });
     }

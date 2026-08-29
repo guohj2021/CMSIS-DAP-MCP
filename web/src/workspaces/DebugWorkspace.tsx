@@ -7,6 +7,7 @@ import { ConsolePanel } from "../panels/ConsolePanel";
 import { SymbolsPanel } from "../panels/SymbolsPanel";
 import { WatchPanel } from "../panels/WatchPanel";
 import { PeripheralPanel } from "../panels/PeripheralPanel";
+import { BreakpointsPanel } from "../panels/BreakpointsPanel";
 import { DisassemblyPanel } from "../panels/DisassemblyPanel";
 
 const components: Record<string, React.FC<IDockviewPanelProps<{ title?: string }>>> = {
@@ -16,6 +17,7 @@ const components: Record<string, React.FC<IDockviewPanelProps<{ title?: string }
   symbols: () => <SymbolsPanel />,
   watch: () => <WatchPanel />,
   peripheral: () => <PeripheralPanel />,
+  breakpoints: () => <BreakpointsPanel />,
   disassembly: () => <DisassemblyPanel />,
 };
 
@@ -78,6 +80,12 @@ export function DebugWorkspace() {
         component: "peripheral",
         title: "外设",
         position: { referencePanel: "memory", direction: "right" },
+      });
+      api.addPanel({
+        id: "breakpoints",
+        component: "breakpoints",
+        title: "断点",
+        position: { referencePanel: "peripheral", direction: "right" },
       });
       api.addPanel({
         id: "console",

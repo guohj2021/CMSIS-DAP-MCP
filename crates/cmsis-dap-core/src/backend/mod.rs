@@ -361,6 +361,14 @@ pub trait Backend: Send {
     fn set_breakpoint(&mut self, address: u64) -> Result<(), McpError>;
     fn clear_breakpoints(&mut self) -> Result<(), McpError>;
     fn list_breakpoints(&mut self) -> Result<Vec<u64>, McpError>;
+
+    /// Hardware breakpoint resource usage `(used, total)`.
+    ///
+    /// Returns `None` when the backend/probe cannot report the comparator
+    /// count; the UI must display "Unknown" instead of faking a number.
+    fn hw_breakpoint_limits(&mut self) -> Result<Option<(u32, u32)>, McpError> {
+        Ok(None)
+    }
     fn reset(&mut self, mode: ResetMode) -> Result<(), McpError>;
     fn read_dap(&mut self, address: u32) -> Result<u32, McpError>;
     fn write_dap(&mut self, address: u32, value: u32) -> Result<(), McpError>;
@@ -545,3 +553,4 @@ pub trait Backend: Send {
         ))
     }
 }
+

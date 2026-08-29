@@ -12,7 +12,7 @@ use crate::op::{
     TargetState, WebError,
 };
 use cmsis_dap_core::backend::{
-    AccessWidth, ConnectOptions, CoreRegister, Protocol, ResetMode,
+    AccessWidth, ConnectOptions, CoreRegister, Protocol, ResetMode, WatchAccess,
 };
 use cmsis_dap_core::error::ErrorCode;
 use cmsis_dap_core::session::SessionManager;
@@ -210,11 +210,9 @@ impl ExecutorRunner {
 
         let result = self.dispatch(&op);
 
-        // Restore state after the op.
+        // Restore state after the op. The target state set by the dispatch
+        // (e.g. Running/Halted after a reset) is preserved.
         let mut status = self.status.read().unwrap().clone();
-        if op.kind == OperationKind::Reset {
-            status.target = TargetState::Unknown;
-        }
         status.operation = prev.as_ref().map(|p| p.operation).unwrap_or(OperationState::None);
         status.server = match status.server {
             ServerState::Disconnected => ServerState::Disconnected,
@@ -321,6 +319,17 @@ impl ExecutorRunner {
             OperationKind::Status => {
                 let backend = session.backend();
                 let core = backend.get_core_status()?;
+                // Keep the executor's TargetState in sync with reality
+                // (e.g. a hardware breakpoint halt while "running").
+                let mut status = self.status.write().unwrap();
+                status.target = match core.state.as_str() {
+                    "running" | "sleeping" => TargetState::Running,
+                    "halted" => TargetState::Halted,
+                    _ => status.target,
+                };
+                status.reason = core.halt_reason.clone();
+                status.pc = core.pc;
+                drop(status);
                 Ok(json!({ "status": core }))
             }
             OperationKind::Run => {
@@ -443,6 +452,43 @@ impl ExecutorRunner {
                     "list_flash" => Ok(json!({ "breakpoints": backend.list_flash_breakpoints()? })),
                     other => Err(WebError::InvalidArgument(format!(
                         "unknown breakpoint action {other}"
+                    ))),
+                }
+            }
+            OperationKind::BreakpointLimits => {
+                let backend = session.backend();
+                let limits = backend.hw_breakpoint_limits()?;
+                match limits {
+                    Some((used, total)) => Ok(json!({ "used": used, "total": total })),
+                    None => Ok(json!({ "used": null, "total": null })),
+                }
+            }
+            OperationKind::Watchpoint => {
+                let backend = session.backend();
+                let action = param_str(p, "action").unwrap_or("set".into());
+                match action.as_str() {
+                    "set" => {
+                        let address = param_u64(p, "address")?;
+                        let access = match p.get("access").and_then(|v| v.as_str()).unwrap_or("rw") {
+                            "read" => WatchAccess::Read,
+                            "write" => WatchAccess::Write,
+                            "rw" => WatchAccess::ReadWrite,
+                            other => {
+                                return Err(WebError::InvalidArgument(format!(
+                                    "watchpoint access must be read/write/rw, got {other}"
+                                )))
+                            }
+                        };
+                        backend.set_watchpoint(address, access)?;
+                        Ok(json!({ "set": address }))
+                    }
+                    "clear" => {
+                        backend.clear_watchpoints()?;
+                        Ok(json!({ "cleared": true }))
+                    }
+                    "list" => Ok(json!({ "watchpoints": backend.list_watchpoints()? })),
+                    other => Err(WebError::InvalidArgument(format!(
+                        "unknown watchpoint action {other}"
                     ))),
                 }
             }

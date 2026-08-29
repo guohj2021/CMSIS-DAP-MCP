@@ -14,6 +14,32 @@ export default function App() {
     connectWs();
     refreshProbes();
 
+    // Poll status while connected so target state (e.g. breakpoint halt)
+    // stays in sync even without a WS event.
+    const pollTimer = setInterval(async () => {
+      if (!useDebugStore.getState().connected) return;
+      try {
+        const r = await fetch("/api/status");
+        if (r.ok) {
+          const j = await r.json();
+          const coreState = j.status?.state as string | undefined;
+          if (coreState === "halted" || coreState === "running") {
+            useDebugStore.getState().setStatus({
+              target: coreState === "halted" ? "halted" : "running",
+              pc: j.pc ?? j.status?.pc ?? null,
+              reason: j.reason ?? j.status?.halt_reason ?? null,
+            });
+          }
+          if (coreState === "halted") {
+            refreshRegisters();
+            refreshFault();
+          }
+        }
+      } catch {
+        /* ignore transient errors */
+      }
+    }, 500);
+
     const offReady = onWsEvent("ready", (data) => {
       const d = data as unknown as Partial<SessionStatus>;
       useDebugStore.getState().setStatus(d);
@@ -40,6 +66,7 @@ export default function App() {
     });
 
     return () => {
+      clearInterval(pollTimer);
       offReady();
       offState();
       offLost();

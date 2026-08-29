@@ -25,7 +25,10 @@ pub fn router() -> Router<SharedState> {
         .route("/api/memory/read", post(memory_read))
         .route("/api/memory/write", post(memory_write))
         .route("/api/breakpoints", get(breakpoints).post(breakpoint_set))
+        .route("/api/breakpoints/limits", get(breakpoint_limits))
         .route("/api/breakpoints/{address}", axum::routing::delete(breakpoint_delete))
+        .route("/api/watchpoints", get(watchpoints).post(watchpoint_set))
+        .route("/api/watchpoints/{address}", axum::routing::delete(watchpoint_delete))
         .route("/api/fault", get(fault))
         .route("/api/snapshot", post(snapshot))
 }
@@ -203,6 +206,54 @@ async fn breakpoint_delete(State(state): State<SharedState>, Path(_address): Pat
             .executor
             .clone()
             .call_async(OperationKind::Breakpoint, json!({ "action": "clear" }))
+            .await,
+    )
+}
+
+async fn breakpoint_limits(State(state): State<SharedState>) -> Response {
+    api_result(
+        state
+            .executor
+            .clone()
+            .call_async(OperationKind::BreakpointLimits, json!({}))
+            .await,
+    )
+}
+
+async fn watchpoints(State(state): State<SharedState>) -> Response {
+    api_result(
+        state
+            .executor
+            .clone()
+            .call_async(OperationKind::Watchpoint, json!({ "action": "list" }))
+            .await,
+    )
+}
+
+#[derive(Deserialize)]
+struct WatchpointBody {
+    address: u64,
+    access: Option<String>,
+}
+async fn watchpoint_set(State(state): State<SharedState>, Json(body): Json<WatchpointBody>) -> Response {
+    api_result(
+        state
+            .executor
+            .clone()
+            .call_async(
+                OperationKind::Watchpoint,
+                json!({ "action": "set", "address": body.address, "access": body.access }),
+            )
+            .await,
+    )
+}
+
+async fn watchpoint_delete(State(state): State<SharedState>, Path(_address): Path<u64>) -> Response {
+    api_result(
+        state
+            .executor
+            .clone()
+            .call_async(OperationKind::Watchpoint, json!({ "action": "clear" }))
             .await,
     )
 }

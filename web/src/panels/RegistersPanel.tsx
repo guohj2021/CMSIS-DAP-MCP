@@ -1,7 +1,8 @@
 // CPU Registers panel: HEX/DEC/BIN, PC highlight, per-register value.
 import { useMemo, useState } from "react";
+import { api } from "../api/client";
 import { useDebugStore } from "../store/debugStore";
-import { formatValue, NumFormat } from "../debug/formatters";
+import { formatValue, parseNumber, NumFormat } from "../debug/formatters";
 
 const PC_RE = /^(pc|r15)$/i;
 
@@ -14,6 +15,22 @@ export function RegistersPanel() {
     const f = filter.trim().toLowerCase();
     return registers.filter((r) => r.name.toLowerCase().includes(f));
   }, [registers, filter]);
+
+  const log = useDebugStore((s) => s.log);
+
+  async function writeRegister(name: string, input: string) {
+    const v = parseNumber(input);
+    if (v === null || v < 0 || v > 0xffffffff) {
+      log("error", `无效寄存器值: ${input}`);
+      return;
+    }
+    try {
+      await api.registerWrite(name, v);
+      log("info", `寄存器 ${name} = 0x${v.toString(16)}`);
+    } catch (e) {
+      log("error", e instanceof Error ? e.message : String(e));
+    }
+  }
 
   return (
     <div className="flex h-full flex-col text-xs">
@@ -44,7 +61,12 @@ export function RegistersPanel() {
             }`}
           >
             <span className="text-zinc-400">{r.name}</span>
-            <span className="font-mono">{formatValue(r.value, fmt)}</span>
+            <input
+              className="w-24 bg-transparent text-right font-mono text-zinc-200 outline-none focus:bg-zinc-700"
+              defaultValue={formatValue(r.value, fmt)}
+              key={`${r.name}-${fmt}-${r.value}`}
+              onBlur={(e) => writeRegister(r.name, e.target.value)}
+            />
           </div>
         ))}
       </div>
