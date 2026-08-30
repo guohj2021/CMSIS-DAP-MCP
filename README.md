@@ -9,7 +9,7 @@
 ![CI](https://img.shields.io/github/actions/workflow/status/guohj2021/CMSIS-DAP-MCP/ci.yml?branch=main&label=CI)
 <!-- Keep the Release badge ?branch= in sync with the latest release tag; the
      tag-triggered Release workflow never runs on main. -->
-![Release](https://img.shields.io/github/actions/workflow/status/guohj2021/CMSIS-DAP-MCP/release.yml?branch=v0.7.0&label=Release)
+![Release](https://img.shields.io/github/actions/workflow/status/guohj2021/CMSIS-DAP-MCP/release.yml?branch=v0.8.0&label=Release)
 ![Pages](https://img.shields.io/github/actions/workflow/status/guohj2021/CMSIS-DAP-MCP/pages.yml?branch=main&label=Pages)
 ![Version](https://img.shields.io/github/v/tag/guohj2021/CMSIS-DAP-MCP)
 ![Rust](https://img.shields.io/badge/rust-1.97.1-orange)

@@ -204,7 +204,7 @@ jobs:
             Release ${{ github.ref_name }} of the CMSIS-DAP MCP server and CLI.
 
             Feature highlights and fixes for this release are documented in the
-            [CHANGELOG](https://github.com/guohj2021/CMSIS-DAP-MCP/blob/main/CHANGELOG.md#v050).
+            [CHANGELOG](https://github.com/guohj2021/CMSIS-DAP-MCP/blob/main/CHANGELOG.md#v080).
           update_release_body: true
   publish-npm:
     needs: build

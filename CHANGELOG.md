@@ -3,6 +3,52 @@
 All notable changes are documented per release. Version numbers match the
 `v*` tags; npm packages and platform binaries follow the same version.
 
+## [v0.8.0] - 2026-08-30
+
+### Features
+
+- **Web Debug (browser UI)**: `cmsis-dap-cli web` starts a local Web Debug
+  server (REST + WebSocket) serving a Keil-style Debug Workspace in the
+  browser, built on the same engine as the CLI / MCP:
+  - Execution control: connect/disconnect, run / halt / step / step-over /
+    step-out / run-to-address, reset and reset-and-halt, snapshot.
+  - CPU registers (HEX/DEC/BIN, PC highlight, bitfield view); memory viewer
+    with u8/u16/u32 grouped display and in-place edit; hardware / flash
+    software breakpoints and watchpoints.
+  - ELF/AXF symbol explorer (search, drag-to-watch, ＋Watch), live watch,
+    SVD peripheral explorer (read/write/decode, 全部刷新, in-place periodic
+    monitor with configurable rate), flash erase/program/verify (BIN/HEX)
+    with progress, RTT / EVR viewers, disassembly, call stack / locals
+    (DWARF), source viewer, expression evaluator, PC-sampling profiler, SWO.
+  - Dockable panel layout with presets (Quick / Full), a Window menu to
+    show/hide every panel, and named layout configurations saved in the
+    browser; layout persists across reloads.
+  - Security: binds `127.0.0.1` by default; destructive tools (flash,
+    flash-software breakpoints) require `--allow-destructive`. Flash
+    programming needs a chip target (`--target-yaml` / `--target`) so flash
+    regions and algorithms are defined.
+
+### Fixed
+
+- Web API `DELETE /api/breakpoints` now clears breakpoints (was 405 / 500).
+- Status polling stops after session loss (no 409 storm; the UI returns to
+  disconnected and stops hammering the server).
+- Symbol list renders reliably after ELF/AXF upload; single-cell memory
+  writes take effect; memory u8/u16/u32 width now changes the display
+  grouping instead of just the read length.
+- SVD peripheral monitoring no longer creates separate monitor blocks —
+  "全部刷新" reads every readable register in place, and per-register
+  "监控" refreshes the value in the same row.
+
+### Documentation
+
+- New `docs/src/web.md` (+ Chinese mirror) covering the Web Debug server,
+  workspaces, panels and examples; `docs/implementation/ui-test-report.md`
+  records the UI functional test matrix and bug fixes.
+- Committed UI functional test suite under `tests/ui/` (Playwright + Edge).
+- Pinned-version examples updated to `@0.8.0`; README Release badge synced
+  to `v0.8.0`.
+
 ## [v0.7.0] - 2026-08-22
 
 ### Features
