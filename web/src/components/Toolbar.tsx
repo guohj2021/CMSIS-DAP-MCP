@@ -4,15 +4,17 @@ import { useDebugStore } from "../store/debugStore";
 import * as ops from "../debug/operations";
 
 export function Toolbar() {
-  const status = useDebugStore((s) => s.status);
+  const server = useDebugStore((s) => s.status.server);
+  const target = useDebugStore((s) => s.status.target);
+  const operation = useDebugStore((s) => s.status.operation);
   const probes = useDebugStore((s) => s.probes);
   const [probeId, setProbeId] = useState("");
   const [connecting, setConnecting] = useState(false);
 
-  const connected = status.server === "ready";
-  const running = status.target === "running";
-  const halted = status.target === "halted";
-  const busy = status.server === "busy" || status.operation === "flash";
+  const connected = server === "ready";
+  const running = target === "running";
+  const halted = target === "halted";
+  const busy = server === "busy" || operation === "flash";
 
   const btn =
     "rounded px-3 py-1 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40";
@@ -86,17 +88,17 @@ export function Toolbar() {
       </button>
 
       <span className="ml-auto flex items-center gap-2 text-xs">
-        <StatusDot state={status.server} />
+        <StatusDot state={server} />
         <span className="text-zinc-400">
-          {status.server === "disconnected"
+          {server === "disconnected"
             ? "未连接"
-            : status.operation === "flash"
+            : operation === "flash"
               ? "FLASHING…"
-              : status.target === "running"
+              : target === "running"
                 ? "运行中"
-                : status.target === "halted"
+                : target === "halted"
                   ? "已暂停"
-                  : status.target === "fault"
+                  : target === "fault"
                     ? "FAULT"
                     : "已连接"}
         </span>

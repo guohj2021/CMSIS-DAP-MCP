@@ -1,5 +1,5 @@
 // Debug workspace: Dockview layout presets (Quick / Full), same state.
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { DockviewReact, DockviewReadyEvent, IDockviewPanelProps } from "dockview-react";
 import { RegistersPanel } from "../panels/RegistersPanel";
 import { MemoryPanel } from "../panels/MemoryPanel";
@@ -37,11 +37,17 @@ const components: Record<string, React.FC<IDockviewPanelProps<{ title?: string }
 
 type Preset = "quick" | "full";
 
+const LAYOUT_KEY = "cmsis-dap-layout";
+
 export function DebugWorkspace() {
   const apiRef = useRef<DockviewReadyEvent["api"] | null>(null);
+  // builtRef makes onReady idempotent (StrictMode-safe): the layout is built
+  // exactly once per mount instead of being cleared/rebuilt 2-3 times.
+  const builtRef = useRef(false);
+  const saveSubRef = useRef<{ dispose: () => void } | null>(null);
   const [preset, setPreset] = useState<Preset>("quick");
 
-  function applyPreset(p: Preset, api: DockviewReadyEvent["api"]) {
+  const applyPreset = useCallback((p: Preset, api: DockviewReadyEvent["api"]) => {
     api.clear();
     if (p === "quick") {
       api.addPanel({ id: "registers", component: "registers", title: "寄存器" });
@@ -150,36 +156,58 @@ export function DebugWorkspace() {
         position: { referencePanel: "peripheral", direction: "below" },
       });
     }
-  }
-
-  useEffect(() => {
-    if (apiRef.current) applyPreset(preset, apiRef.current);
-  }, [preset]);
-
-  // Layout persistence: save on change, restore on load (P7a).
-  useEffect(() => {
-    const api = apiRef.current;
-    if (!api) return;
-    const save = () => {
-      try {
-        const json = api.toJSON();
-        localStorage.setItem("cmsis-dap-layout", JSON.stringify(json));
-      } catch {
-        /* ignore */
-      }
-    };
-    const sub = api.onDidLayoutChange(() => save());
-    const restore = localStorage.getItem("cmsis-dap-layout");
-    if (restore) {
-      try {
-        api.fromJSON(JSON.parse(restore));
-        return;
-      } catch {
-        /* fall back to preset */
-      }
-    }
-    return () => sub.dispose();
   }, []);
+
+  // Build the layout exactly once per mount: restore the saved layout when
+  // present (fall back to the preset otherwise). The save subscription is
+  // registered here too, so it is always attached - the old code returned
+  // early on restore and leaked/dropped the subscription.
+  const onReady = useCallback(
+    (event: DockviewReadyEvent) => {
+      const api = event.api;
+      apiRef.current = api;
+      if (!saveSubRef.current) {
+        saveSubRef.current = api.onDidLayoutChange(() => {
+          try {
+            const json = api.toJSON();
+            localStorage.setItem(LAYOUT_KEY, JSON.stringify(json));
+          } catch {
+            /* ignore */
+          }
+        });
+      }
+      if (builtRef.current) return;
+      builtRef.current = true;
+      try {
+        const saved = localStorage.getItem(LAYOUT_KEY);
+        if (saved) {
+          api.fromJSON(JSON.parse(saved));
+          return;
+        }
+      } catch {
+        /* fall back to the preset */
+      }
+      applyPreset(preset, api);
+    },
+    [applyPreset, preset]
+  );
+
+  // Clean up on unmount so a remount (Debug/Flash switch, StrictMode) rebuilds
+  // from scratch instead of ending up with a half-initialised layout.
+  useEffect(() => {
+    return () => {
+      saveSubRef.current?.dispose();
+      saveSubRef.current = null;
+      builtRef.current = false;
+      apiRef.current = null;
+    };
+  }, []);
+
+  function switchPreset(p: Preset) {
+    setPreset(p);
+    const api = apiRef.current;
+    if (api) applyPreset(p, api);
+  }
 
   return (
     <div className="flex h-full flex-col">
@@ -187,13 +215,13 @@ export function DebugWorkspace() {
         <span className="text-zinc-400">工作区</span>
         <button
           className={`rounded px-2 py-0.5 ${preset === "quick" ? "bg-blue-600 text-white" : "bg-zinc-700 text-zinc-300"}`}
-          onClick={() => setPreset("quick")}
+          onClick={() => switchPreset("quick")}
         >
           Quick Debug
         </button>
         <button
           className={`rounded px-2 py-0.5 ${preset === "full" ? "bg-blue-600 text-white" : "bg-zinc-700 text-zinc-300"}`}
-          onClick={() => setPreset("full")}
+          onClick={() => switchPreset("full")}
         >
           Full Debug
         </button>
@@ -201,14 +229,9 @@ export function DebugWorkspace() {
       <div className="flex-1">
         <DockviewReact
           components={components}
-          onReady={(event) => {
-            apiRef.current = event.api;
-            applyPreset(preset, event.api);
-          }}
+          onReady={onReady}
         />
       </div>
     </div>
   );
 }
-
-

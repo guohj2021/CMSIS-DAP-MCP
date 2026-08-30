@@ -65,12 +65,18 @@ export const useDebugStore = create<DebugStore>((set) => ({
   wsConnected: false,
 
   setStatus: (s) =>
-    set((st) => ({
-      status: { ...st.status, ...s },
-      // Busy implies an established connection; only explicit disconnect or
-      // probe-lost flips this off (prevents busy/ready polling flicker).
-      connected: s.server === "ready" || s.server === "busy",
-    })),
+    set((st) => {
+      const status = { ...st.status, ...s };
+      return {
+        status,
+        // `connected` only follows explicit server transitions. Partial
+        // patches (500ms status polling, run/halt/step/reset) carry no
+        // `server`, so they must never flip the connection state - otherwise
+        // the poll loop kills itself and buttons/panels flicker every cycle.
+        connected:
+          s.server !== undefined ? s.server !== "disconnected" : st.connected,
+      };
+    }),
   setWsConnected: (v) => set({ wsConnected: v }),
   setProbes: (p) => set({ probes: p }),
   setTarget: (t) => set({ target: t }),

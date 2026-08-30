@@ -229,11 +229,17 @@ impl ExecutorRunner {
         if op.kind == OperationKind::Reset {
             status.target = TargetState::Resetting;
         }
+        let changed = {
+            let current = self.status.read().unwrap();
+            !status_visible_eq(&status, &current)
+        };
         *self.status.write().unwrap() = status.clone();
-        self.emit(ServerEvent::TargetStateChanged {
-            status,
-            operation_id: Some(op.id),
-        });
+        if changed {
+            self.emit(ServerEvent::TargetStateChanged {
+                status,
+                operation_id: Some(op.id),
+            });
+        }
 
         let result = self.dispatch(&op);
 
@@ -253,11 +259,17 @@ impl ExecutorRunner {
             ServerState::Disconnected => ServerState::Disconnected,
             _ => ServerState::Ready,
         };
+        let changed = {
+            let current = self.status.read().unwrap();
+            !status_visible_eq(&status, &current)
+        };
         *self.status.write().unwrap() = status.clone();
-        self.emit(ServerEvent::TargetStateChanged {
-            status,
-            operation_id: Some(op.id),
-        });
+        if changed {
+            self.emit(ServerEvent::TargetStateChanged {
+                status,
+                operation_id: Some(op.id),
+            });
+        }
         *active = prev;
 
         // Send reply; on probe-loss, escalate.
@@ -1021,6 +1033,16 @@ impl ExecutorRunner {
     fn emit(&self, event: ServerEvent) {
         let _ = self.events.send(event);
     }
+}
+
+/// Compare the *visible* part of the session status (server/target/reason/pc).
+///
+/// The transient `operation` field toggles on every quick op (status polling,
+/// register/memory/watch refresh) and must not, by itself, trigger a
+/// `target_state_changed` broadcast - otherwise the WS floods the UI with
+/// redundant events during routine polling.
+fn status_visible_eq(a: &SessionStatus, b: &SessionStatus) -> bool {
+    a.server == b.server && a.target == b.target && a.reason == b.reason && a.pc == b.pc
 }
 
 /// Decide whether a backend error means the probe disappeared (USB-level).

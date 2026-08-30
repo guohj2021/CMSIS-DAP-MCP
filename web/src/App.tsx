@@ -48,15 +48,25 @@ export default function App() {
           const j = await r.json();
           const coreState = j.status?.state as string | undefined;
           if (coreState === "halted" || coreState === "running") {
-            useDebugStore.getState().setStatus({
-              target: coreState === "halted" ? "halted" : "running",
-              pc: j.pc ?? j.status?.pc ?? null,
-              reason: j.reason ?? j.status?.halt_reason ?? null,
-            });
-          }
-          if (coreState === "halted") {
-            refreshRegisters();
-            refreshFault();
+            const target = coreState === "halted" ? "halted" : "running";
+            const pc = j.pc ?? j.status?.pc ?? null;
+            const reason = j.reason ?? j.status?.halt_reason ?? null;
+            const cur = useDebugStore.getState().status;
+            // Only push a store update when something actually changed;
+            // this keeps status-object churn (and re-renders) minimal.
+            const changed =
+              cur.target !== target ||
+              (cur.pc ?? null) !== (pc ?? null) ||
+              (cur.reason ?? null) !== (reason ?? null);
+            if (changed) {
+              useDebugStore.getState().setStatus({ target, pc, reason });
+            }
+            // Refresh registers/fault only when the target *enters* halted,
+            // not on every poll cycle (avoids needless probe traffic).
+            if (target === "halted" && cur.target !== "halted") {
+              refreshRegisters();
+              refreshFault();
+            }
           }
         }
       } catch {

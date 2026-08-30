@@ -1,6 +1,6 @@
 // CPU Registers panel: HEX/DEC/BIN, PC highlight, per-register value.
 import { useMemo, useState } from "react";
-import { api } from "../api/client";
+import { api, RegisterValue } from "../api/client";
 import { useDebugStore } from "../store/debugStore";
 import { formatValue, parseNumber, NumFormat } from "../debug/formatters";
 
@@ -82,33 +82,68 @@ export function RegistersPanel() {
       </div>
       <div className="grid grid-cols-2 gap-x-3 overflow-y-auto px-2 py-1">
         {rows.map((r) => (
-          <div
+          <RegisterRow
             key={r.name}
-            className={`flex cursor-pointer justify-between rounded px-1 py-0.5 ${
-              PC_RE.test(r.name) ? "bg-amber-500/20 font-bold text-amber-300" : "text-zinc-300"
-            } ${selected === r.name ? "bg-zinc-800" : ""}`}
-            onClick={() => setSelected(r.name)}
-          >
-            <span className="text-zinc-400">{r.name}</span>
-            <input
-              className="w-24 bg-transparent text-right font-mono text-zinc-200 outline-none focus:bg-zinc-700"
-              defaultValue={formatValue(r.value, fmt)}
-              key={`${r.name}-${fmt}-${r.value}`}
-              onClick={(e) => e.stopPropagation()}
-              onBlur={(e) => writeRegister(r.name, e.target.value)}
-            />
-          </div>
+            reg={r}
+            fmt={fmt}
+            selected={selected === r.name}
+            onSelect={() => setSelected(r.name)}
+            onWrite={writeRegister}
+          />
         ))}
       </div>
-      {selected && (() => {
-        const reg = registers.find((x) => x.name === selected);
-        const text2 = reg ? bitfieldText(reg.name, reg.value) : "";
-        return text2 ? (
-          <div className="border-t border-zinc-800 px-2 py-1 font-mono text-emerald-300">
-            {selected}: {text2}
-          </div>
-        ) : null;
-      })()}
+      {selected &&
+        (() => {
+          const reg = registers.find((x) => x.name === selected);
+          const text2 = reg ? bitfieldText(reg.name, reg.value) : "";
+          return text2 ? (
+            <div className="border-t border-zinc-800 px-2 py-1 font-mono text-emerald-300">
+              {selected}: {text2}
+            </div>
+          ) : null;
+        })()}
+    </div>
+  );
+}
+
+// A single register row with a controlled input. A local draft keeps focus
+// while editing; when not editing, the displayed value follows the latest
+// register refresh (the input is no longer remounted via a value-bearing key,
+// so it does not blink or lose focus every 500ms poll).
+function RegisterRow({
+  reg,
+  fmt,
+  selected,
+  onSelect,
+  onWrite,
+}: {
+  reg: RegisterValue;
+  fmt: NumFormat;
+  selected: boolean;
+  onSelect: () => void;
+  onWrite: (name: string, input: string) => void;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const display = draft !== null ? draft : formatValue(reg.value, fmt);
+  const isPc = PC_RE.test(reg.name);
+  return (
+    <div
+      className={`flex cursor-pointer justify-between rounded px-1 py-0.5 ${
+        isPc ? "bg-amber-500/20 font-bold text-amber-300" : "text-zinc-300"
+      } ${selected ? "bg-zinc-800" : ""}`}
+      onClick={onSelect}
+    >
+      <span className="text-zinc-400">{reg.name}</span>
+      <input
+        className="w-24 bg-transparent text-right font-mono text-zinc-200 outline-none focus:bg-zinc-700"
+        value={display}
+        onChange={(e) => setDraft(e.target.value)}
+        onClick={(e) => e.stopPropagation()}
+        onBlur={(e) => {
+          setDraft(null);
+          onWrite(reg.name, e.target.value);
+        }}
+      />
     </div>
   );
 }
