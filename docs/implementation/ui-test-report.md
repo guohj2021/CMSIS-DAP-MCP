@@ -3,7 +3,7 @@
 - 日期：2026-08-30
 - 硬件：DemoMCU（Cortex-M0+，FLASH 0x08000000-0x08010000，SRAM 0x20000000-0x20002000）+ CMSIS-DAP CMSIS-DAP
 - 环境：`cmsis-dap-cli web --port 18080 --allow-destructive --target-yaml target/demo.yaml`
-- 工具：Playwright + Edge（headless），脚本位于 `target/ui_tests/`
+- 工具：Playwright + Edge（headless），脚本位于 `tests/ui/`（配置见 `tests/ui/README.md`）
 - 测试方式：完全通过 UI 操作（点击/上传/拖拽）驱动，后端仅作状态校验
 
 ## 一、测试矩阵与结果
