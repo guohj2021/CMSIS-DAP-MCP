@@ -153,32 +153,37 @@ with sync_playwright() as p:
         tab("内存").click(); page.wait_for_timeout(600)
         page.locator("input.w-32.rounded.bg-zinc-800").first.fill("0x20000000")
         page.locator("button:has-text('读取')").first.click(force=True); page.wait_for_timeout(1800)
-        cells = page.locator("input.w-7.bg-transparent.text-center")
-        REP.t("内存读取", cells.count() > 0, f"{cells.count()} 字节格")
+        cells = page.locator("div.flex.items-center.gap-2.whitespace-pre input")
+        REP.t("内存读取", cells.count() > 0, f"{cells.count()} 个数据单元")
     except Exception as e:
         REP.t("内存读取", False, str(e))
     try:
-        page.locator("select:has(option[value='u16'])").first.select_option("u16")
-        page.locator("button:has-text('读取')").first.click(force=True); page.wait_for_timeout(1500)
-        page.locator("select:has(option[value='u32'])").first.select_option("u32")
-        page.locator("button:has-text('读取')").first.click(force=True); page.wait_for_timeout(1500)
-        REP.t("宽度切换", True, "u16/u32 读取无异常")
+        sel = page.locator("select:has(option[value='u16'])").first
+        def per_row():
+            row = page.locator("div.flex.items-center.gap-2.whitespace-pre").first
+            return row.locator("input").count() if row.count() else 0
+        sel.select_option("u16"); page.wait_for_timeout(400); u16n = per_row()
+        sel.select_option("u8"); page.wait_for_timeout(400); u8n = per_row()
+        sel.select_option("u32"); page.wait_for_timeout(400); u32n = per_row()
+        REP.t("宽度切换生效", u16n == 8 and u8n == 16 and u32n == 4, f"u32={u32n}/行 u16={u16n}/行 u8={u8n}/行")
     except Exception as e:
-        REP.t("宽度切换", False, str(e))
+        REP.t("宽度切换生效", False, str(e))
     try:
         page.locator("button:has-text('暂停')").click(force=True) if not page.locator("button:has-text('暂停')").first.is_disabled() else None
         page.wait_for_timeout(800)
+        sel = page.locator("select:has(option[value='u16'])").first
+        sel.select_option("u8")
         page.locator("input.w-32.rounded.bg-zinc-800").first.fill("0x20000000")
         page.locator("button:has-text('读取')").first.click(force=True); page.wait_for_timeout(1800)
-        cell = page.locator("input.w-7.bg-transparent.text-center").first
+        cell = page.locator("div.flex.items-center.gap-2.whitespace-pre input").first
         old = cell.input_value()
         newv = "FF" if old != "FF" else "00"
         cell.fill(newv); cell.press("Tab"); page.wait_for_timeout(2000)
         page.locator("button:has-text('读取')").first.click(force=True); page.wait_for_timeout(1800)
-        now = page.locator("input.w-7.bg-transparent.text-center").first.input_value()
-        REP.t("内存单字节写", now.upper() == newv, f"{old} -> {newv} -> 读回 {now}")
+        now = page.locator("div.flex.items-center.gap-2.whitespace-pre input").first.input_value()
+        REP.t("内存写后重读", now.upper() == newv, f"{old} -> {newv} -> 读回 {now}")
     except Exception as e:
-        REP.t("内存单字节写", False, str(e))
+        REP.t("内存写后重读", False, str(e))
 
     # ============ E. 断点 ============
     REP.sec("E_断点")
