@@ -119,6 +119,8 @@ export const api = {
   monitorAdd: (p: { peripheral: string; register: string; rate_ms?: number }) =>
     request<{ id: number; safety: string }>("POST", "/peripherals/monitor", p),
   monitorDelete: (id: number) => request<{ deleted: boolean }>("DELETE", `/peripherals/monitor/${id}`),
+  monitorPatch: (id: number, body: { rate_ms: number }) =>
+    request<{ updated: boolean; rate_ms: number }>("PATCH", `/peripherals/monitor/${id}`, body),
   rttStart: (address?: number) => request<{ channels: unknown[] }>("POST", "/rtt/start", { address }),
   rttStop: () => request<{ stopped: boolean }>("POST", "/rtt/stop"),
   evrStart: (info_address: number) => request<{ status: unknown }>("POST", "/evr/start", { info_address }),

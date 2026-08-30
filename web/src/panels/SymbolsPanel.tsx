@@ -1,5 +1,5 @@
 // Symbol explorer: upload ELF/AXF, virtualized list, drag to watch/breakpoint.
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { api, SymbolItem } from "../api/client";
 import { useDebugStore } from "../store/debugStore";
@@ -42,7 +42,21 @@ export function SymbolsPanel() {
     overscan: 20,
   });
 
-  const rows = useMemo(() => virtualizer.getVirtualItems(), [virtualizer]);
+  // NOTE: do NOT memoize getVirtualItems() on the (stable) virtualizer
+  // instance - that froze the list at 0 rows after symbols loaded. Calling it
+  // during render lets the virtualizer re-render with the current range.
+  const rows = virtualizer.getVirtualItems();
+
+  async function addToWatch(s: SymbolItem) {
+    try {
+      await api.watchAdd({ kind: "symbol", symbol_id: s.id });
+      log("info", `已添加到 Watch: ${s.name}`);
+      // Ask the Watch panel to reload its item list (it keeps items locally).
+      window.dispatchEvent(new Event("watch-changed"));
+    } catch (e) {
+      log("error", e instanceof Error ? e.message : String(e));
+    }
+  }
 
   async function onDrop(e: React.DragEvent) {
     e.preventDefault();
@@ -94,6 +108,16 @@ export function SymbolsPanel() {
                   <span className="w-28 font-mono text-zinc-400">0x{hex8(s.address).padStart(8, "0")}</span>
                   <span className="flex-1 truncate text-zinc-200">{s.name}</span>
                   <span className="text-zinc-600">{s.size}</span>
+                  <button
+                    className="rounded bg-zinc-700 px-1.5 py-0.5 text-[10px] text-zinc-300 hover:bg-zinc-600"
+                    title="添加到 Watch"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      addToWatch(s);
+                    }}
+                  >
+                    ＋Watch
+                  </button>
                 </div>
               );
             })}

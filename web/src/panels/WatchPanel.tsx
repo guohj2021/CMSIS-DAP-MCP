@@ -31,7 +31,13 @@ export function WatchPanel() {
         })
       );
     });
-    return off;
+    // Symbols panel (＋Watch button / context menu) asks us to reload.
+    const onChanged = () => refresh();
+    window.addEventListener("watch-changed", onChanged);
+    return () => {
+      off();
+      window.removeEventListener("watch-changed", onChanged);
+    };
   }, [refresh]);
 
   async function setRate(id: number, rate_ms: number) {
@@ -95,6 +101,8 @@ export function WatchPanel() {
               <option value={200}>200ms</option>
               <option value={500}>500ms</option>
               <option value={1000}>1s</option>
+              <option value={2000}>2s</option>
+              <option value={5000}>5s</option>
             </select>
             <span className="font-mono text-amber-300">
               {w.value !== undefined && w.value !== null ? `0x${w.value.toString(16)}` : "—"}

@@ -54,7 +54,7 @@ pub fn router() -> Router<SharedState> {
         )
         .route(
             "/api/peripherals/monitor/{id}",
-            axum::routing::delete(monitor_delete),
+            axum::routing::delete(monitor_delete).patch(monitor_patch),
         )
         .route("/api/rtt/start", post(rtt_start))
         .route("/api/rtt/stop", post(rtt_stop))
@@ -1072,6 +1072,31 @@ async fn monitor_add(
 async fn monitor_delete(State(state): State<SharedState>, Path(id): Path<u64>) -> Response {
     state.monitors.lock().unwrap().retain(|m| m.id != id);
     api_result(Ok(json!({ "deleted": true })))
+}
+
+#[derive(Deserialize)]
+struct MonitorPatchBody {
+    rate_ms: Option<u32>,
+}
+/// Update the refresh interval of a peripheral monitor (takes effect on the
+/// next scheduler tick; schedulers read `rate_ms` per tick).
+async fn monitor_patch(
+    State(state): State<SharedState>,
+    Path(id): Path<u64>,
+    Json(body): Json<MonitorPatchBody>,
+) -> Response {
+    let Some(rate_ms) = body.rate_ms else {
+        return api_result(Err(WebError::InvalidArgument("rate_ms is required".into())));
+    };
+    let rate_ms = rate_ms.max(50);
+    let mut items = state.monitors.lock().unwrap();
+    let Some(item) = items.iter_mut().find(|m| m.id == id) else {
+        return api_result(Err(WebError::InvalidArgument(format!(
+            "monitor {id} not found"
+        ))));
+    };
+    item.rate_ms = rate_ms;
+    api_result(Ok(json!({ "updated": true, "rate_ms": rate_ms })))
 }
 
 #[derive(Deserialize)]

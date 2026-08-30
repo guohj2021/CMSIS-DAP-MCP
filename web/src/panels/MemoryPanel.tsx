@@ -36,19 +36,21 @@ export function MemoryPanel() {
     }
   }
 
-  async function writeCell(rowIndex: number, newHex: string) {
-    const v = parseNumber(newHex);
-    if (v === null) return;
+  async function writeCell(rowIndex: number, bytes: number[]) {
     const row = rows[rowIndex];
     if (!row) return;
     try {
+      // Rebuild the row as u32 values INCLUDING the edited byte (the old code
+      // used the pre-edit row, so single-cell writes never took effect).
       const values: number[] = [];
-      for (let i = 0; i < row.bytes.length; i += 4) {
+      for (let i = 0; i < bytes.length; i += 4) {
         values.push(
-          row.bytes[i] | (row.bytes[i + 1] << 8) | (row.bytes[i + 2] << 16) | (row.bytes[i + 3] << 24)
+          (bytes[i] ?? 0) |
+            ((bytes[i + 1] ?? 0) << 8) |
+            ((bytes[i + 2] ?? 0) << 16) |
+            ((bytes[i + 3] ?? 0) << 24)
         );
       }
-      // Single-cell write: rewrite whole row as u32 values, then reload.
       await api.memoryWrite(row.address, "u32", values);
       log("info", `已写入 0x${row.address.toString(16)}`);
       await read(row.address);
@@ -100,7 +102,7 @@ export function MemoryPanel() {
                       const modified = [...row.bytes];
                       modified[j] = v & 0xff;
                       setRows((prev) => prev.map((r, ri) => (ri === i ? { ...r, bytes: modified } : r)));
-                      writeCell(i, e.target.value);
+                      writeCell(i, modified);
                     }
                   }}
                 />

@@ -39,7 +39,7 @@ type Preset = "quick" | "full";
 
 type Direction = "left" | "right" | "above" | "below" | "within";
 
-const LAYOUT_KEY = "cmsis-dap-layout-v2";
+const LAYOUT_KEY = "cmsis-dap-layout-v3";
 const CONFIGS_KEY = "cmsis-dap-configs";
 
 interface PanelAdd {
@@ -102,14 +102,12 @@ const PRESETS: Record<Preset, PanelAdd[]> = {
       position: { referencePanel: "watch", direction: "below" },
     },
   ],
+  // Full (Keil-style): build root columns first (registers | disasm | watch),
+  // then stack within the columns - symbols below registers (left column),
+  // source / memory tabs / console down the centre column. Adding symbols
+  // last keeps it inside the left column instead of a full-width bottom row.
   full: [
     { id: "registers", title: "寄存器", component: "registers" },
-    {
-      id: "symbols",
-      title: "符号",
-      component: "symbols",
-      position: { referencePanel: "registers", direction: "below" },
-    },
     {
       id: "disasm",
       title: "代码 / 反汇编",
@@ -117,16 +115,16 @@ const PRESETS: Record<Preset, PanelAdd[]> = {
       position: { referencePanel: "registers", direction: "right" },
     },
     {
-      id: "source",
-      title: "源码",
-      component: "source",
-      position: { referencePanel: "disasm", direction: "below" },
-    },
-    {
       id: "watch",
       title: "Watch",
       component: "watch",
       position: { referencePanel: "disasm", direction: "right" },
+    },
+    {
+      id: "source",
+      title: "源码",
+      component: "source",
+      position: { referencePanel: "disasm", direction: "below" },
     },
     {
       id: "memory",
@@ -147,6 +145,12 @@ const PRESETS: Record<Preset, PanelAdd[]> = {
       title: "控制台",
       component: "console",
       position: { referencePanel: "memory", direction: "below" },
+    },
+    {
+      id: "symbols",
+      title: "符号",
+      component: "symbols",
+      position: { referencePanel: "registers", direction: "below" },
     },
   ],
 };
