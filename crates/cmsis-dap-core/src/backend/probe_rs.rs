@@ -1,6 +1,6 @@
 use crate::backend::{
     register_hint, AccessWidth, Backend, ConnectOptions, CoreInfo, CoreRegister, CoreStatusInfo,
-    EvrStatus, ExportFormat, ImageFileFormat, MemoryMismatch, MemoryRegionSummary,
+    EvrStatus, ExportFormat, FlashPhase, ImageFileFormat, MemoryMismatch, MemoryRegionSummary,
     MemoryVerifyReport, OptionByte, ProbeInfo, Protocol, RegisterHint, ResetMode, RttChannelInfo,
     RttRead, TargetInfo, WatchAccess, Watchpoint,
 };
@@ -10,16 +10,57 @@ use probe_rs::architecture::arm::component::TraceSink;
 use probe_rs::architecture::arm::swo::SwoConfig;
 use probe_rs::config::MemoryRegion;
 use probe_rs::flashing::{
-    build_loader, erase, erase_all, image_format, DownloadOptions, FlashProgress,
+    build_loader, erase, erase_all, image_format, DownloadOptions, FlashProgress, ProgressEvent,
+    ProgressOperation,
 };
 use probe_rs::probe::{list::Lister, WireProtocol};
 use probe_rs::rtt::Rtt;
 use probe_rs::{CoreStatus, MemoryInterface, Permissions, RegisterRole, Session};
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::time::Duration;
 
 fn file_error<E: std::fmt::Display>(e: E) -> McpError {
     McpError::new(ErrorCode::FileError, e.to_string())
+}
+
+/// Map probe-rs flash progress events to the crate's `(phase, done, total, addr)` callback.
+fn flash_progress<'a>(cb: &'a mut dyn FnMut(FlashPhase, u64, u64, u64)) -> FlashProgress<'a> {
+    let phase = |op: ProgressOperation| match op {
+        ProgressOperation::Fill => FlashPhase::Analyze,
+        ProgressOperation::Erase => FlashPhase::Erase,
+        ProgressOperation::Program => FlashPhase::Program,
+        ProgressOperation::Verify => FlashPhase::Verify,
+    };
+    let mut totals: HashMap<FlashPhase, u64> = HashMap::new();
+    let mut done: HashMap<FlashPhase, u64> = HashMap::new();
+    FlashProgress::new(move |ev| match ev {
+        ProgressEvent::AddProgressBar { operation, total } => {
+            let p = phase(operation);
+            if let Some(t) = total {
+                totals.insert(p, t);
+            }
+            cb(p, 0, totals.get(&p).copied().unwrap_or(0), 0);
+        }
+        ProgressEvent::Started(op) => {
+            let p = phase(op);
+            done.insert(p, 0);
+            cb(p, 0, totals.get(&p).copied().unwrap_or(0), 0);
+        }
+        ProgressEvent::Progress {
+            operation, size, ..
+        } => {
+            let p = phase(operation);
+            let d = done.entry(p).or_insert(0);
+            *d += size;
+            cb(p, *d, totals.get(&p).copied().unwrap_or(*d), 0);
+        }
+        ProgressEvent::Finished(op) => {
+            let p = phase(op);
+            let t = totals.get(&p).copied().unwrap_or(0);
+            cb(p, t, t, 0);
+        }
+        _ => {}
+    })
 }
 
 pub struct ProbeRsBackend {
@@ -265,6 +306,7 @@ impl ProbeRsBackend {
         data: &[u8],
         verify: bool,
         keep_unwritten_bytes: bool,
+        progress: Option<FlashProgress<'_>>,
     ) -> Result<(), McpError> {
         let session = self
             .session
@@ -280,6 +322,9 @@ impl ProbeRsBackend {
         let mut options = DownloadOptions::default();
         options.verify = verify;
         options.keep_unwritten_bytes = keep_unwritten_bytes;
+        if let Some(p) = progress {
+            options.progress = p;
+        }
         loader.commit(session, options).map_err(|e| {
             McpError::new(
                 ErrorCode::ProtocolError,
@@ -624,9 +669,31 @@ impl Backend for ProbeRsBackend {
         Ok(())
     }
 
+    fn clear_breakpoint(&mut self, address: u64) -> Result<(), McpError> {
+        let mut core = self.core()?;
+        core.clear_hw_breakpoint(address)
+            .map_err(|e| McpError::new(ErrorCode::ProtocolError, e.to_string()))?;
+        drop(core);
+        self.breakpoints.retain(|b| *b != address);
+        Ok(())
+    }
+
     fn list_breakpoints(&mut self) -> Result<Vec<u64>, McpError> {
         self.core()?;
         Ok(self.breakpoints.clone())
+    }
+
+    fn hw_breakpoint_limits(&mut self) -> Result<Option<(u32, u32)>, McpError> {
+        let total = {
+            let mut core = self.core()?;
+            match core.available_breakpoint_units() {
+                Ok(n) => n,
+                Err(_) => return Ok(None),
+            }
+        };
+        // probe-rs 0.32 does not expose used units publicly; count the
+        // breakpoints this backend has set itself.
+        Ok(Some((self.breakpoints.len() as u32, total)))
     }
 
     fn reset(&mut self, mode: ResetMode) -> Result<(), McpError> {
@@ -706,46 +773,33 @@ impl Backend for ProbeRsBackend {
     }
 
     fn erase_flash(&mut self, address: u64, size: u64) -> Result<(), McpError> {
-        let session = self
-            .session
-            .as_mut()
-            .ok_or_else(|| McpError::new(ErrorCode::NotConnected, "no active session"))?;
-        if size == 0 {
-            return Err(McpError::new(
-                ErrorCode::InvalidArgument,
-                "erase size must be greater than zero",
-            ));
-        }
-        let end = address
-            .checked_add(size)
-            .ok_or_else(|| McpError::new(ErrorCode::InvalidArgument, "erase range overflows"))?;
-        let mut nvm_regions = session
-            .target()
-            .memory_map
-            .iter()
-            .filter_map(MemoryRegion::as_nvm_region)
-            .filter(|r| !r.is_alias);
-        let nvm_count = nvm_regions.clone().count();
-        if nvm_count == 0 {
-            return Err(McpError::new(
-                ErrorCode::UnsupportedFeature,
-                "target has no flash memory definition; connect with a chip target that defines flash",
-            ));
-        }
         let mut progress = FlashProgress::new(|_| {});
-        let covers_all = nvm_regions.all(|r| address <= r.range.start && r.range.end <= end);
-        let result = if covers_all {
-            erase_all(session, &mut progress, false)
-        } else {
-            erase(session, &mut progress, address, end, false)
-        };
-        result.map_err(|e| {
-            McpError::new(ErrorCode::ProtocolError, format!("flash erase failed: {e}"))
-        })
+        self.erase_flash_impl(address, size, &mut progress)
+    }
+
+    fn erase_flash_with_progress(
+        &mut self,
+        address: u64,
+        size: u64,
+        progress: &mut dyn FnMut(FlashPhase, u64, u64, u64),
+    ) -> Result<(), McpError> {
+        let mut fp = flash_progress(progress);
+        self.erase_flash_impl(address, size, &mut fp)
     }
 
     fn program_flash(&mut self, address: u64, data: &[u8], verify: bool) -> Result<(), McpError> {
-        self.program_flash_impl(address, data, verify, false)
+        self.program_flash_impl(address, data, verify, false, None)
+    }
+
+    fn program_flash_with_progress(
+        &mut self,
+        address: u64,
+        data: &[u8],
+        verify: bool,
+        progress: &mut dyn FnMut(FlashPhase, u64, u64, u64),
+    ) -> Result<(), McpError> {
+        let fp = flash_progress(progress);
+        self.program_flash_impl(address, data, verify, false, Some(fp))
     }
 
     fn program_flash_keep_unwritten(
@@ -754,7 +808,7 @@ impl Backend for ProbeRsBackend {
         data: &[u8],
         verify: bool,
     ) -> Result<(), McpError> {
-        self.program_flash_impl(address, data, verify, true)
+        self.program_flash_impl(address, data, verify, true, None)
     }
 
     fn set_flash_breakpoint(&mut self, address: u64) -> Result<(), McpError> {
@@ -978,57 +1032,19 @@ impl Backend for ProbeRsBackend {
         address: u64,
         verify: bool,
     ) -> Result<u64, McpError> {
-        let session = self
-            .session
-            .as_mut()
-            .ok_or_else(|| McpError::new(ErrorCode::NotConnected, "no active session"))?;
-        let mut options = DownloadOptions::default();
-        options.verify = verify;
-        match format {
-            ImageFileFormat::Bin => {
-                let data = std::fs::read(path).map_err(file_error)?;
-                let mut loader = probe_rs::flashing::FlashLoader::new(
-                    session.target().memory_map.clone(),
-                    session.target().source().clone(),
-                );
-                loader.add_data(address, &data).map_err(file_error)?;
-                loader.commit(session, options).map_err(file_error)?;
-                Ok(data.len() as u64)
-            }
-            ImageFileFormat::Elf | ImageFileFormat::Axf | ImageFileFormat::Hex => {
-                let format_name = if matches!(format, ImageFileFormat::Hex) {
-                    "hex"
-                } else {
-                    "elf"
-                };
-                let factory = image_format(format_name)
-                    .ok_or_else(|| file_error(format!("{format_name} format is unavailable")))?;
-                let loader = build_loader(session, path, factory.create_loader(None), None)
-                    .map_err(file_error)?;
-                // Report only the bytes that actually land in flash (NVM);
-                // images may also carry RAM initialization data.
-                let nvm_ranges: Vec<(u64, u64)> = session
-                    .target()
-                    .memory_map
-                    .iter()
-                    .filter_map(MemoryRegion::as_nvm_region)
-                    .filter(|r| !r.is_alias)
-                    .map(|r| (r.range.start, r.range.end))
-                    .collect();
-                let bytes = loader
-                    .data()
-                    .filter(|(addr, d)| {
-                        let end = addr.saturating_add(d.len() as u64);
-                        nvm_ranges
-                            .iter()
-                            .any(|(start, end_nvm)| *addr < *end_nvm && end > *start)
-                    })
-                    .map(|(_, d)| d.len() as u64)
-                    .sum::<u64>();
-                loader.commit(session, options).map_err(file_error)?;
-                Ok(bytes)
-            }
-        }
+        self.program_file_impl(path, format, address, verify, None)
+    }
+
+    fn program_file_with_progress(
+        &mut self,
+        path: &std::path::Path,
+        format: ImageFileFormat,
+        address: u64,
+        verify: bool,
+        progress: &mut dyn FnMut(FlashPhase, u64, u64, u64),
+    ) -> Result<u64, McpError> {
+        let fp = flash_progress(progress);
+        self.program_file_impl(path, format, address, verify, Some(fp))
     }
 
     fn export_memory(
@@ -1458,5 +1474,113 @@ impl Backend for ProbeRsBackend {
         self.write_dap(0x4002_3C14, current)?;
         tracing::info!("option bytes written: 0x{current:08X}");
         Ok(())
+    }
+}
+
+impl ProbeRsBackend {
+    fn erase_flash_impl(
+        &mut self,
+        address: u64,
+        size: u64,
+        progress: &mut FlashProgress<'_>,
+    ) -> Result<(), McpError> {
+        let session = self
+            .session
+            .as_mut()
+            .ok_or_else(|| McpError::new(ErrorCode::NotConnected, "no active session"))?;
+        if size == 0 {
+            return Err(McpError::new(
+                ErrorCode::InvalidArgument,
+                "erase size must be greater than zero",
+            ));
+        }
+        let end = address
+            .checked_add(size)
+            .ok_or_else(|| McpError::new(ErrorCode::InvalidArgument, "erase range overflows"))?;
+        let mut nvm_regions = session
+            .target()
+            .memory_map
+            .iter()
+            .filter_map(MemoryRegion::as_nvm_region)
+            .filter(|r| !r.is_alias);
+        let nvm_count = nvm_regions.clone().count();
+        if nvm_count == 0 {
+            return Err(McpError::new(
+                ErrorCode::UnsupportedFeature,
+                "target has no flash memory definition; connect with a chip target that defines flash",
+            ));
+        }
+        let covers_all = nvm_regions.all(|r| address <= r.range.start && r.range.end <= end);
+        let result = if covers_all {
+            erase_all(session, progress, false)
+        } else {
+            erase(session, progress, address, end, false)
+        };
+        result.map_err(|e| {
+            McpError::new(ErrorCode::ProtocolError, format!("flash erase failed: {e}"))
+        })
+    }
+    fn program_file_impl(
+        &mut self,
+        path: &std::path::Path,
+        format: ImageFileFormat,
+        address: u64,
+        verify: bool,
+        progress: Option<FlashProgress<'_>>,
+    ) -> Result<u64, McpError> {
+        let session = self
+            .session
+            .as_mut()
+            .ok_or_else(|| McpError::new(ErrorCode::NotConnected, "no active session"))?;
+        let mut options = DownloadOptions::default();
+        options.verify = verify;
+        if let Some(p) = progress {
+            options.progress = p;
+        }
+        match format {
+            ImageFileFormat::Bin => {
+                let data = std::fs::read(path).map_err(file_error)?;
+                let mut loader = probe_rs::flashing::FlashLoader::new(
+                    session.target().memory_map.clone(),
+                    session.target().source().clone(),
+                );
+                loader.add_data(address, &data).map_err(file_error)?;
+                loader.commit(session, options).map_err(file_error)?;
+                Ok(data.len() as u64)
+            }
+            ImageFileFormat::Elf | ImageFileFormat::Axf | ImageFileFormat::Hex => {
+                let format_name = if matches!(format, ImageFileFormat::Hex) {
+                    "hex"
+                } else {
+                    "elf"
+                };
+                let factory = image_format(format_name)
+                    .ok_or_else(|| file_error(format!("{format_name} format is unavailable")))?;
+                let loader = build_loader(session, path, factory.create_loader(None), None)
+                    .map_err(file_error)?;
+                // Report only the bytes that actually land in flash (NVM);
+                // images may also carry RAM initialization data.
+                let nvm_ranges: Vec<(u64, u64)> = session
+                    .target()
+                    .memory_map
+                    .iter()
+                    .filter_map(MemoryRegion::as_nvm_region)
+                    .filter(|r| !r.is_alias)
+                    .map(|r| (r.range.start, r.range.end))
+                    .collect();
+                let bytes = loader
+                    .data()
+                    .filter(|(addr, d)| {
+                        let end = addr.saturating_add(d.len() as u64);
+                        nvm_ranges
+                            .iter()
+                            .any(|(start, end_nvm)| *addr < *end_nvm && end > *start)
+                    })
+                    .map(|(_, d)| d.len() as u64)
+                    .sum::<u64>();
+                loader.commit(session, options).map_err(file_error)?;
+                Ok(bytes)
+            }
+        }
     }
 }

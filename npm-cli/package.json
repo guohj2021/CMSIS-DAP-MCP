@@ -1,6 +1,6 @@
 {
   "name": "cmsis-dap-cli",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "CLI for CMSIS-DAP debug probes (Cortex-M)",
   "license": "MIT OR Apache-2.0",
   "bin": { "cmsis-dap-cli": "bin/cmsis-dap-cli.js" },
