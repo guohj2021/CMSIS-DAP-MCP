@@ -6,7 +6,28 @@ permissions:
   contents: write
   packages: write
 jobs:
+  sync-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify main and develop content are in sync
+        shell: bash
+        run: |
+          set -euo pipefail
+          MAIN_TREE=$(git rev-parse "origin/main^{tree}")
+          DEV_TREE=$(git rev-parse "origin/develop^{tree}")
+          TAG_SHA=$(git rev-parse HEAD)
+          echo "tag=$TAG_SHA main_tree=$MAIN_TREE develop_tree=$DEV_TREE"
+          if [ "$MAIN_TREE" != "$DEV_TREE" ]; then
+            echo "::error::Release requires main and develop to have identical content, but they differ (main_tree=$MAIN_TREE develop_tree=$DEV_TREE). Merge develop into main (PR develop -> main) before tagging a release."
+            exit 1
+          fi
+          echo "main and develop are in sync (identical content, tree=$DEV_TREE)" 
+
   webui:
+    needs: sync-check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
