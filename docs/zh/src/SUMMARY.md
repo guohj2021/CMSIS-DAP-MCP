@@ -19,3 +19,4 @@
 
 - [架构说明](./architecture.md)
 - [开发与发布](./development.md)
+- [发布流程](./releasing.md)
