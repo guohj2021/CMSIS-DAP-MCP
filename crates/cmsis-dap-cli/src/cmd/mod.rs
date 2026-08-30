@@ -254,6 +254,31 @@ pub enum Command {
     Option(option::OptionArgs),
     /// Interactive shell (J-Link Commander style commands).
     Repl,
+    /// Start the local Web Debug server (browser UI over the same engine).
+    ///
+    /// Flash erase/program/verify requires a chip target that defines flash
+    /// (generic targets have no flash algorithm): pass `--target-yaml` (or
+    /// `--target`) so flash regions/algorithms are available, e.g.
+    /// `cmsis-dap-cli web --target-yaml target/demo.yaml`.
+    Web(WebArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct WebArgs {
+    /// Bind host (default: 127.0.0.1; use 0.0.0.0 only when you intend to
+    /// expose the debugger on the network).
+    #[arg(long, default_value = "127.0.0.1")]
+    pub host: String,
+    /// Bind port (default: 8080).
+    #[arg(long, default_value_t = 8080)]
+    pub port: u16,
+    /// Enable destructive tools (flash erase/program, flash software
+    /// breakpoints) without the per-request gate.
+    #[arg(long)]
+    pub allow_destructive: bool,
+    /// Flash operation timeout in seconds (default: 600).
+    #[arg(long, value_parser = parse_u32_arg, default_value_t = 600)]
+    pub flash_timeout: u32,
 }
 
 #[derive(Debug, Args)]
@@ -785,7 +810,6 @@ pub fn run(
     args: CliArgs,
     backend: Box<dyn Backend>,
 ) -> Result<Option<serde_json::Value>, CliError> {
-    let mut session = SessionManager::new(backend);
     let globals = Globals {
         probe_id: args.probe_id.clone(),
         protocol: args.protocol.clone(),
@@ -798,6 +822,30 @@ pub fn run(
         elf: args.elf.clone(),
         json: args.json,
     };
+
+    // The web server owns the backend for its whole lifetime; it must be
+    // intercepted before a SessionManager is created.
+    if let Command::Web(a) = &args.command {
+        let options = cmsis_dap_web::WebServerOptions {
+            host: a.host.clone(),
+            port: a.port,
+            allow_destructive: a.allow_destructive,
+            flash_timeout: std::time::Duration::from_secs(a.flash_timeout as u64),
+            default_connect: ConnectOptions {
+                probe_id: globals.probe_id.clone(),
+                protocol: parse_protocol(&globals.protocol)?,
+                speed_khz: globals.speed_khz,
+                target: resolve_target(&globals)?,
+                under_reset: globals.under_reset,
+                core_index: globals.core_index,
+            },
+        };
+        cmsis_dap_web::serve(backend, options)
+            .map_err(|e| CliError::Mcp(McpError::new(ErrorCode::InternalError, e.to_string())))?;
+        return Ok(None);
+    }
+
+    let mut session = SessionManager::new(backend);
     match args.command {
         Command::List => {
             let probes = session.backend().list_probes()?;
@@ -1108,5 +1156,7 @@ pub fn run(
             repl::run(&opts, &mut session, &mut reader, interactive)?;
             Ok(None)
         }
+        // Handled at the top of `run`; unreachable here.
+        Command::Web(_) => unreachable!("web command handled before session creation"),
     }
 }

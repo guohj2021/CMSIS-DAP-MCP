@@ -6,7 +6,27 @@ permissions:
   contents: write
   packages: write
 jobs:
+  webui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: webui
+          path: crates/cmsis-dap-web/assets
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - working-directory: web
+        run: npm ci && npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: webui
+          path: crates/cmsis-dap-web/assets
+          if-no-files-found: error
+
   build:
+    needs: webui
     strategy:
       fail-fast: false
       matrix:
@@ -184,7 +204,7 @@ jobs:
             Release ${{ github.ref_name }} of the CMSIS-DAP MCP server and CLI.
 
             Feature highlights and fixes for this release are documented in the
-            [CHANGELOG](https://github.com/guohj2021/CMSIS-DAP-MCP/blob/main/CHANGELOG.md#v050).
+            [CHANGELOG](https://github.com/guohj2021/CMSIS-DAP-MCP/blob/main/CHANGELOG.md#v080).
           update_release_body: true
   publish-npm:
     needs: build

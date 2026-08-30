@@ -1,0 +1,33 @@
+[package]
+name = "cmsis-dap-web"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Local Web Debug server for cmsis-dap-cli (REST + WebSocket over cmsis-dap-core)"
+
+[dependencies]
+cmsis-dap-core = { path = "../cmsis-dap-core" }
+serde.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["sync", "time", "signal", "fs", "macros", "rt-multi-thread"] }
+tracing.workspace = true
+thiserror.workspace = true
+axum = { version = "0.8.9", features = ["ws", "multipart"] }
+tower-http = { version = "0.7.0", features = ["fs"] }
+rust-embed = "8.12.0"
+futures-util = { version = "0.3.34", features = ["sink"] }
+bytes = "1.12.1"
+mime_guess = "2.0.5"
+uuid = { version = "1.26.0", features = ["v4"] }
+tempfile.workspace = true
+base64 = "0.23.1"
+capstone = { version = "0.14.0", features = ["std"] }
+object = { version = "0.40.0", features = ["read", "std"] }
+
+[dev-dependencies]
+http-body-util = "0.1.5"
+object = { version = "0.40.0", features = ["read", "write", "std"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tower = "0.5.3"
+
+

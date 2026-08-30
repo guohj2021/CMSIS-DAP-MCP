@@ -9,7 +9,7 @@
 ![CI](https://img.shields.io/github/actions/workflow/status/guohj2021/CMSIS-DAP-MCP/ci.yml?branch=main&label=CI)
 <!-- Keep the Release badge ?branch= in sync with the latest release tag; the
      tag-triggered Release workflow never runs on main. -->
-![Release](https://img.shields.io/github/actions/workflow/status/guohj2021/CMSIS-DAP-MCP/release.yml?branch=v0.7.0&label=Release)
+![Release](https://img.shields.io/github/actions/workflow/status/guohj2021/CMSIS-DAP-MCP/release.yml?branch=v0.8.0&label=Release)
 ![Pages](https://img.shields.io/github/actions/workflow/status/guohj2021/CMSIS-DAP-MCP/pages.yml?branch=main&label=Pages)
 ![Version](https://img.shields.io/github/v/tag/guohj2021/CMSIS-DAP-MCP)
 ![Rust](https://img.shields.io/badge/rust-1.97.1-orange)
@@ -44,6 +44,22 @@ flash from firmware files, and run J-Link / OpenOCD style debug scripts.
 - Zero runtime dependencies for end users: `npx -y cmsis-dap-mcp` or one
   native binary (`npx -y cmsis-dap-cli` for the CLI).
 - Cross-platform: Windows / Linux / macOS.
+
+## Web Debug (browser UI)
+
+`cmsis-dap-cli web` starts a local Web Debug server (`127.0.0.1:8080`) with a
+browser Debug Workspace over the same engine: connect, run/halt/step/reset,
+registers, memory, hardware/software breakpoints, ELF symbols, Watch /
+Live Watch, SVD peripheral explorer with bit-field decode, real DWARF CFI
+call stack + locals, disassembly with source locations, RTT / EVR, SWO/ITM,
+a sampling profiler, an expression evaluator, and firmware download
+(BIN/HEX) with region validation and progress.
+
+```bash
+cmsis-dap-cli web --target-yaml target/demo.yaml --probe-id <serial> --allow-destructive
+```
+
+See [Web Debug](https://guohj2021.github.io/CMSIS-DAP-MCP/web.html) in the docs.
 
 ## Features
 

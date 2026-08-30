@@ -1,30 +1,24 @@
 //! ELF symbol lookup shared by `symbols`, `watch`, `rtt` and `evr`.
+//!
+//! Thin wrapper over `cmsis_dap_core::symbols::SymbolDatabase` (kept here so
+//! existing callers in this crate keep the same `BTreeMap`-based API).
 
 use crate::cmd::CliError;
 use cmsis_dap_core::error::{ErrorCode, McpError};
-use object::{Object, ObjectSymbol};
+use cmsis_dap_core::symbols::SymbolDatabase;
 use std::collections::BTreeMap;
 use std::path::Path;
 
 fn file_error(msg: impl Into<String>) -> CliError {
-    CliError::Mcp(McpError::new(ErrorCode::FileError, msg))
+    CliError::Mcp(McpError::new(ErrorCode::FileError, msg.into()))
 }
 
 /// Load all defined symbols (name -> virtual address) from a firmware ELF.
 pub fn load_symbols(path: &Path) -> Result<BTreeMap<String, u64>, CliError> {
-    let bytes = std::fs::read(path)
-        .map_err(|e| file_error(format!("failed to read ELF {}: {e}", path.display())))?;
-    let file = object::File::parse(&bytes[..])
-        .map_err(|e| file_error(format!("failed to parse ELF {}: {e}", path.display())))?;
+    let db = SymbolDatabase::load(path).map_err(|e| file_error(e.to_string()))?;
     let mut symbols = BTreeMap::new();
-    for symbol in file.symbols() {
-        let Ok(name) = symbol.name() else {
-            continue;
-        };
-        if name.is_empty() || !symbol.is_definition() || symbol.section_index().is_none() {
-            continue;
-        }
-        symbols.entry(name.to_string()).or_insert(symbol.address());
+    for symbol in db.symbols() {
+        symbols.entry(symbol.name.clone()).or_insert(symbol.address);
     }
     Ok(symbols)
 }
