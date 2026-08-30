@@ -28,7 +28,12 @@ pub fn router() -> Router<SharedState> {
         .route("/api/registers", get(registers).post(register_write))
         .route("/api/memory/read", post(memory_read))
         .route("/api/memory/write", post(memory_write))
-        .route("/api/breakpoints", get(breakpoints).post(breakpoint_set))
+        .route(
+            "/api/breakpoints",
+            get(breakpoints)
+                .post(breakpoint_set)
+                .delete(breakpoint_clear_all),
+        )
         .route("/api/breakpoints/limits", get(breakpoint_limits))
         .route(
             "/api/breakpoints/{address}",
@@ -365,6 +370,18 @@ async fn breakpoint_set(
                 OperationKind::Breakpoint,
                 json!({ "action": action, "address": address }),
             )
+            .await,
+    )
+}
+
+/// Clear all breakpoints (DELETE /api/breakpoints). This is the handler for
+/// the no-path route (breakpoint_delete below serves /api/breakpoints/{address}).
+async fn breakpoint_clear_all(State(state): State<SharedState>) -> Response {
+    api_result(
+        state
+            .executor
+            .clone()
+            .call_async(OperationKind::Breakpoint, json!({ "action": "clear" }))
             .await,
     )
 }

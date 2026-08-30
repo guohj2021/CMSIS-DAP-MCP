@@ -255,6 +255,11 @@ pub enum Command {
     /// Interactive shell (J-Link Commander style commands).
     Repl,
     /// Start the local Web Debug server (browser UI over the same engine).
+    ///
+    /// Flash erase/program/verify requires a chip target that defines flash
+    /// (generic targets have no flash algorithm): pass `--target-yaml` (or
+    /// `--target`) so flash regions/algorithms are available, e.g.
+    /// `cmsis-dap-cli web --target-yaml target/demo.yaml`.
     Web(WebArgs),
 }
 

@@ -68,6 +68,20 @@ export default function App() {
               refreshFault();
             }
           }
+        } else {
+          // 409 not_connected means the session is gone (disconnect / probe
+          // lost / server restart): sync the UI and stop the poll loop.
+          try {
+            const j = await r.json();
+            if (j?.error?.code === "not_connected") {
+              useDebugStore.getState().setStatus({
+                server: "disconnected",
+                target: "unknown",
+              });
+            }
+          } catch {
+            /* ignore */
+          }
         }
       } catch {
         /* ignore transient errors */

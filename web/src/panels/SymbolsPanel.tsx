@@ -1,6 +1,5 @@
-// Symbol explorer: upload ELF/AXF, virtualized list, drag to watch/breakpoint.
+// Symbol explorer: upload ELF/AXF, scrollable list, drag / ＋Watch to Watch.
 import { useRef, useState } from "react";
-import { useVirtualizer } from "@tanstack/react-virtual";
 import { api, SymbolItem } from "../api/client";
 import { useDebugStore } from "../store/debugStore";
 import { hex8 } from "../debug/formatters";
@@ -12,7 +11,7 @@ export function SymbolsPanel() {
   const [pattern, setPattern] = useState("");
   const [loaded, setLoaded] = useState(false);
   const log = useDebugStore((s) => s.log);
-  const parentRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   async function upload(file: File) {
     try {
@@ -20,6 +19,8 @@ export function SymbolsPanel() {
       setLoaded(true);
       log("info", `已加载 ${r.name ?? file.name}: ${r.symbols} 个符号 (${r.functions} 函数, ${r.variables} 变量)`);
       await refresh();
+      // Back to the top of the list after a fresh load.
+      scrollRef.current?.scrollTo({ top: 0 });
     } catch (e) {
       log("error", `ELF 加载失败: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -30,22 +31,11 @@ export function SymbolsPanel() {
       const r = await api.symbols({ kind: k || undefined, pattern: p || undefined, limit: 500 });
       setTotal(r.total);
       setItems(r.items);
+      scrollRef.current?.scrollTo({ top: 0 });
     } catch (e) {
       log("error", `符号查询失败: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
-
-  const virtualizer = useVirtualizer({
-    count: items.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => 22,
-    overscan: 20,
-  });
-
-  // NOTE: do NOT memoize getVirtualItems() on the (stable) virtualizer
-  // instance - that froze the list at 0 rows after symbols loaded. Calling it
-  // during render lets the virtualizer re-render with the current range.
-  const rows = virtualizer.getVirtualItems();
 
   async function addToWatch(s: SymbolItem) {
     try {
@@ -92,36 +82,31 @@ export function SymbolsPanel() {
           上传 ELF/AXF 或拖入文件；拖拽符号到 Watch 面板
         </div>
       ) : (
-        <div ref={parentRef} className="flex-1 overflow-auto">
-          <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
-            {rows.map((row) => {
-              const s = items[row.index];
-              return (
-                <div
-                  key={s.id}
-                  style={{ position: "absolute", top: 0, left: 0, width: "100%", height: row.size, transform: `translateY(${row.start}px)` }}
-                  className="flex items-center gap-2 px-2 hover:bg-zinc-800/60"
-                  draggable
-                  onDragStart={(e) => e.dataTransfer.setData("application/x-symbol", String(s.id))}
-                >
-                  <span className={`w-2 ${s.kind === "function" ? "text-blue-400" : "text-emerald-400"}`}>{s.kind === "function" ? "ƒ" : "v"}</span>
-                  <span className="w-28 font-mono text-zinc-400">0x{hex8(s.address).padStart(8, "0")}</span>
-                  <span className="flex-1 truncate text-zinc-200">{s.name}</span>
-                  <span className="text-zinc-600">{s.size}</span>
-                  <button
-                    className="rounded bg-zinc-700 px-1.5 py-0.5 text-[10px] text-zinc-300 hover:bg-zinc-600"
-                    title="添加到 Watch"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      addToWatch(s);
-                    }}
-                  >
-                    ＋Watch
-                  </button>
-                </div>
-              );
-            })}
-          </div>
+        <div ref={scrollRef} className="flex-1 overflow-auto">
+          {items.length === 0 && <div className="px-2 py-2 text-zinc-500">无匹配符号</div>}
+          {items.map((s) => (
+            <div
+              key={s.id}
+              className="flex items-center gap-2 px-2 hover:bg-zinc-800/60"
+              draggable
+              onDragStart={(e) => e.dataTransfer.setData("application/x-symbol", String(s.id))}
+            >
+              <span className={`w-2 ${s.kind === "function" ? "text-blue-400" : "text-emerald-400"}`}>{s.kind === "function" ? "ƒ" : "v"}</span>
+              <span className="w-28 font-mono text-zinc-400">0x{hex8(s.address).padStart(8, "0")}</span>
+              <span className="flex-1 truncate text-zinc-200">{s.name}</span>
+              <span className="text-zinc-600">{s.size}</span>
+              <button
+                className="rounded bg-zinc-700 px-1.5 py-0.5 text-[10px] text-zinc-300 hover:bg-zinc-600"
+                title="添加到 Watch"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  addToWatch(s);
+                }}
+              >
+                ＋Watch
+              </button>
+            </div>
+          ))}
         </div>
       )}
     </div>
