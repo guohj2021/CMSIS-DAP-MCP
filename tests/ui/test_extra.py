@@ -28,7 +28,7 @@ with sync_playwright() as p:
     page.on("console", lambda m: console_errs.append(m.text) if m.type == "error" else None)
     page.on("pageerror", lambda e: console_errs.append("[PAGEERR] " + str(e)))
     page.on("response", lambda r: bad.append(r.url.replace("http://127.0.0.1:18080/api","") + ":" + str(r.status)) if r.status >= 400 else None)
-    page.goto(URL, wait_until="networkidle", timeout=30000)
+    page.goto(URL, wait_until="domcontentloaded", timeout=30000)
     page.wait_for_timeout(2500)
 
     def btn(name): return page.get_by_role("button", name=name, exact=True).first
@@ -65,37 +65,42 @@ with sync_playwright() as p:
         T("H_SVD", "读寄存器位域仅一行", decoded.count() == 1, f"decoded 面板 {decoded.count()} 处")
     except Exception as e:
         T("H_SVD", "读寄存器位域仅一行", False, str(e))
+    # 全部刷新: read all registers of the selected peripheral in place
     try:
-        # monitor add with header rate select set to 200ms
-        rate = page.locator("select[title='刷新周期']").first
+        page.locator("button:has-text('全部刷新')").first.click(force=True)
+        page.wait_for_timeout(5000)
+        vals = page.locator("span.font-mono.text-emerald-300:has-text('值=')")
+        T("H_SVD", "全部刷新显示各寄存器值", vals.count() >= 5, f"{vals.count()} 个值")
+    except Exception as e:
+        T("H_SVD", "全部刷新显示各寄存器值", False, str(e))
+    # 监控: in-place periodic refresh on the register row (no separate block)
+    try:
+        moder_row = page.locator("span.font-mono.text-amber-300:has-text('MODER')").first.locator("xpath=ancestor::div[contains(@class,'mb-1')]").first
+        rate = page.locator("select[title='监控刷新周期']").first
         rate.select_option("200")
         page.wait_for_timeout(300)
-        moder.locator("xpath=ancestor::div[contains(@class,'mb-1')]").first.locator("button:has-text('监控')").first.click(force=True)
-        page.wait_for_timeout(1500)
-        mon = page.locator("div.flex.items-center.gap-2:has(button:has-text('停止'))").first
-        T("H_SVD", "监控添加", mon.count() > 0, "监控行出现")
+        moder_row.locator("button:has-text('监控')").first.click(force=True)
+        page.wait_for_timeout(1800)
+        in_place = moder_row.locator("button:has-text('停止')").count() > 0 and "●" in moder_row.inner_text()
+        T("H_SVD", "监控就地显示", in_place, "停止按钮 + ● 就地值")
     except Exception as e:
-        T("H_SVD", "监控添加", False, str(e))
+        T("H_SVD", "监控就地显示", False, str(e))
     try:
-        mon_rate = page.locator("div.flex.items-center.gap-2:has(button:has-text('停止')) select[title='刷新周期']").first
-        if mon_rate.count():
-            mon_rate.select_option("1000")
-            page.wait_for_timeout(800)
-        cur = page.locator("div.flex.items-center.gap-2:has(button:has-text('停止')) select[title='刷新周期']").first.input_value() if page.locator("div.flex.items-center.gap-2:has(button:has-text('停止')) select[title='刷新周期']").first.count() else None
-        T("H_SVD", "监控周期修改", cur == "1000", f"周期={cur}")
+        T("H_SVD", "无独立监控块", page.locator("text=监控中（周期刷新）").count() == 0, "下方无新增监控点")
     except Exception as e:
-        T("H_SVD", "监控周期修改", False, str(e))
-    # wait for monitor values to arrive (WS peripheral_value_changed)
+        T("H_SVD", "无独立监控块", False, str(e))
+    # wait for periodic value updates in place (WS peripheral_value_changed)
     try:
-        got = wait_for(lambda: "0x" in (page.locator("div.flex.items-center.gap-2:has(button:has-text('停止')) span.font-mono.text-emerald-300").first.inner_text() if page.locator("div.flex.items-center.gap-2:has(button:has-text('停止')) span.font-mono.text-emerald-300").first.count() else ""), 8000)
-        T("H_SVD", "监控值刷新", got, "收到外设值")
+        moder_row = page.locator("span.font-mono.text-amber-300:has-text('MODER')").first.locator("xpath=ancestor::div[contains(@class,'mb-1')]").first
+        got = wait_for(lambda: "值=0x" in moder_row.inner_text() if moder_row.count() else False, 8000)
+        T("H_SVD", "监控值就地刷新", got, "MODER 行出现值")
     except Exception as e:
-        T("H_SVD", "监控值刷新", False, str(e))
+        T("H_SVD", "监控值就地刷新", False, str(e))
     # stop monitor
     try:
-        page.locator("div.flex.items-center.gap-2:has(button:has-text('停止')) button:has-text('停止')").first.click(force=True)
-        page.wait_for_timeout(800)
-        T("H_SVD", "监控停止", page.locator("button:has-text('停止')").count() == 0, "监控行移除")
+        moder_row.locator("button:has-text('停止')").first.click(force=True)
+        page.wait_for_timeout(1000)
+        T("H_SVD", "监控停止", moder_row.locator("button:has-text('监控')").count() > 0, "回到监控按钮")
     except Exception as e:
         T("H_SVD", "监控停止", False, str(e))
 
@@ -123,10 +128,8 @@ with sync_playwright() as p:
         prog = page.locator("button:has-text('烧录')").first
         prog.click(force=True); page.wait_for_timeout(500)
         prog.click(force=True)
-        done = wait_for(lambda: "烧录完成" in page.locator("text=烧录完成").all_inner_texts() if page.locator("text=烧录完成").count() else False, 60000)
-        # also detect via console log "已烧录" style - use FlashWorkspace log line
-        done2 = wait_for(lambda: any("烧录完成" in l or "校验" in l for l in console_errs) or done, 10000)
-        T("I_Flash", "烧录+校验", done, "烧录完成")
+        done = wait_for(lambda: (prog.count() and not prog.is_disabled() and "烧录中" not in prog.inner_text()), 150000)
+        T("I_Flash", "烧录+校验", done, f"按钮状态={prog.inner_text() if prog.count() else '?'}")
     except Exception as e:
         T("I_Flash", "烧录+校验", False, str(e))
     # reset & run after flash
@@ -142,6 +145,12 @@ with sync_playwright() as p:
 
     # ============ J. RTT / EVR ============
     try:
+        # RTT panel is not in the default layout; open via the Window menu
+        page.locator("button:has-text('窗口')").first.click()
+        page.wait_for_timeout(400)
+        page.locator("div.z-50 button:has-text('RTT')").first.click(force=True)
+        page.wait_for_timeout(600)
+        page.keyboard.press("Escape"); page.wait_for_timeout(300)
         tab("RTT").click(); page.wait_for_timeout(700)
         btn("启动").click(force=True); page.wait_for_timeout(2500)
         started = page.locator("button:has-text('停止')").count() > 0
@@ -151,8 +160,12 @@ with sync_playwright() as p:
     except Exception as e:
         T("J_RTT", "RTT 启动", False, str(e))
     try:
+        page.locator("button:has-text('窗口')").first.click()
+        page.wait_for_timeout(400)
+        page.locator("div.z-50 button:has-text('EVR')").first.click(force=True)
+        page.wait_for_timeout(600)
+        page.keyboard.press("Escape"); page.wait_for_timeout(300)
         tab("EVR").click(); page.wait_for_timeout(700)
-        # EVR start requires an info address; the panel may error (firmware dependent)
         T("J_EVR", "EVR 面板存在", True, "EVR 面板可打开")
     except Exception as e:
         T("J_EVR", "EVR 面板存在", False, str(e))

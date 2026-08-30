@@ -20,7 +20,7 @@ with sync_playwright() as p:
     page = ctx.new_page()
     console_errs = []
     page.on("console", lambda m: console_errs.append(m.text) if m.type == "error" else None)
-    page.goto(URL, wait_until="networkidle", timeout=30000)
+    page.goto(URL, wait_until="domcontentloaded", timeout=30000)
     page.wait_for_timeout(2500)
 
     def btn(name): return page.get_by_role("button", name=name, exact=True).first

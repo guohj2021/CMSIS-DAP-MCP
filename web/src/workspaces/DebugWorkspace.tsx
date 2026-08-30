@@ -39,7 +39,7 @@ type Preset = "quick" | "full";
 
 type Direction = "left" | "right" | "above" | "below" | "within";
 
-const LAYOUT_KEY = "cmsis-dap-layout-v3";
+const LAYOUT_KEY = "cmsis-dap-layout-v4";
 const CONFIGS_KEY = "cmsis-dap-configs";
 
 interface PanelAdd {
@@ -102,10 +102,12 @@ const PRESETS: Record<Preset, PanelAdd[]> = {
       position: { referencePanel: "watch", direction: "below" },
     },
   ],
-  // Full (Keil-style): build root columns first (registers | disasm | watch),
-  // then stack within the columns - symbols below registers (left column),
-  // source / memory tabs / console down the centre column. Adding symbols
-  // last keeps it inside the left column instead of a full-width bottom row.
+  // Default layout (user-specified, Keil-like):
+  //   left:   Registers (top) + Symbols (below)
+  //   centre: Disassembly (top) + Console (below)
+  //   right:  Peripheral (top) + [Memory | Watch] tabs (below)
+  // Build root columns first (registers | disasm | peripheral), then stack
+  // within each column; watch is added last "within memory" to become a tab.
   full: [
     { id: "registers", title: "寄存器", component: "registers" },
     {
@@ -115,42 +117,34 @@ const PRESETS: Record<Preset, PanelAdd[]> = {
       position: { referencePanel: "registers", direction: "right" },
     },
     {
-      id: "watch",
-      title: "Watch",
-      component: "watch",
+      id: "peripheral",
+      title: "外设",
+      component: "peripheral",
       position: { referencePanel: "disasm", direction: "right" },
-    },
-    {
-      id: "source",
-      title: "源码",
-      component: "source",
-      position: { referencePanel: "disasm", direction: "below" },
-    },
-    {
-      id: "memory",
-      title: "内存",
-      component: "memory",
-      position: { referencePanel: "source", direction: "below" },
-    },
-    { id: "peripheral", title: "外设", component: "peripheral", position: { referencePanel: "memory", direction: "within" } },
-    { id: "breakpoints", title: "断点", component: "breakpoints", position: { referencePanel: "memory", direction: "within" } },
-    { id: "callstack", title: "调用栈", component: "callstack", position: { referencePanel: "memory", direction: "within" } },
-    { id: "locals", title: "Locals", component: "locals", position: { referencePanel: "memory", direction: "within" } },
-    { id: "rtt", title: "RTT", component: "rtt", position: { referencePanel: "memory", direction: "within" } },
-    { id: "evr", title: "EVR", component: "evr", position: { referencePanel: "memory", direction: "within" } },
-    { id: "swo", title: "SWO", component: "swo", position: { referencePanel: "memory", direction: "within" } },
-    { id: "profiler", title: "采样分析器", component: "profiler", position: { referencePanel: "memory", direction: "within" } },
-    {
-      id: "console",
-      title: "控制台",
-      component: "console",
-      position: { referencePanel: "memory", direction: "below" },
     },
     {
       id: "symbols",
       title: "符号",
       component: "symbols",
       position: { referencePanel: "registers", direction: "below" },
+    },
+    {
+      id: "console",
+      title: "控制台",
+      component: "console",
+      position: { referencePanel: "disasm", direction: "below" },
+    },
+    {
+      id: "memory",
+      title: "内存",
+      component: "memory",
+      position: { referencePanel: "peripheral", direction: "below" },
+    },
+    {
+      id: "watch",
+      title: "Watch",
+      component: "watch",
+      position: { referencePanel: "memory", direction: "within" },
     },
   ],
 };

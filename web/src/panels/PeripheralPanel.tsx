@@ -1,6 +1,12 @@
 // Peripheral explorer: upload SVD, tree, read/write/decode registers.
+//
+// Design (v5 user feedback): no extra monitor items/variables - either
+// refresh ALL registers of the selected peripheral in place (全部刷新), or
+// toggle periodic monitoring per register with the value shown in the SAME
+// register row (监控 button toggles on/off). There is no separate "监控中"
+// block below.
 import { useEffect, useState } from "react";
-import { api, DecodedRegister, MonitorItem, PeripheralInfo, PeripheralSummary } from "../api/client";
+import { api, DecodedRegister, PeripheralInfo, PeripheralSummary } from "../api/client";
 import { useDebugStore } from "../store/debugStore";
 import { onWsEvent } from "../ws/client";
 
@@ -13,20 +19,41 @@ export function PeripheralPanel() {
   const [decoded, setDecoded] = useState<Record<string, DecodedRegister>>({});
   const [readValues, setReadValues] = useState<Record<string, number>>({});
   const [rateMs, setRateMs] = useState(500);
-  const [monitors, setMonitors] = useState<MonitorItem[]>([]);
-  const [monitorValues, setMonitorValues] = useState<Record<number, number | null>>({});
+  // monitored: "peripheral.register" -> monitor id (button state)
+  const [monitored, setMonitored] = useState<Record<string, number>>({});
+  // monitorRegs: monitor id -> "peripheral.register" (WS value routing)
+  const [monitorRegs, setMonitorRegs] = useState<Record<number, string>>({});
+  const [refreshing, setRefreshing] = useState(false);
   const log = useDebugStore((s) => s.log);
 
   useEffect(() => {
-    api.monitorList().then((r) => setMonitors(r.items)).catch(() => {});
+    api.monitorList().then((r) => {
+      const m: Record<string, number> = {};
+      const mr: Record<number, string> = {};
+      for (const it of r.items) {
+        const key = `${it.peripheral}.${it.register}`;
+        m[key] = it.id;
+        mr[it.id] = key;
+      }
+      setMonitored(m);
+      setMonitorRegs(mr);
+    }).catch(() => {});
     const off = onWsEvent("peripheral_value_changed", (data) => {
       const d = data as { items: { id: number; value?: number | null }[] };
-      const next: Record<number, number | null> = {};
-      for (const it of d.items) next[it.id] = it.value ?? null;
-      setMonitorValues((m) => ({ ...m, ...next }));
+      const next: Record<string, number> = {};
+      for (const it of d.items) {
+        const key = monitorRegs[it.id];
+        if (key && it.value !== null && it.value !== undefined) {
+          const reg = key.split(".").slice(1).join(".");
+          next[reg] = it.value;
+        }
+      }
+      if (Object.keys(next).length) {
+        setReadValues((m) => ({ ...m, ...next }));
+      }
     });
     return off;
-  }, []);
+  }, [monitorRegs]);
 
   async function upload(file: File) {
     try {
@@ -45,6 +72,7 @@ export function PeripheralPanel() {
       setSelected(r.peripheral);
       setDecoded({});
       setReadValues({});
+      setRegValue({});
     } catch (e) {
       log("error", e instanceof Error ? e.message : String(e));
     }
@@ -59,6 +87,23 @@ export function PeripheralPanel() {
       if (dv) setDecoded((m) => ({ ...m, [reg]: dv }));
     } catch (e) {
       log("error", e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  // Read every readable register of the selected peripheral in place.
+  async function refreshAll() {
+    if (!selected || refreshing) return;
+    setRefreshing(true);
+    let ok = 0;
+    try {
+      for (const r of selected.registers) {
+        if (r.access === "write-only") continue;
+        await read(r.name);
+        ok += 1;
+      }
+      log("info", `已刷新 ${selected.name} 的 ${ok} 个寄存器`);
+    } finally {
+      setRefreshing(false);
     }
   }
 
@@ -78,48 +123,49 @@ export function PeripheralPanel() {
     }
   }
 
-  async function addMonitor(reg: string) {
+  // Toggle periodic in-place refresh for one register (no extra monitor block).
+  async function toggleMonitor(reg: string) {
     if (!selected) return;
+    const key = `${selected.name}.${reg}`;
+    const id = monitored[key];
     try {
-      const pname = selected.name;
-      const m = await api.monitorAdd({ peripheral: pname, register: reg, rate_ms: rateMs });
-      setMonitors((prev) => [...prev, { id: m.id, peripheral: pname, register: reg, rate_ms: rateMs, safety: m.safety }]);
-      log("info", `已监控 ${pname}.${reg}（${rateMs}ms）`);
+      if (id !== undefined) {
+        await api.monitorDelete(id);
+        const next = { ...monitored };
+        delete next[key];
+        setMonitored(next);
+        const mr = { ...monitorRegs };
+        delete mr[id];
+        setMonitorRegs(mr);
+        log("info", `已停止监控 ${key}`);
+      } else {
+        const m = await api.monitorAdd({ peripheral: selected.name, register: reg, rate_ms: rateMs });
+        setMonitored((prev) => ({ ...prev, [key]: m.id }));
+        setMonitorRegs((prev) => ({ ...prev, [m.id]: key }));
+        log("info", `已开始监控 ${key}（${rateMs}ms，值就地刷新）`);
+        await read(reg);
+      }
     } catch (e) {
       log("error", e instanceof Error ? e.message : String(e));
     }
   }
 
-  async function changeMonitorRate(id: number, rate_ms: number) {
-    try {
-      await api.monitorPatch(id, { rate_ms });
-      setMonitors((prev) => prev.map((m) => (m.id === id ? { ...m, rate_ms } : m)));
-      log("info", `监控周期已改为 ${rate_ms}ms`);
-    } catch (e) {
-      log("error", e instanceof Error ? e.message : String(e));
-    }
-  }
-
-  function rateSelect(value: number, onChange: (v: number) => void, cls = "") {
-    return (
-      <select
-        className={`rounded bg-zinc-800 px-1 py-0.5 text-zinc-400 outline-none ${cls}`}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        title="刷新周期"
-      >
-        {RATE_OPTIONS.map((r) => (
-          <option key={r} value={r}>
-            {r >= 1000 ? `${r / 1000}s` : `${r}ms`}
-          </option>
-        ))}
-      </select>
+  // Changing the header rate also applies to active monitors of this peripheral.
+  async function changeRate(v: number) {
+    setRateMs(v);
+    if (!selected) return;
+    const ids = Object.entries(monitored)
+      .filter(([k]) => k.startsWith(selected.name + "."))
+      .map(([, id]) => id);
+    await Promise.all(
+      ids.map((id) => api.monitorPatch(id, { rate_ms: v }).catch(() => {}))
     );
+    if (ids.length) log("info", `监控刷新周期已改为 ${v}ms`);
   }
 
   return (
     <div className="flex h-full flex-col text-xs">
-      <div className="flex items-center gap-2 border-b border-zinc-700 px-2 py-1">
+      <div className="flex flex-wrap items-center gap-2 border-b border-zinc-700 px-2 py-1">
         <input
           type="file"
           accept=".svd"
@@ -127,8 +173,27 @@ export function PeripheralPanel() {
           onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])}
         />
         <span className="text-zinc-500">{peripherals.length} 个外设</span>
+        <button
+          className="rounded bg-blue-600 px-2 py-0.5 text-white hover:bg-blue-500 disabled:opacity-40"
+          onClick={refreshAll}
+          disabled={!selected || refreshing}
+          title="读取选中外设的所有寄存器（跳过只写寄存器）"
+        >
+          {refreshing ? "刷新中…" : "全部刷新"}
+        </button>
         <span className="ml-auto text-zinc-500">刷新周期</span>
-        {rateSelect(rateMs, setRateMs)}
+        <select
+          className="rounded bg-zinc-800 px-1 py-0.5 text-zinc-400 outline-none"
+          value={rateMs}
+          onChange={(e) => changeRate(Number(e.target.value))}
+          title="监控刷新周期"
+        >
+          {RATE_OPTIONS.map((r) => (
+            <option key={r} value={r}>
+              {r >= 1000 ? `${r / 1000}s` : `${r}ms`}
+            </option>
+          ))}
+        </select>
       </div>
       <div className="flex flex-1 overflow-hidden">
         <div className="w-40 overflow-auto border-r border-zinc-800 py-1">
@@ -146,6 +211,7 @@ export function PeripheralPanel() {
           {selected?.registers.map((r) => {
             const dv = decoded[r.name];
             const rv = readValues[r.name];
+            const isMonitored = monitored[`${selected.name}.${r.name}`] !== undefined;
             return (
               <div key={r.name} className="mb-1 rounded bg-zinc-900 p-1">
                 <div className="flex flex-wrap items-center gap-2">
@@ -155,6 +221,7 @@ export function PeripheralPanel() {
                   {rv !== undefined && (
                     <span className="font-mono text-emerald-300">
                       值=0x{rv.toString(16).toUpperCase().padStart(8, "0")}
+                      {isMonitored && <span className="ml-1 text-emerald-500">●</span>}
                     </span>
                   )}
                   <input
@@ -167,10 +234,11 @@ export function PeripheralPanel() {
                     读
                   </button>
                   <button
-                    className="rounded bg-emerald-900 px-2 py-0.5 text-emerald-200 hover:bg-emerald-800"
-                    onClick={() => addMonitor(r.name)}
+                    className={`rounded px-2 py-0.5 ${isMonitored ? "bg-red-900 text-red-200 hover:bg-red-800" : "bg-emerald-900 text-emerald-200 hover:bg-emerald-800"}`}
+                    onClick={() => toggleMonitor(r.name)}
+                    title="周期刷新该寄存器（值就地显示）"
                   >
-                    监控
+                    {isMonitored ? "停止" : "监控"}
                   </button>
                   <button className="rounded bg-zinc-700 px-2 py-0.5 hover:bg-zinc-600" onClick={() => write(r.name, regValue[r.name] ?? "")}>
                     写
@@ -194,30 +262,9 @@ export function PeripheralPanel() {
           {selected && selected.registers.length === 0 && (
             <div className="text-zinc-500">无寄存器</div>
           )}
-          {monitors.length > 0 && (
-            <div className="mt-2 border-t border-zinc-800 pt-1">
-              <div className="mb-1 text-zinc-500">监控中（周期刷新）</div>
-              {monitors.map((m) => (
-                <div key={m.id} className="flex items-center gap-2">
-                  <span className="text-zinc-300">{m.peripheral}.{m.register}</span>
-                  {rateSelect(m.rate_ms, (v) => changeMonitorRate(m.id, v))}
-                  <span className="font-mono text-emerald-300">
-                    {(() => {
-                      const v = monitorValues[m.id];
-                      return v !== undefined && v !== null ? `0x${v.toString(16)}` : "—";
-                    })()}
-                  </span>
-                  <button
-                    className="rounded bg-red-900 px-2 py-0.5 text-red-200 hover:bg-red-800"
-                    onClick={async () => {
-                      await api.monitorDelete(m.id);
-                      setMonitors((prev) => prev.filter((x) => x.id !== m.id));
-                    }}
-                  >
-                    停止
-                  </button>
-                </div>
-              ))}
+          {!selected && peripherals.length === 0 && (
+            <div className="rounded border border-dashed border-zinc-700 p-3 text-center text-zinc-500">
+              上传 SVD 或选择外设；可"全部刷新"或对单个寄存器点"监控"（值就地刷新）
             </div>
           )}
         </div>
