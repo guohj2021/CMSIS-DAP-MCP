@@ -17,3 +17,4 @@ npm/bin/*.exe
 test_flash_write.script
 tests/ui/__pycache__/
 reports/
+web/tsconfig.tsbuildinfo
