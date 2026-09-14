@@ -21,6 +21,8 @@ All notable changes are documented per release. Version numbers match the
   scans dot-directories and binary files, and accepts `-History` (commit
   messages, tag messages and git objects) and `-Path <file>`. The scan runs in
   CI on every push and pull request.
+- The release workflow uploads its build artifacts before publishing, and the
+  GitHub Release is produced even when npm publishing fails.
 
 ## [v0.8.0] - 2026-08-30
 

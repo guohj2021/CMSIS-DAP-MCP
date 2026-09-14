@@ -153,6 +153,13 @@ jobs:
           mkdir -p "${{ matrix.npmdir }}/${{ matrix.scope }}/bin"
           cp "target/release/${{ matrix.artifact }}" "${{ matrix.npmdir }}/${{ matrix.scope }}/bin/"
           npm --prefix "${{ matrix.npmdir }}/${{ matrix.scope }}" pkg set version="$VERSION"
+      # Uploaded before publishing on purpose: a registry failure must not cost
+      # us the binaries the GitHub Release is built from.
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.scope }}
+          path: target/release/${{ matrix.artifact }}
       - name: Publish platform package to npmjs
         if: env.NPM_TOKEN != ''
         shell: bash
@@ -180,13 +187,11 @@ jobs:
           else
             npm publish
           fi
-      - name: Upload binary artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.scope }}
-          path: target/release/${{ matrix.artifact }}
   release-assets:
     needs: build
+    # Runs even when `build` failed at the publish steps, so the release
+    # binaries still ship if npm publishing breaks.
+    if: ${{ !cancelled() && needs.build.result != 'skipped' }}
     runs-on: ubuntu-latest
     steps:
       - name: Download binaries
