@@ -3,6 +3,25 @@
 All notable changes are documented per release. Version numbers match the
 `v*` tags; npm packages and platform binaries follow the same version.
 
+## [v0.8.1] - 2026-09-14
+
+### Changed
+
+- `cmsis-dap-web` takes additional DWARF source roots from the
+  `CMSIS_DAP_SOURCE_ROOTS` environment variable (a platform-separated list of
+  directories), so the source viewer can locate files outside the working tree.
+- `tests/ui` reads its fixture files from `UI_AXF`, `UI_SVD` and `UI_HEX`
+  explicitly; `configs/` and `.zcode/` are git-ignored.
+- Documentation and CLI examples use `DemoMCU` and `target/demo.yaml` as the
+  example device and target file.
+
+### Fixed
+
+- `scripts/check-no-vendor.ps1` also detects base64, UTF-16LE and hex forms,
+  scans dot-directories and binary files, and accepts `-History` (commit
+  messages, tag messages and git objects) and `-Path <file>`. The scan runs in
+  CI on every push and pull request.
+
 ## [v0.8.0] - 2026-08-30
 
 ### Features

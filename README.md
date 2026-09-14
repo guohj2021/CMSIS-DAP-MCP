@@ -7,7 +7,7 @@
 
 ![License](https://img.shields.io/github/license/guohj2021/CMSIS-DAP-MCP)
 ![CI](https://img.shields.io/github/actions/workflow/status/guohj2021/CMSIS-DAP-MCP/ci.yml?branch=main&label=CI)
-![Release](https://img.shields.io/github/actions/workflow/status/guohj2021/CMSIS-DAP-MCP/release.yml?branch=v0.8.0&label=Release) <!-- ?branch= must stay in sync with the latest release tag -->
+![Release](https://img.shields.io/github/actions/workflow/status/guohj2021/CMSIS-DAP-MCP/release.yml?branch=v0.8.1&label=Release) <!-- ?branch= must stay in sync with the latest release tag -->
 ![Pages](https://img.shields.io/github/actions/workflow/status/guohj2021/CMSIS-DAP-MCP/pages.yml?branch=main&label=Pages)
 ![Version](https://img.shields.io/github/v/tag/guohj2021/CMSIS-DAP-MCP)
 ![Rust](https://img.shields.io/badge/rust-1.97.1-orange)
