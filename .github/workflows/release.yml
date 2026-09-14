@@ -173,8 +173,12 @@ jobs:
           else
             npm publish --access public
           fi
+      # Secondary mirror: never let it fail the release. Publishing here needs
+      # the package to be linked to this repository, which newly recreated
+      # packages are not.
       - name: Publish platform package to GitHub Packages
         if: env.GH_TOKEN != ''
+        continue-on-error: true
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
