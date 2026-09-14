@@ -12,6 +12,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      # Fail fast, before the expensive builds: no vendor-specific content may
+      # enter the repository (see scripts/check-no-vendor.ps1).
+      - name: Vendor content scan
+        shell: pwsh
+        run: ./scripts/check-no-vendor.ps1
       - uses: dtolnay/rust-toolchain@1.97.1
         with:
           components: "rustfmt,clippy"

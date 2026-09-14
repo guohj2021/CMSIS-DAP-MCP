@@ -9,6 +9,7 @@ node_modules/
 .serial_mcp/
 .worktrees/
 .codex/
+.zcode/
 docs/book/
 docs/zh/book/
 npm/bin/*.exe
@@ -17,4 +18,5 @@ npm/bin/*.exe
 test_flash_write.script
 tests/ui/__pycache__/
 reports/
+configs/
 web/tsconfig.tsbuildinfo
