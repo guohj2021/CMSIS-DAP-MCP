@@ -75,9 +75,9 @@ code:
   mdbook build docs/zh     # Chinese
   ```
 8. Run the vendor-content scan:
-  ```powershell
-  powershell -File scripts/check-no-vendor.ps1
-  ```
+   ```powershell
+   powershell -File scripts/check-no-vendor.ps1
+   ```
 
 If any step surfaces a discrepancy, fix it before tagging the release.
 

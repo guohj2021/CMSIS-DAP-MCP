@@ -1,9 +1,9 @@
 //! SWO / ITM packet decoder (frozen v5 P8, ITM over SWO).
 //!
 //! Parses the Cortex-M SWO protocol into ITM packets. Pure function with unit
-//! tests — the decode layer is complete even though some probes (e.g. the
-//! CMSIS-DAP used in development) cannot capture SWO; the panel then reports
-//! the capture error honestly.
+//! tests — the decode layer is complete even though some probes without a trace
+//! port (e.g. SWD-only probes used in development) cannot capture SWO; the panel
+//! then reports the capture error honestly.
 
 use serde::Serialize;
 

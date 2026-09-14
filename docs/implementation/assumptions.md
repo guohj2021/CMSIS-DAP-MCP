@@ -2,7 +2,7 @@
 
 Date: 2026-08-29
 Branch: codex/web-debug
-Environment: CMSIS-DAP CMSIS-DAP (serial 0123456789AB) + DemoMCU (Cortex-M0+) target
+Environment: CMSIS-DAP probe (serial 0123456789AB) + DemoMCU (Cortex-M0+) target
 
 > Per the frozen v5 plan §2, each assumption was validated before entering P1.
 > Failures follow the documented degradation path and do not expand scope.
@@ -132,7 +132,7 @@ state (hardware/ecosystem), not by software effort:
 
 | Item | Why blocked on this environment |
 | --- | --- |
-| Trace timeline / ETM / instruction trace | Requires ETM trace port + trace decoder; CMSIS-DAP CMSIS-DAP has no trace port (SWO start returns an ARM protocol error). Fabricating a trace view would violate the plan's "never fabricate" rule. |
+| Trace timeline / ETM / instruction trace | Requires ETM trace port + trace decoder; CMSIS-DAP probe has no trace port (SWO start returns an ARM protocol error). Fabricating a trace view would violate the plan's "never fabricate" rule. |
 | Logic Analyzer | Requires high-speed GPIO sampling through the probe; not supported over SWD/HID CMSIS-DAP. |
 | Code Coverage | Requires instruction trace (ETM) or instrumentation runtime; neither is present in the demo firmware. |
 | RTOS awareness | Requires an RTOS (e.g. FreeRTOS) firmware with a task list; the DemoMCU demo has no RTOS. Can be added once an RTOS firmware is supplied (task-list symbol + stack pointer scan per task). |

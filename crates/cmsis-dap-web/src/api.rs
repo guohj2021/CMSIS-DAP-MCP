@@ -1375,7 +1375,9 @@ struct SourceQuery {
 }
 /// Search bounded roots for a file with the same basename (DWARF paths may
 /// point at a Keil pack location that is not on this host). Only descends into
-/// plausible source directories and caps the walk.
+/// plausible source directories and caps the walk. Extra SDK roots are supplied
+/// through the `CMSIS_DAP_SOURCE_ROOTS` environment variable, a
+/// platform-separated list of directories.
 fn find_source(file: &str) -> Option<std::path::PathBuf> {
     let p = std::path::Path::new(file);
     if p.is_file() {
@@ -1386,18 +1388,19 @@ fn find_source(file: &str) -> Option<std::path::PathBuf> {
     if let Ok(cwd) = std::env::current_dir() {
         roots.push(cwd);
     }
-    let sdk = std::path::Path::new("C:\\Workspace\\DemoWorkspace\\workspace\\DemoMCU_SDK");
-    if sdk.is_dir() {
-        for sub in [
-            "Libraries",
-            "TEST_Example",
-            "Examples",
-            "Project",
-            "FUNCTION_TEST",
-        ] {
-            let d = sdk.join(sub);
-            if d.is_dir() {
-                roots.push(d);
+    if let Some(list) = std::env::var_os("CMSIS_DAP_SOURCE_ROOTS") {
+        for sdk in std::env::split_paths(&list) {
+            for sub in [
+                "Libraries",
+                "TEST_Example",
+                "Examples",
+                "Project",
+                "FUNCTION_TEST",
+            ] {
+                let d = sdk.join(sub);
+                if d.is_dir() {
+                    roots.push(d);
+                }
             }
         }
     }
