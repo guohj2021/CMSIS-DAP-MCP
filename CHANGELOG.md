@@ -22,7 +22,8 @@ All notable changes are documented per release. Version numbers match the
   messages, tag messages and git objects) and `-Path <file>`. The scan runs in
   CI on every push and pull request.
 - The release workflow uploads its build artifacts before publishing, and the
-  GitHub Release is produced even when npm publishing fails.
+  GitHub Release is produced even when npm publishing fails. Publishing to the
+  GitHub Packages mirror no longer fails the release.
 
 ## [v0.8.0] - 2026-08-30
 
